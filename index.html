@@ -1,0 +1,1577 @@
+
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>凱文南坡萬實業社 · 報價單系統</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/dist/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#22241F;--sub:#6B6B63;--hint:#A8A69C;
+  --bd:#E5E2D8;--bg:#FAF9F5;--wh:#FFFFFF;
+  --gold:#A6824A;--gold-deep:#7C5E32;--gold-pale:#F7F1E3;
+  --forest:#23402E;
+  --rad:6px;--rad-lg:10px
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.5}
+.shell{display:grid;grid-template-columns:236px 1fr;min-height:100vh}
+.sb{background:var(--forest);display:flex;flex-direction:column}
+.sb-top{padding:30px 22px 22px;border-bottom:1px solid rgba(166,130,74,.25)}
+.logo-mark{display:flex;align-items:flex-start;gap:13px}
+.logo-vline{width:3px;height:38px;background:var(--gold);border-radius:2px;margin-top:2px}
+.logo-text{color:#EFE9D8;font-size:16px;letter-spacing:3px;font-weight:400;line-height:1.35}
+.logo-en{color:rgba(166,130,74,.65);font-size:8.5px;letter-spacing:1.4px;margin-top:6px;text-transform:uppercase;line-height:1.7}
+.sb-nav{padding:18px 12px;flex:1;display:flex;flex-direction:column;gap:2px}
+.nb{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:7px;color:rgba(239,233,216,.55);cursor:pointer;border:none;background:transparent;width:100%;text-align:left;font-size:12.5px;transition:.15s}
+.nb:hover{background:rgba(255,255,255,.06);color:#EFE9D8}
+.nb.on{background:var(--gold);color:var(--forest);font-weight:600}
+.nb i{font-size:15px;width:18px;flex-shrink:0}
+.sb-foot{padding:16px 16px 26px}
+.bk{background:rgba(0,0,0,.18);border-radius:7px;padding:12px 14px;border:1px solid rgba(166,130,74,.15)}
+.bk-t{color:rgba(166,130,74,.6);font-size:9.5px;letter-spacing:1px;margin-bottom:5px}
+.bk-v{color:rgba(239,233,216,.65);font-size:11px;line-height:1.7}
+.main{overflow-y:auto;display:flex;flex-direction:column}
+.tb{background:var(--wh);border-bottom:1px solid var(--bd);padding:18px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.tb-left h1{font-size:18px;font-weight:600;color:var(--ink)}
+.tb-left p{font-size:11.5px;color:var(--hint);margin-top:3px}
+.tb-right{display:flex;gap:8px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 17px;border-radius:7px;font-size:12.5px;font-weight:500;cursor:pointer;border:1.5px solid transparent;transition:.15s}
+.btn-g{background:transparent;border-color:var(--bd);color:var(--sub)}
+.btn-g:hover{border-color:var(--ink);color:var(--ink)}
+.btn-dk{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btn-dk:hover{background:#3A3D34}
+.btn-gold{background:var(--gold);color:#fff;border-color:var(--gold);font-weight:600}
+.btn-gold:hover{background:var(--gold-deep)}
+.content{padding:26px 32px;display:flex;flex-direction:column;gap:16px;max-width:920px}
+.pills{display:flex;gap:8px;flex-wrap:wrap}
+.pill{background:var(--gold-pale);border:1px solid rgba(166,130,74,.25);border-radius:20px;padding:5px 14px;font-size:11.5px;color:var(--gold-deep);display:flex;align-items:center;gap:5px}
+.pill strong{font-weight:600}
+.tsw{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tc{border:1.5px solid var(--bd);border-radius:var(--rad-lg);padding:15px 17px;cursor:pointer;transition:.2s;background:var(--wh)}
+.tc:hover{border-color:var(--ink)}
+.tc.on{border-color:var(--gold);background:var(--gold-pale)}
+.tc-icon{font-size:19px;margin-bottom:5px}
+.tc-name{font-size:13.5px;font-weight:600;color:var(--ink)}
+.tc-desc{font-size:11px;color:var(--hint);margin-top:2px}
+.card{background:var(--wh);border:1px solid var(--bd);border-radius:var(--rad-lg);overflow:hidden}
+.ch{padding:14px 20px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--bd)}
+.ch span{font-size:13px;font-weight:600;color:var(--ink);letter-spacing:.2px}
+.ch i{font-size:15px;color:var(--gold-deep)}
+.ch-opt{font-size:10.5px;color:var(--hint);margin-left:auto;font-style:italic;font-weight:400}
+.cb{padding:20px}
+.fg{display:grid;gap:14px}
+.fg2{grid-template-columns:1fr 1fr}
+.fg3{grid-template-columns:1fr 1fr 1fr}
+.fg4{grid-template-columns:1fr 1fr 1fr 1fr}
+.fg1{grid-template-columns:1fr}
+.fl{display:flex;flex-direction:column;gap:5px}
+.fl label{font-size:10.5px;color:var(--hint);font-weight:600;letter-spacing:.4px}
+.fl label .opt{color:var(--bd);font-style:italic;font-weight:400}
+.fi,.fs,.fta,select.fi{border:1px solid var(--bd);border-radius:6px;padding:8px 11px;font-size:13px;color:var(--ink);background:var(--bg);width:100%;font-family:inherit;transition:.15s}
+.fi:focus,.fs:focus,.fta:focus{outline:none;border-color:var(--gold);background:var(--wh)}
+.fi.ro{background:var(--gold-pale);color:var(--gold-deep);font-weight:600;border-color:rgba(166,130,74,.35);cursor:default}
+.fta{resize:vertical;min-height:64px}
+.sec-divider{height:1px;background:var(--bd);margin:6px 0 2px}
+.sub-label{font-size:11px;color:var(--gold-deep);font-weight:600;letter-spacing:.4px;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.sub-label .ln{flex:1;height:1px;background:var(--bd)}
+/* item groups for banquet */
+.item-group{border:1px solid var(--bd);border-radius:8px;margin-bottom:12px;overflow:hidden}
+.ig-head{background:var(--bg);padding:11px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--bd)}
+.ig-head .ig-name{font-size:12.5px;font-weight:600;color:var(--ink);flex:1}
+.ig-head input.ig-price{width:80px;border:1px solid var(--bd);border-radius:6px;padding:6px 8px;font-size:12px;text-align:right;font-family:inherit}
+.ig-head .ig-unit{font-size:11.5px;color:var(--hint);white-space:nowrap}
+.ig-body{padding:12px 16px}
+.flavor-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.flavor-tag{display:flex;align-items:center;gap:5px;background:var(--gold-pale);border:1px solid rgba(166,130,74,.25);border-radius:14px;padding:4px 8px 4px 11px;font-size:11.5px;color:var(--gold-deep)}
+.flavor-tag button{background:none;border:none;cursor:pointer;color:rgba(124,94,50,.4);font-size:12px;line-height:1;padding:0}
+.flavor-tag button:hover{color:#C0453F}
+.flavor-add{display:flex;gap:7px}
+.flavor-add input{flex:1;border:1px solid var(--bd);border-radius:6px;padding:6px 10px;font-size:12px;font-family:inherit}
+.flavor-add input:focus{outline:none;border-color:var(--gold)}
+.flavor-add button{background:var(--ink);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:11.5px;cursor:pointer;white-space:nowrap}
+.flavor-add button:hover{background:#3A3D34}
+.ig-qty-row{display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--bd)}
+.ig-qty-row label{font-size:11px;color:var(--hint)}
+.ig-qty-row input{width:70px;border:1px solid var(--bd);border-radius:6px;padding:6px 8px;font-size:12px;font-family:inherit}
+.ig-sub{margin-left:auto;font-size:13px;font-weight:700;color:var(--ink)}
+/* optional service fee selector */
+.svc-select-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.svc-select-row select{flex:1}
+.svc-detail{background:var(--bg);border:1px solid var(--bd);border-radius:7px;padding:12px 14px;display:none}
+.svc-detail.on{display:block}
+/* generic item rows (free items, addons) */
+.ith{display:grid;gap:6px;padding:8px 16px;font-size:10.5px;color:var(--hint);font-weight:600;letter-spacing:.4px;border-bottom:1px solid var(--bd);background:var(--bg)}
+.itr{display:grid;gap:6px;padding:10px 16px;border-bottom:1px solid var(--bd);align-items:center}
+.itr:last-child{border-bottom:none}
+.itr input{border:1px solid var(--bd);border-radius:6px;padding:6px 8px;font-size:12px;color:var(--ink);background:transparent;width:100%;font-family:inherit}
+.itr input:focus{outline:none;border-color:var(--gold);background:var(--wh)}
+.itr .sub{font-size:12.5px;font-weight:700;color:var(--ink);text-align:right}
+.del{background:none;border:none;color:var(--bd);cursor:pointer;font-size:16px;line-height:1;padding:2px}
+.del:hover{color:#C0453F}
+.add-row{width:100%;padding:11px;background:transparent;border:none;border-top:1.5px dashed var(--bd);color:var(--hint);cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;gap:5px;transition:.15s}
+.add-row:hover{color:var(--ink);background:var(--bg)}
+/* col toggles */
+.col-toggle-bar{display:flex;align-items:center;gap:10px;padding:11px 16px;background:var(--gold-pale);border-bottom:1px solid var(--bd);flex-wrap:wrap}
+.col-toggle-bar > span{font-size:11px;color:var(--gold-deep);font-weight:600}
+.ctg{display:flex;align-items:center;gap:6px;background:var(--wh);border:1px solid rgba(166,130,74,.35);border-radius:14px;padding:4px 10px;cursor:pointer;font-size:11.5px;color:var(--sub);transition:.15s}
+.ctg.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.ctg .dot{width:6px;height:6px;border-radius:50%;background:var(--bd)}
+.ctg.on .dot{background:var(--gold)}
+.tax-toggle{display:flex;align-items:center;gap:12px;padding:11px 16px;background:var(--bg);border-top:1px solid var(--bd);flex-wrap:wrap}
+.tax-toggle span{font-size:11.5px;color:var(--sub)}
+.tpill{padding:5px 13px;border-radius:20px;font-size:11.5px;cursor:pointer;border:1px solid var(--bd);background:var(--wh);color:var(--sub);transition:.15s}
+.tpill.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.tax-rate-in{width:50px;border:1px solid var(--bd);border-radius:6px;padding:5px 7px;font-size:12px;text-align:center;font-family:inherit}
+.tax-rate-in:focus{outline:none;border-color:var(--gold)}
+/* extras */
+.ext-list{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}
+.etag{display:flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--bd);border-radius:14px;padding:4px 9px 4px 11px;font-size:11.5px;color:var(--ink)}
+.etag button{background:none;border:none;cursor:pointer;color:var(--hint);font-size:13px;line-height:1;padding:0}
+.etag button:hover{color:#C0453F}
+.ext-add{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.ext-add input{border:1px solid var(--bd);border-radius:6px;padding:6px 10px;font-size:12px;font-family:inherit}
+.ext-add input:focus{outline:none;border-color:var(--gold)}
+.pres-btn{background:var(--bg);border:1px solid var(--bd);border-radius:6px;padding:5px 12px;font-size:11.5px;color:var(--sub);cursor:pointer;font-weight:500}
+.pres-btn:hover{background:var(--ink);color:#fff;border-color:var(--ink)}
+/* total */
+.tot-box{background:var(--ink);border-radius:9px;padding:16px 20px;display:flex;flex-direction:column;gap:7px}
+.tr{display:flex;justify-content:space-between;font-size:12.5px;color:rgba(255,255,255,.55)}
+.tr.big{font-size:16px;color:var(--gold);font-weight:700;border-top:1px solid rgba(255,255,255,.15);padding-top:8px;margin-top:3px;letter-spacing:.3px}
+/* payment */
+.pay-tabs{display:flex;gap:0;border:1px solid var(--bd);border-radius:7px;overflow:hidden;margin-bottom:14px}
+.ptab{flex:1;padding:8px 6px;text-align:center;font-size:11.5px;cursor:pointer;background:var(--bg);color:var(--sub);border:none;border-right:1px solid var(--bd);transition:.15s}
+.ptab:last-child{border-right:none}
+.ptab.on{background:var(--ink);color:#fff;font-weight:600}
+.pay-panel{display:none}
+.pay-panel.on{display:block}
+.pc{background:var(--bg);border:1px solid var(--bd);border-radius:7px;padding:11px}
+.pc .pl{font-size:10px;color:var(--hint);margin-bottom:3px;letter-spacing:.4px}
+.pc .pv{font-size:13.5px;font-weight:700;color:var(--ink)}
+/* upload */
+.uarea{border:2px dashed var(--bd);border-radius:9px;padding:22px;text-align:center;cursor:pointer;transition:.2s;position:relative}
+.uarea:hover{border-color:var(--gold);background:var(--gold-pale)}
+.uarea input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.uarea i{font-size:25px;color:var(--bd);margin-bottom:6px}
+.uarea:hover i{color:var(--gold)}
+.uprev{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.uth{position:relative;width:76px;height:76px;border-radius:7px;overflow:hidden;border:1px solid var(--bd)}
+.uth img{width:100%;height:100%;object-fit:cover}
+.uth .rm{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:17px;height:17px;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center}
+.rem-ul{list-style:none;display:flex;flex-direction:column;gap:4px}
+.rem-ul li{font-size:11.5px;color:var(--hint);padding-left:14px;position:relative;line-height:1.7}
+.rem-ul li::before{content:'·';position:absolute;left:3px;color:var(--gold);font-size:16px;line-height:1.3}
+/* preview */
+.pov{display:none;position:fixed;inset:0;background:rgba(20,18,10,.75);z-index:200;overflow-y:auto;padding:36px 16px}
+.pdoc{max-width:740px;margin:0 auto;background:#fff;border-radius:4px;overflow:hidden;box-shadow:0 30px 70px rgba(0,0,0,.35)}
+.phead{background:var(--ink);padding:13px 24px;display:flex;justify-content:space-between;align-items:center}
+.phead span{color:var(--gold);font-size:14px;font-weight:600;letter-spacing:.3px}
+.phbtns{display:flex;gap:8px;align-items:center}
+/* ===== 登入頁 ===== */
+.login-overlay{position:fixed;inset:0;background:var(--forest);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px}
+.login-box{background:var(--wh);border-radius:14px;padding:42px 38px;width:100%;max-width:380px;box-shadow:0 30px 80px rgba(0,0,0,.4)}
+.login-logo{display:flex;align-items:flex-start;gap:13px;margin-bottom:30px;justify-content:center}
+.login-logo .lv{width:3px;height:46px;background:var(--gold);border-radius:2px;margin-top:3px}
+.login-logo .lt{font-size:19px;letter-spacing:3px;color:var(--ink);font-weight:700;line-height:1.3}
+.login-logo .le{font-size:8.5px;letter-spacing:1.5px;color:var(--gold);margin-top:6px;text-transform:uppercase;line-height:1.7;font-weight:600}
+.login-title{font-size:14px;color:var(--sub);text-align:center;margin-bottom:24px}
+.login-field{margin-bottom:16px}
+.login-field label{display:block;font-size:11px;color:var(--hint);font-weight:600;letter-spacing:.4px;margin-bottom:6px}
+.login-field input{width:100%;border:1.5px solid var(--bd);border-radius:8px;padding:12px 14px;font-size:18px;letter-spacing:6px;text-align:center;font-family:inherit;color:var(--ink);background:var(--bg);transition:.15s}
+.login-field input:focus{outline:none;border-color:var(--gold);background:var(--wh)}
+.login-btn{width:100%;background:var(--ink);color:#fff;border:none;border-radius:8px;padding:13px;font-size:14px;font-weight:600;cursor:pointer;transition:.15s;letter-spacing:1px}
+.login-btn:hover{background:#3A3D34}
+.login-btn:disabled{opacity:.5;cursor:not-allowed}
+.login-err{color:#C0453F;font-size:12px;text-align:center;margin-top:14px;min-height:16px}
+.login-foot{text-align:center;font-size:10px;color:var(--hint);margin-top:24px;letter-spacing:.5px}
+/* ===== toast ===== */
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--ink);color:#fff;padding:13px 24px;border-radius:9px;font-size:13px;font-weight:500;box-shadow:0 12px 40px rgba(0,0,0,.3);z-index:600;opacity:0;transition:.3s;display:flex;align-items:center;gap:9px}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+.toast.ok i{color:#5FB97E}
+.toast.err{background:#8A2F2C}
+/* ===== records page ===== */
+.rec-wrap{padding:26px 32px;max-width:920px}
+.rec-toolbar{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center}
+.rec-search{flex:1;min-width:180px;border:1px solid var(--bd);border-radius:8px;padding:9px 13px;font-size:13px;font-family:inherit;background:var(--wh)}
+.rec-search:focus{outline:none;border-color:var(--gold)}
+.rec-filter{border:1px solid var(--bd);border-radius:8px;padding:9px 13px;font-size:13px;font-family:inherit;background:var(--wh);cursor:pointer}
+.rec-table{width:100%;border-collapse:collapse;background:var(--wh);border:1px solid var(--bd);border-radius:10px;overflow:hidden}
+.rec-table th{background:var(--bg);padding:12px 14px;text-align:left;font-size:11px;color:var(--sub);font-weight:600;letter-spacing:.4px;border-bottom:1px solid var(--bd)}
+.rec-table td{padding:13px 14px;font-size:12.5px;color:var(--ink);border-bottom:1px solid var(--bd)}
+.rec-table tr:last-child td{border-bottom:none}
+.rec-table tr.clickable:hover{background:var(--gold-pale);cursor:pointer}
+.rec-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:10.5px;font-weight:600}
+.rec-badge.bottle{background:#EAF1ED;color:#23402E}
+.rec-badge.banquet{background:var(--gold-pale);color:var(--gold-deep)}
+.rec-badge.draft{background:#F0EEE8;color:#8A8870}
+.rec-badge.sent{background:#E6F0E9;color:#2E7D4F}
+.rec-empty{text-align:center;padding:50px;color:var(--hint);font-size:13px}
+.rec-actions{display:flex;gap:6px}
+.rec-act-btn{background:none;border:1px solid var(--bd);border-radius:6px;padding:5px 9px;font-size:11px;cursor:pointer;color:var(--sub)}
+.rec-act-btn:hover{border-color:var(--ink);color:var(--ink)}
+.rec-act-btn.del:hover{border-color:#C0453F;color:#C0453F}
+.page{display:none}
+.page.on{display:block}
+
+</style>
+</head>
+<body>
+<!-- ===== 登入頁 ===== -->
+<div class="login-overlay" id="login-overlay">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="lv"></div>
+      <div>
+        <div class="lt">凱文南坡萬實業社</div>
+        <div class="le">KEVIN NUMBER 1<br>TAILORED.COCKTAIL<br>EST. 2023. TAIWAN</div>
+      </div>
+    </div>
+    <div class="login-title">報價單系統 · 請輸入 PIN 碼登入</div>
+    <div class="login-field">
+      <label>PIN 碼</label>
+      <input type="password" id="login-pin" inputmode="numeric" maxlength="12" placeholder="••••••"
+             onkeydown="if(event.key==='Enter')doLogin()" autocomplete="off">
+    </div>
+    <button class="login-btn" id="login-btn" onclick="doLogin()">登入</button>
+    <div class="login-err" id="login-err"></div>
+    <div class="login-foot">© 2026 凱文南坡萬實業社</div>
+  </div>
+</div>
+
+<!-- ===== toast ===== -->
+<div class="toast" id="toast"><i class="ti ti-check"></i><span id="toast-msg"></span></div>
+
+<div class="shell">
+
+<div class="sb">
+  <div class="sb-top">
+    <div class="logo-mark">
+      <div class="logo-vline"></div>
+      <div>
+        <div class="logo-text">凱文南坡萬實業社</div>
+        <div class="logo-en">KEVIN NUMBER 1<br>TAILORED.COCKTAIL<br>EST. 2023. TAIWAN</div>
+      </div>
+    </div>
+  </div>
+  <div class="sb-nav">
+    <div style="font-size:9.5px;color:rgba(239,233,216,.3);letter-spacing:2px;padding:4px 11px 8px;text-transform:uppercase">功能</div>
+    <button class="nb on" id="nav-new" onclick="newQuote()"><i class="ti ti-file-plus"></i>新增報價單</button>
+    <button class="nb" id="nav-records" onclick="gotoPage('records')"><i class="ti ti-files"></i>報價紀錄</button>
+    <button class="nb" onclick="openPreview()"><i class="ti ti-eye"></i>預覽報價單</button>
+  </div>
+  <div class="sb-foot">
+    <div style="font-size:9.5px;color:rgba(239,233,216,.3);letter-spacing:2px;margin-bottom:8px;text-transform:uppercase">匯款資訊</div>
+    <div class="bk">
+      <div class="bk-t">陽信銀行中興分行 (108)</div>
+      <div class="bk-v">02142-00230-91<br>凱文南坡萬實業社 黃彥愷</div>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="tb">
+    <div class="tb-left">
+      <h1>報價單製作</h1>
+      <p>填寫後可即時預覽，並匯出 PDF / Word</p>
+    </div>
+    <div class="tb-right">
+      <button class="btn btn-g" onclick="resetAll()"><i class="ti ti-refresh"></i>清除</button>
+      <button class="btn btn-dk" onclick="openPreview()"><i class="ti ti-eye"></i>預覽</button>
+      <button class="btn btn-dk" id="btn-save" onclick="saveQuote()"><i class="ti ti-device-floppy"></i>儲存</button>
+      <button class="btn btn-gold" onclick="exportPDF()"><i class="ti ti-download"></i>匯出 PDF</button>
+    </div>
+  </div>
+
+  <div class="content page on" id="page-new">
+
+    <div class="pills">
+      <div class="pill"><i class="ti ti-hash" style="font-size:12px"></i>單號：<strong id="pl-no">—</strong></div>
+      <div class="pill"><i class="ti ti-calendar" style="font-size:12px"></i>報價日：<strong id="pl-dt">—</strong></div>
+      <div class="pill"><i class="ti ti-calendar-event" style="font-size:12px"></i>有效至：<strong id="pl-ex">—</strong></div>
+    </div>
+
+    <div class="tsw">
+      <div class="tc on" id="tc-bot" onclick="setType('bottle')">
+        <div class="tc-icon">🍶</div>
+        <div class="tc-name">瓶裝酒代工報價</div>
+        <div class="tc-desc">批次代工 · 客製標籤 · SGS 檢驗</div>
+      </div>
+      <div class="tc" id="tc-ban" onclick="setType('banquet')">
+        <div class="tc-icon">🍹</div>
+        <div class="tc-name">宴會酒水服務報價</div>
+        <div class="tc-desc">現場調酒 · 調酒師服務 · 車身佈置</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ch"><i class="ti ti-user"></i><span>客戶資訊</span><span class="ch-opt">* 為輸出必填</span></div>
+      <div class="cb">
+        <div class="fg fg2">
+          <div class="fl"><label>客戶名稱 *</label><input class="fi" id="f-cli" placeholder="南野子國際整合行銷有限公司" oninput="upNo()"></div>
+          <div class="fl"><label>聯絡人 * </label><input class="fi" id="f-con" placeholder="李雅楠小姐"></div>
+          <div class="fl"><label>客戶統編 <span class="opt">選填</span></label><input class="fi" id="f-tax" placeholder="12345678"></div>
+          <div class="fl"><label>聯絡電話 <span class="opt">選填</span></label><input class="fi" id="f-ph" placeholder="0912 000 143"></div>
+          <div class="fl" style="grid-column:span 2"><label>聯絡地址 <span class="opt">選填</span></label><input class="fi" id="f-ad" placeholder="台北市文山區仙岩路 79 號"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ch"><i class="ti ti-file-description"></i><span>報價單資訊</span></div>
+      <div class="cb">
+        <div class="fg fg4">
+          <div class="fl"><label>報價單號（自動）</label><input class="fi ro" id="f-no" readonly></div>
+          <div class="fl"><label>流水號</label><input class="fi" type="number" id="f-ser" value="1" min="1" max="99" oninput="upNo()"></div>
+          <div class="fl"><label>報價日期</label><input class="fi" type="date" id="f-dt" oninput="onDate()"></div>
+          <div class="fl"><label>有效至（自動+1月）</label><input class="fi ro" id="f-ex" readonly></div>
+          <div class="fl"><label>處理人員</label><input class="fi" id="f-hdl" value="林湘珆 Molly"></div>
+        </div>
+        <div id="ban-meta" style="display:none;margin-top:16px">
+          <div class="sub-label">活動資訊 <span class="ln"></span> <span style="font-style:italic;color:var(--bd);font-weight:400">選填</span></div>
+          <div class="fg fg3">
+            <div class="fl" style="grid-column:span 3"><label>佈置地點</label><input class="fi" id="f-ven" placeholder="台北市…"></div>
+            <div class="fl"><label>進場時間</label><input class="fi" type="datetime-local" id="f-ent"></div>
+            <div class="fl"><label>供酒時間</label><input class="fi" id="f-svc" placeholder="18:00 – 21:00"></div>
+            <div class="fl"><label>撤場時間</label><input class="fi" type="datetime-local" id="f-ext"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== BOTTLE ITEMS ===== -->
+    <div class="card" id="bottle-items-card">
+      <div class="ch"><i class="ti ti-list-details"></i><span>品項明細</span></div>
+      <div class="col-toggle-bar">
+        <span><i class="ti ti-adjustments" style="font-size:13px;vertical-align:-2px"></i> 此批是否需要：</span>
+        <div class="ctg on" id="ctg-ded" onclick="toggleCol('ded')"><span class="dot"></span>標費扣除</div>
+        <div class="ctg on" id="ctg-logo" onclick="toggleCol('logo')"><span class="dot"></span>LOGO印刷費</div>
+      </div>
+      <div id="ith-bot" class="ith" style="grid-template-columns:2fr 1fr 68px 80px 68px 68px 60px 88px 26px">
+        <span>品名</span><span>出貨批次</span><span>容量ml</span><span>單價</span><span id="th-ded">標費扣除</span><span id="th-logo">LOGO印刷</span><span>瓶數</span><span style="text-align:right">小計</span><span></span>
+      </div>
+      <div id="itbody-bot"></div>
+      <button class="add-row" onclick="addBotRow()"><i class="ti ti-plus"></i> 新增品項</button>
+    </div>
+
+    <!-- ===== BANQUET ITEMS (structured) ===== -->
+    <div class="card" id="banquet-items-card" style="display:none">
+      <div class="ch"><i class="ti ti-list-details"></i><span>必要品項</span></div>
+      <div class="cb">
+        <!-- group 1: 客製化調酒 -->
+        <div class="item-group">
+          <div class="ig-head">
+            <span class="ig-name">客製化調酒</span>
+            <input class="ig-price" type="number" id="ban-g1-price" placeholder="150" oninput="calcBan()">
+            <span class="ig-unit">元 / 杯</span>
+          </div>
+          <div class="ig-body">
+            <div class="flavor-list" id="ban-g1-flavors"></div>
+            <div class="flavor-add">
+              <input id="ban-g1-input" placeholder="輸入品名後按新增（如：櫻花白柚mojito）" onkeydown="if(event.key==='Enter')addFlavor('g1')">
+              <button onclick="addFlavor('g1')">+ 新增品名</button>
+            </div>
+            <div class="ig-qty-row">
+              <label>總杯數</label>
+              <input type="number" id="ban-g1-qty" placeholder="90" oninput="calcBan()">
+              <span class="ig-sub" id="ban-g1-sub">$0</span>
+            </div>
+          </div>
+        </div>
+        <!-- group 2: 客製化無酒精雞尾酒 -->
+        <div class="item-group">
+          <div class="ig-head">
+            <span class="ig-name">客製化無酒精雞尾酒</span>
+            <input class="ig-price" type="number" id="ban-g2-price" placeholder="120" oninput="calcBan()">
+            <span class="ig-unit">元 / 杯</span>
+          </div>
+          <div class="ig-body">
+            <div class="flavor-list" id="ban-g2-flavors"></div>
+            <div class="flavor-add">
+              <input id="ban-g2-input" placeholder="輸入品名後按新增" onkeydown="if(event.key==='Enter')addFlavor('g2')">
+              <button onclick="addFlavor('g2')">+ 新增品名</button>
+            </div>
+            <div class="ig-qty-row">
+              <label>總杯數</label>
+              <input type="number" id="ban-g2-qty" placeholder="0" oninput="calcBan()">
+              <span class="ig-sub" id="ban-g2-sub">$0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="ban-free-body"></div>
+      <button class="add-row" onclick="addBanFreeRow()"><i class="ti ti-plus"></i> 新增自訂品項</button>
+    </div>
+
+    <!-- ===== BANQUET OPTIONAL SERVICE FEE ===== -->
+    <div class="card" id="banquet-svc-card" style="display:none">
+      <div class="ch"><i class="ti ti-steering-wheel"></i><span>調酒師服務費 <span style="font-weight:400;font-size:11px">(選填，四種計價方式任選一)</span></span></div>
+      <div class="cb">
+        <select class="fi" id="svc-mode" onchange="onSvcModeChange()">
+          <option value="">— 不需要此項 —</option>
+          <option value="basic">調酒師服務費及運費（基礎運費）</option>
+          <option value="equip">調酒師費（含設備）</option>
+          <option value="travel">調酒師費＋車馬費及酒水運費</option>
+          <option value="travelonly">車馬費（單獨計算）</option>
+        </select>
+        <div class="svc-detail" id="svc-detail-wrap" style="margin-top:12px">
+          <div class="fg fg3">
+            <div class="fl"><label id="svc-label-1">服務費</label><input class="fi" type="number" id="svc-amt1" placeholder="9500" oninput="calcBan()"></div>
+            <div class="fl" id="svc-field-2-wrap" style="display:none"><label id="svc-label-2">車馬費</label><input class="fi" type="number" id="svc-amt2" placeholder="2000" oninput="calcBan()"></div>
+            <div class="fl"><label>人數／單位</label><input class="fi" type="number" id="svc-qty" placeholder="2" value="1" oninput="calcBan()"></div>
+          </div>
+          <div style="margin-top:10px;text-align:right;font-size:12.5px;font-weight:700;color:var(--ink)">小計：<span id="svc-sub">$0</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== BANQUET OPTIONAL ADDONS ===== -->
+    <div class="card" id="banquet-addon-card" style="display:none">
+      <div class="ch"><i class="ti ti-plus" ></i><span>加購項目 <span style="font-weight:400;font-size:11px">(選填)</span></span></div>
+      <div class="ith" style="grid-template-columns:3fr 60px 56px 86px 86px 26px">
+        <span>項目</span><span>數量</span><span>單位</span><span>單價</span><span style="text-align:right">小計</span><span></span>
+      </div>
+      <div id="ban-addon-body"></div>
+      <button class="add-row" onclick="addBanAddonRow()"><i class="ti ti-plus"></i> 新增加購項目</button>
+    </div>
+
+    <!-- ===== EXTRA FEES (bottle only) ===== -->
+    <div class="card" id="ext-card">
+      <div class="ch"><i class="ti ti-tag"></i><span>額外費用 <span style="font-weight:400;font-size:11px">(選填)</span></span></div>
+      <div class="cb">
+        <div class="ext-list" id="ext-list"></div>
+        <div class="ext-add">
+          <input id="en" placeholder="項目名稱" style="width:150px" class="fi">
+          <input id="ea" type="number" placeholder="金額" style="width:90px" class="fi">
+          <button class="pres-btn" onclick="addExt()">+ 加入</button>
+          <div style="width:1px;height:20px;background:var(--bd);margin:0 2px"></div>
+          <button class="pres-btn" onclick="pres('SGS 檢驗費',8000)">SGS $8,000</button>
+          <button class="pres-btn" onclick="pres('GS1條碼登記費',3000)">GS1 $3,000</button>
+          <button class="pres-btn" onclick="pres('整批出貨免運',0)">免運 $0</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- tax mode (shared) -->
+    <div class="card">
+      <div class="ch"><i class="ti ti-percentage"></i><span>價格模式</span></div>
+      <div class="tax-toggle" style="border-top:none">
+        <span>輸入價格為：</span>
+        <button class="tpill on" id="tp-inc" onclick="setTaxMode('inc')">含稅價</button>
+        <button class="tpill" id="tp-exc" onclick="setTaxMode('exc')">未稅價</button>
+        <span style="font-size:11px;color:var(--hint);margin-left:6px">稅率</span>
+        <input class="tax-rate-in" type="number" id="taxrate" value="5" min="0" max="50" oninput="calc()">
+        <span style="font-size:11px;color:var(--hint)">%</span>
+        <span id="tax-status" style="font-size:11px;color:var(--gold-deep);margin-left:4px">輸入含稅價，自動反推稅額</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ch"><i class="ti ti-calculator"></i><span>金額總計</span></div>
+      <div class="cb">
+        <div class="tot-box">
+          <div class="tr"><span id="lb-sub">品項合計（含稅）</span><span id="t-sub">$0</span></div>
+          <div class="tr" id="tr-tax" style="display:none"><span id="lb-tax">其中稅額</span><span id="t-tax">$0</span></div>
+          <div class="tr" id="tr-ext"><span>額外費用</span><span id="t-ext">$0</span></div>
+          <div class="tr big"><span>總計</span><span id="t-tot">$0</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ch"><i class="ti ti-cash"></i><span>付款條件</span></div>
+      <div class="cb">
+        <div class="pay-tabs">
+          <button class="ptab on" onclick="setPay(0)">比例訂金＋尾款</button>
+          <button class="ptab" onclick="setPay(1)">到貨驗收後付款</button>
+          <button class="ptab" onclick="setPay(2)">隔月指定日付款</button>
+          <button class="ptab" onclick="setPay(3)">自訂</button>
+        </div>
+        <div class="pay-panel on" id="pp0">
+          <div class="fg fg3" style="margin-bottom:14px">
+            <div class="fl">
+              <label>訂金比例</label>
+              <div style="display:flex;align-items:center;gap:7px">
+                <input class="fi" type="number" id="dep-pct" value="30" min="0" max="100" style="width:70px" oninput="calcPay()">
+                <span style="color:var(--hint);font-size:13px">%</span>
+              </div>
+            </div>
+            <div class="pc"><div class="pl">訂金金額</div><div class="pv" id="dep-amt">$0</div></div>
+            <div class="pc"><div class="pl">尾款金額</div><div class="pv" id="dep-bal">$0</div></div>
+          </div>
+          <div class="fg fg2">
+            <div class="fl"><label>驗收寬限（天）<span class="opt">選填</span></label><input class="fi" id="dep-days" type="number" placeholder="7" min="1"></div>
+            <div class="fl"><label>折抵說明 <span class="opt">選填</span></label><input class="fi" id="dep-ded" placeholder="Lot 28 溢收折抵 798 元"></div>
+          </div>
+        </div>
+        <div class="pay-panel" id="pp1">
+          <div class="fg fg3">
+            <div class="fl"><label>到貨後幾日驗收</label><input class="fi" type="number" id="p1-vdays" placeholder="7" min="1"></div>
+            <div class="fl"><label>驗收無誤後幾日付款</label><input class="fi" type="number" id="p1-pdays" placeholder="30" min="1"></div>
+            <div class="fl"><label>付款比例 <span class="opt">若需分期</span></label>
+              <div style="display:flex;align-items:center;gap:6px"><input class="fi" type="number" id="p1-pct" placeholder="100" min="1" max="100" style="width:70px"><span style="color:var(--hint);font-size:13px">%</span></div>
+            </div>
+          </div>
+          <div class="fl" style="margin-top:12px"><label>補充說明 <span class="opt">選填</span></label><input class="fi" id="p1-note" placeholder="如：需附驗收單"></div>
+        </div>
+        <div class="pay-panel" id="pp2">
+          <div class="fg fg3">
+            <div class="fl"><label>收貨後第幾個月</label>
+              <div style="display:flex;align-items:center;gap:6px"><input class="fi" type="number" id="p2-mon" placeholder="1" min="1"><span style="color:var(--hint);font-size:13px">月</span></div>
+            </div>
+            <div class="fl"><label>該月幾號付款</label>
+              <div style="display:flex;align-items:center;gap:6px"><input class="fi" type="number" id="p2-day" placeholder="15" min="1" max="31"><span style="color:var(--hint);font-size:13px">號</span></div>
+            </div>
+            <div class="fl"><label>預估付款日 <span class="opt">自動計算</span></label><input class="fi ro" id="p2-est" readonly placeholder="—"></div>
+          </div>
+        </div>
+        <div class="pay-panel" id="pp3">
+          <div class="fl"><label>自訂付款條件</label><textarea class="fta" id="p3-txt" placeholder="請輸入完整付款條款說明…"></textarea></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ch"><i class="ti ti-photo"></i><span>附加圖片 <span style="font-weight:400;font-size:11px">(選填)</span></span></div>
+      <div class="cb">
+        <div class="uarea" id="ua">
+          <input type="file" accept="image/*" multiple onchange="handleImg(event)">
+          <i class="ti ti-cloud-upload"></i>
+          <div style="font-size:12.5px;color:var(--hint);margin-top:3px">點擊或拖曳上傳圖片</div>
+          <div style="font-size:11px;color:var(--bd);margin-top:2px">圖片將排列於報價單圖片區域</div>
+        </div>
+        <div class="uprev" id="uprev"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:32px">
+      <div class="ch"><i class="ti ti-notes"></i><span>備註欄 <span style="font-weight:400;font-size:11px">(選填)</span></span></div>
+      <div class="cb">
+        <div class="fl" style="margin-bottom:16px">
+          <label>自由備註</label>
+          <textarea class="fta" id="f-note" placeholder="可輸入特殊條件、補充說明等…"></textarea>
+        </div>
+        <div style="font-size:10.5px;color:var(--hint);font-weight:600;letter-spacing:.4px;margin-bottom:8px">固定條款（自動附上）</div>
+        <ul class="rem-ul">
+          <li>雙方確認此報價單內容無誤並於雙方各執一份，以維雙方權利</li>
+          <li>匯款：陽信銀行中興分行 (108)，帳號 02142-00230-91，戶名：凱文南坡萬實業社黃彥愷</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="page" id="page-records">
+    <div class="rec-wrap">
+      <div class="rec-toolbar">
+        <input class="rec-search" id="rec-search" placeholder="搜尋客戶名稱…" onkeydown="if(event.key==='Enter')loadRecords()">
+        <select class="rec-filter" id="rec-type-filter" onchange="loadRecords()">
+          <option value="">全部類型</option>
+          <option value="bottle">瓶裝酒代工</option>
+          <option value="banquet">宴會酒水服務</option>
+        </select>
+        <button class="btn btn-dk" onclick="loadRecords()"><i class="ti ti-search"></i>查詢</button>
+      </div>
+      <table class="rec-table">
+        <thead><tr>
+          <th>報價單號</th><th>客戶</th><th>類型</th><th>報價日期</th><th>總計</th><th>操作</th>
+        </tr></thead>
+        <tbody id="rec-body">
+          <tr><td colspan="6" class="rec-empty">載入中…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="pov" id="pov">
+  <div class="pdoc">
+    <div class="phead">
+      <span>報價單預覽</span>
+      <div class="phbtns">
+        <button class="btn btn-gold" style="font-size:12px;padding:6px 13px" onclick="exportPDF()"><i class="ti ti-file-type-pdf"></i>列印 / PDF</button>
+        <button class="btn btn-g" style="font-size:12px;padding:6px 13px;color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.2)" onclick="exportPDF()"><i class="ti ti-file-word"></i>列印</button>
+        <button style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;font-size:20px;line-height:1;margin-left:4px" onclick="closePreview()">✕</button>
+      </div>
+    </div>
+    <div id="pcon"></div>
+  </div>
+</div>
+
+<script>
+let qType='bottle', taxMode='inc', payTab=0;
+let botItems=[],banFreeItems=[],banAddonItems=[],extras=[],imgs=[],rowId=0;
+let colDed=true, colLogo=true;
+let flavors={g1:[],g2:[]};
+
+(()=>{
+  const t=new Date();
+  const s=d=>(d<10?'0':'')+d;
+  const v=`${t.getFullYear()}-${s(t.getMonth()+1)}-${s(t.getDate())}`;
+  document.getElementById('f-dt').value=v;
+  onDate(); upNo(); addBotRow();
+})();
+
+function s2(n){return String(n).padStart(2,'0')}
+
+function onDate(){
+  const v=document.getElementById('f-dt').value; if(!v) return;
+  const d=new Date(v);
+  const disp=`${d.getFullYear()}/${s2(d.getMonth()+1)}/${s2(d.getDate())}`;
+  const e=new Date(d); e.setMonth(e.getMonth()+1);
+  const estr=`${e.getFullYear()}/${s2(e.getMonth()+1)}/${s2(e.getDate())}`;
+  document.getElementById('f-ex').value=estr;
+  document.getElementById('pl-dt').textContent=disp;
+  document.getElementById('pl-ex').textContent=estr;
+  upNo(); estPayDay();
+}
+
+function upNo(){
+  const v=document.getElementById('f-dt').value; if(!v) return;
+  const d=new Date(v);
+  const base=`${d.getFullYear()}${s2(d.getMonth()+1)}${s2(d.getDate())}`;
+  const ser=String(document.getElementById('f-ser').value||1).padStart(2,'0');
+  const no=`${base}-${ser}`;
+  document.getElementById('f-no').value=no;
+  document.getElementById('pl-no').textContent=no;
+}
+
+function setType(t){
+  qType=t;
+  document.getElementById('tc-bot').classList.toggle('on',t==='bottle');
+  document.getElementById('tc-ban').classList.toggle('on',t==='banquet');
+  document.getElementById('ban-meta').style.display=t==='banquet'?'block':'none';
+  document.getElementById('bottle-items-card').style.display=t==='bottle'?'block':'none';
+  document.getElementById('banquet-items-card').style.display=t==='banquet'?'block':'none';
+  document.getElementById('banquet-svc-card').style.display=t==='banquet'?'block':'none';
+  document.getElementById('banquet-addon-card').style.display=t==='banquet'?'block':'none';
+  document.getElementById('ext-card').style.display=t==='bottle'?'block':'none';
+  if(t==='banquet' && banFreeItems.length===0) addBanFreeRow();
+  if(t==='banquet' && banAddonItems.length===0) addBanAddonRow();
+  calc();
+}
+
+// ── COLUMN TOGGLES (bottle) ──
+function toggleCol(which){
+  if(which==='ded') colDed=!colDed;
+  if(which==='logo') colLogo=!colLogo;
+  document.getElementById('ctg-ded').classList.toggle('on',colDed);
+  document.getElementById('ctg-logo').classList.toggle('on',colLogo);
+  rebuildBotHeader();
+  const oldData = botItems.map(id=>{
+    const row=document.getElementById(`r-${id}`);
+    return row ? {name:gs(row,'name'),lot:gs(row,'lot'),vol:gs(row,'vol'),price:gs(row,'price'),ded:gs(row,'ded'),logo:gs(row,'logo'),qty:gs(row,'qty')} : null;
+  }).filter(Boolean);
+  document.getElementById('itbody-bot').innerHTML='';
+  botItems=[];
+  oldData.forEach(d=>addBotRow(d));
+  if(oldData.length===0) addBotRow();
+  calc();
+}
+
+function rebuildBotHeader(){
+  let cols = ['2fr','1fr','68px','80px'];
+  if(colDed) cols.push('68px');
+  if(colLogo) cols.push('68px');
+  cols.push('60px','88px','26px');
+  document.getElementById('ith-bot').style.gridTemplateColumns = cols.join(' ');
+  document.getElementById('th-ded').style.display = colDed?'':'none';
+  document.getElementById('th-logo').style.display = colLogo?'':'none';
+}
+
+function addBotRow(prefill){
+  rowId++;
+  const id=rowId;
+  const div=document.createElement('div');
+  div.id=`r-${id}`;
+  let cols = ['2fr','1fr','68px','80px'];
+  if(colDed) cols.push('68px');
+  if(colLogo) cols.push('68px');
+  cols.push('60px','88px','26px');
+  div.className='itr';
+  div.style.gridTemplateColumns = cols.join(' ');
+  let h = `
+    <input placeholder="品名" oninput="calc()" data-f="name" value="${prefill?.name||''}">
+    <input placeholder="Lot31" oninput="calc()" data-f="lot" value="${prefill?.lot||''}">
+    <input type="number" placeholder="500" oninput="calc()" data-f="vol" value="${prefill?.vol||''}">
+    <input type="number" placeholder="375" oninput="calc()" data-f="price" value="${prefill?.price||''}">`;
+  if(colDed) h += `<input type="number" placeholder="-2" oninput="calc()" data-f="ded" value="${prefill?.ded||''}">`;
+  if(colLogo) h += `<input type="number" placeholder="25" oninput="calc()" data-f="logo" value="${prefill?.logo||''}">`;
+  h += `
+    <input type="number" placeholder="40" oninput="calc()" data-f="qty" value="${prefill?.qty||''}">
+    <div class="sub" id="rs-${id}">—</div>
+    <button class="del" onclick="delBotRow(${id})">✕</button>`;
+  div.innerHTML = h;
+  document.getElementById('itbody-bot').appendChild(div);
+  botItems.push(id);
+}
+function delBotRow(id){
+  const el=document.getElementById(`r-${id}`); if(el) el.remove();
+  botItems=botItems.filter(i=>i!==id); calc();
+}
+
+// ── BANQUET FREE ITEMS ──
+function addBanFreeRow(){
+  rowId++;
+  const id=rowId;
+  const div=document.createElement('div');
+  div.id=`bf-${id}`;
+  div.className='itr';
+  div.style.gridTemplateColumns='3fr 60px 56px 86px 86px 26px';
+  div.innerHTML=`
+    <input placeholder="自訂品項描述" oninput="calc()" data-f="name">
+    <input type="number" placeholder="1" oninput="calc()" data-f="qty">
+    <input placeholder="式" oninput="calc()" data-f="unit">
+    <input type="number" placeholder="0" oninput="calc()" data-f="price">
+    <div class="sub" id="bfs-${id}">—</div>
+    <button class="del" onclick="delBanFreeRow(${id})">✕</button>`;
+  document.getElementById('ban-free-body').appendChild(div);
+  banFreeItems.push(id);
+}
+function delBanFreeRow(id){
+  const el=document.getElementById(`bf-${id}`); if(el) el.remove();
+  banFreeItems=banFreeItems.filter(i=>i!==id); calc();
+}
+
+// ── BANQUET ADDON ITEMS ──
+function addBanAddonRow(prefill){
+  rowId++;
+  const id=rowId;
+  const div=document.createElement('div');
+  div.id=`ba-${id}`;
+  div.className='itr';
+  div.style.gridTemplateColumns='3fr 60px 56px 86px 86px 26px';
+  div.innerHTML=`
+    <input placeholder="${prefill?.ph||'加購項目名稱'}" oninput="calc()" data-f="name" value="${prefill?.name||''}">
+    <input type="number" placeholder="1" oninput="calc()" data-f="qty" value="${prefill?.qty||''}">
+    <input placeholder="式" oninput="calc()" data-f="unit" value="${prefill?.unit||''}">
+    <input type="number" placeholder="0" oninput="calc()" data-f="price" value="${prefill?.price||''}">
+    <div class="sub" id="bas-${id}">—</div>
+    <button class="del" onclick="delBanAddonRow(${id})">✕</button>`;
+  document.getElementById('ban-addon-body').appendChild(div);
+  banAddonItems.push(id);
+}
+function delBanAddonRow(id){
+  const el=document.getElementById(`ba-${id}`); if(el) el.remove();
+  banAddonItems=banAddonItems.filter(i=>i!==id); calc();
+}
+
+// ── FLAVOR TAGS ──
+function addFlavor(g){
+  const inp=document.getElementById(`ban-${g}-input`);
+  const v=inp.value.trim();
+  if(!v) return;
+  flavors[g].push(v);
+  inp.value='';
+  renderFlavors(g);
+}
+function removeFlavor(g,idx){
+  flavors[g].splice(idx,1);
+  renderFlavors(g);
+}
+function renderFlavors(g){
+  document.getElementById(`ban-${g}-flavors`).innerHTML = flavors[g].map((f,i)=>
+    `<div class="flavor-tag">${f}<button onclick="removeFlavor('${g}',${i})">✕</button></div>`
+  ).join('') || `<span style="font-size:11px;color:var(--hint);font-style:italic">尚未新增品名（選填，可不填）</span>`;
+}
+renderFlavors('g1'); renderFlavors('g2');
+
+// ── SERVICE FEE MODE ──
+function onSvcModeChange(){
+  const mode=document.getElementById('svc-mode').value;
+  const wrap=document.getElementById('svc-detail-wrap');
+  const f2wrap=document.getElementById('svc-field-2-wrap');
+  const l1=document.getElementById('svc-label-1');
+  const l2=document.getElementById('svc-label-2');
+  if(!mode){ wrap.classList.remove('on'); calc(); return; }
+  wrap.classList.add('on');
+  if(mode==='basic'){ l1.textContent='調酒師服務費及運費（基礎運費）'; f2wrap.style.display='none'; }
+  else if(mode==='equip'){ l1.textContent='調酒師費（含設備）'; f2wrap.style.display='none'; }
+  else if(mode==='travel'){ l1.textContent='調酒師費'; l2.textContent='車馬費及酒水運費'; f2wrap.style.display='block'; }
+  else if(mode==='travelonly'){ l1.textContent='車馬費'; f2wrap.style.display='none'; }
+  calc();
+}
+
+function calcBan(){
+  // group totals
+  const g1p=parseFloat(document.getElementById('ban-g1-price').value)||0;
+  const g1q=parseFloat(document.getElementById('ban-g1-qty').value)||0;
+  const g1sub=g1p*g1q;
+  document.getElementById('ban-g1-sub').textContent='$'+Math.round(g1sub).toLocaleString();
+
+  const g2p=parseFloat(document.getElementById('ban-g2-price').value)||0;
+  const g2q=parseFloat(document.getElementById('ban-g2-qty').value)||0;
+  const g2sub=g2p*g2q;
+  document.getElementById('ban-g2-sub').textContent='$'+Math.round(g2sub).toLocaleString();
+
+  // service fee
+  const mode=document.getElementById('svc-mode').value;
+  let svcSub=0;
+  if(mode){
+    const a1=parseFloat(document.getElementById('svc-amt1').value)||0;
+    const a2=parseFloat(document.getElementById('svc-amt2').value)||0;
+    const q=parseFloat(document.getElementById('svc-qty').value)||1;
+    svcSub=(a1+(mode==='travel'?a2:0))*q;
+  }
+  document.getElementById('svc-sub').textContent='$'+Math.round(svcSub).toLocaleString();
+  calc();
+}
+
+function gv(r,f){const i=r.querySelector(`[data-f="${f}"]`);return i?parseFloat(i.value)||0:0}
+function gs(r,f){const i=r.querySelector(`[data-f="${f}"]`);return i?i.value.trim():''}
+
+function calc(){
+  const rate=(parseFloat(document.getElementById('taxrate').value)||0)/100;
+  let rawSub=0;
+
+  if(qType==='bottle'){
+    botItems.forEach(id=>{
+      const row=document.getElementById(`r-${id}`); if(!row) return;
+      const p=gv(row,'price'),d=colDed?gv(row,'ded'):0,l=colLogo?gv(row,'logo'):0,q=gv(row,'qty');
+      const lineRaw=(p+d+l)*q;
+      rawSub+=lineRaw;
+      const el=document.getElementById(`rs-${id}`);
+      if(el) el.textContent=lineRaw?'$'+Math.round(lineRaw).toLocaleString():'—';
+    });
+  } else {
+    const g1p=parseFloat(document.getElementById('ban-g1-price').value)||0;
+    const g1q=parseFloat(document.getElementById('ban-g1-qty').value)||0;
+    const g2p=parseFloat(document.getElementById('ban-g2-price').value)||0;
+    const g2q=parseFloat(document.getElementById('ban-g2-qty').value)||0;
+    rawSub += g1p*g1q + g2p*g2q;
+
+    banFreeItems.forEach(id=>{
+      const row=document.getElementById(`bf-${id}`); if(!row) return;
+      const p=gv(row,'price'),q=gv(row,'qty');
+      const lineRaw=p*q;
+      rawSub+=lineRaw;
+      const el=document.getElementById(`bfs-${id}`);
+      if(el) el.textContent=lineRaw?'$'+Math.round(lineRaw).toLocaleString():'—';
+    });
+
+    const mode=document.getElementById('svc-mode').value;
+    if(mode){
+      const a1=parseFloat(document.getElementById('svc-amt1').value)||0;
+      const a2=parseFloat(document.getElementById('svc-amt2').value)||0;
+      const q=parseFloat(document.getElementById('svc-qty').value)||1;
+      rawSub += (a1+(mode==='travel'?a2:0))*q;
+    }
+
+    banAddonItems.forEach(id=>{
+      const row=document.getElementById(`ba-${id}`); if(!row) return;
+      const p=gv(row,'price'),q=gv(row,'qty');
+      const lineRaw=p*q;
+      rawSub+=lineRaw;
+      const el=document.getElementById(`bas-${id}`);
+      if(el) el.textContent=lineRaw?'$'+Math.round(lineRaw).toLocaleString():'—';
+    });
+  }
+
+  let taxAmt=0, displaySub=rawSub;
+  if(rate>0){
+    if(taxMode==='inc'){
+      taxAmt=Math.round(rawSub*rate/(1+rate));
+      displaySub=rawSub;
+    } else {
+      taxAmt=Math.round(rawSub*rate);
+      displaySub=rawSub+taxAmt;
+    }
+    document.getElementById('tr-tax').style.display='flex';
+    document.getElementById('t-tax').textContent='$'+taxAmt.toLocaleString();
+  } else {
+    document.getElementById('tr-tax').style.display='none';
+  }
+
+  const extTotal = qType==='bottle' ? extras.reduce((s,e)=>s+e.amt,0) : 0;
+  const grandTotal=displaySub+extTotal;
+  document.getElementById('t-sub').textContent='$'+Math.round(displaySub).toLocaleString();
+  document.getElementById('t-ext').textContent='$'+extTotal.toLocaleString();
+  document.getElementById('tr-ext').style.display = qType==='bottle' ? 'flex' : 'none';
+  document.getElementById('t-tot').textContent='$'+Math.round(grandTotal).toLocaleString();
+  calcPay();
+}
+
+function setTaxMode(m){
+  taxMode=m;
+  document.getElementById('tp-inc').classList.toggle('on',m==='inc');
+  document.getElementById('tp-exc').classList.toggle('on',m==='exc');
+  const status=document.getElementById('tax-status');
+  if(m==='inc'){
+    document.getElementById('lb-sub').textContent='品項合計（含稅）';
+    document.getElementById('lb-tax').textContent='其中稅額';
+    status.textContent='輸入含稅價，自動反推稅額';
+  } else {
+    document.getElementById('lb-sub').textContent='品項合計（未稅）';
+    document.getElementById('lb-tax').textContent='加計稅額';
+    status.textContent='輸入未稅價，自動加計稅額';
+  }
+  calc();
+}
+
+function setPay(n){
+  payTab=n;
+  document.querySelectorAll('.ptab').forEach((b,i)=>b.classList.toggle('on',i===n));
+  document.querySelectorAll('.pay-panel').forEach((p,i)=>p.classList.toggle('on',i===n));
+  estPayDay();
+}
+
+function calcPay(){
+  const tot=parseFloat((document.getElementById('t-tot').textContent||'0').replace(/[$,]/g,''))||0;
+  const pct=(parseFloat(document.getElementById('dep-pct')?.value)||30)/100;
+  const dep=Math.round(tot*pct);
+  const bal=tot-dep;
+  const da=document.getElementById('dep-amt'); if(da) da.textContent='$'+dep.toLocaleString();
+  const db=document.getElementById('dep-bal'); if(db) db.textContent='$'+bal.toLocaleString();
+}
+
+function estPayDay(){
+  const dt=document.getElementById('f-dt').value; if(!dt) return;
+  const mon=parseInt(document.getElementById('p2-mon')?.value)||1;
+  const day=parseInt(document.getElementById('p2-day')?.value)||15;
+  const base=new Date(dt);
+  base.setMonth(base.getMonth()+mon);
+  base.setDate(day);
+  const el=document.getElementById('p2-est');
+  if(el) el.value=`${base.getFullYear()}/${s2(base.getMonth()+1)}/${s2(base.getDate())}`;
+}
+document.addEventListener('input',e=>{ if(e.target.id==='p2-mon'||e.target.id==='p2-day') estPayDay(); });
+
+function addExt(){
+  const n=document.getElementById('en').value.trim();
+  const a=parseFloat(document.getElementById('ea').value)||0;
+  if(!n) return;
+  pushExt(n,a);
+  document.getElementById('en').value='';
+  document.getElementById('ea').value='';
+}
+function pres(n,a){pushExt(n,a);}
+function pushExt(n,a){
+  const id=Date.now(); extras.push({id,n,a});
+  renderExt(); calc();
+}
+function removeExt(id){extras=extras.filter(e=>e.id!==id);renderExt();calc();}
+function renderExt(){
+  document.getElementById('ext-list').innerHTML=extras.map(e=>
+    `<div class="etag">${e.n}：$${e.a.toLocaleString()}<button onclick="removeExt(${e.id})">✕</button></div>`
+  ).join('');
+}
+
+function handleImg(ev){
+  Array.from(ev.target.files).forEach(f=>{
+    const url=URL.createObjectURL(f);
+    imgs.push({url,name:f.name});
+  });
+  renderImgs();
+}
+function removeImg(i){imgs.splice(i,1);renderImgs();}
+function renderImgs(){
+  document.getElementById('uprev').innerHTML=imgs.map((img,i)=>
+    `<div class="uth"><img src="${img.url}" alt="${img.name}"><button class="rm" onclick="removeImg(${i})">✕</button></div>`
+  ).join('');
+}
+
+function resetAll(){
+  if(!confirm('確定清除所有資料？')) return;
+  document.querySelectorAll('input:not([readonly]),textarea,select').forEach(el=>{
+    if(el.type==='number'&&el.id==='f-ser') el.value='1';
+    else if(el.id==='f-hdl') el.value='林湘珆 Molly';
+    else if(el.type==='number'&&el.id==='dep-pct') el.value='30';
+    else if(el.type==='number'&&el.id==='taxrate') el.value='5';
+    else if(el.tagName==='SELECT') el.value='';
+    else if(!el.readOnly) el.value='';
+  });
+  botItems=[]; banFreeItems=[]; banAddonItems=[]; extras=[]; imgs=[]; rowId=0;
+  flavors={g1:[],g2:[]};
+  colDed=true; colLogo=true;
+  document.getElementById('ctg-ded').classList.add('on');
+  document.getElementById('ctg-logo').classList.add('on');
+  rebuildBotHeader();
+  document.getElementById('itbody-bot').innerHTML='';
+  document.getElementById('ban-free-body').innerHTML='';
+  document.getElementById('ban-addon-body').innerHTML='';
+  document.getElementById('ext-list').innerHTML='';
+  document.getElementById('uprev').innerHTML='';
+  renderFlavors('g1'); renderFlavors('g2');
+  document.getElementById('svc-detail-wrap').classList.remove('on');
+  addBotRow();
+  if(qType==='banquet'){ addBanFreeRow(); addBanAddonRow(); }
+  calc(); onDate(); upNo();
+}
+
+function getPayTerms(){
+  const tot=document.getElementById('t-tot').textContent;
+  if(payTab===0){
+    const pct=document.getElementById('dep-pct')?.value||30;
+    const dep=document.getElementById('dep-amt')?.textContent||'—';
+    const bal=document.getElementById('dep-bal')?.textContent||'—';
+    const days=document.getElementById('dep-days')?.value;
+    const ded=document.getElementById('dep-ded')?.value;
+    let t=`訂金 ${pct}%（${dep}），尾款 ${100-pct}%（${bal}）`;
+    if(days) t+=`，到貨後 ${days} 日驗收無誤後支付尾款`;
+    if(ded) t+=`；折抵：${ded}`;
+    return t;
+  }
+  if(payTab===1){
+    const v=document.getElementById('p1-vdays')?.value||'7';
+    const p=document.getElementById('p1-pdays')?.value||'30';
+    const pct=document.getElementById('p1-pct')?.value||'100';
+    const n=document.getElementById('p1-note')?.value;
+    let t=`到貨後 ${v} 日驗收，驗收無誤後 ${p} 日內支付 ${pct}%（${tot}）`;
+    if(n) t+=`；${n}`;
+    return t;
+  }
+  if(payTab===2){
+    const mon=document.getElementById('p2-mon')?.value||'1';
+    const day=document.getElementById('p2-day')?.value||'15';
+    const est=document.getElementById('p2-est')?.value||'—';
+    return `收貨後第 ${mon} 個月 ${day} 號付款，預估付款日：${est}`;
+  }
+  if(payTab===3) return document.getElementById('p3-txt')?.value||'（自訂條款）';
+  return '';
+}
+
+// ── PREVIEW ──
+function openPreview(){
+  const no=document.getElementById('f-no').value||'—';
+  const dt=document.getElementById('f-dt').value||'—';
+  const ex=document.getElementById('f-ex').value||'—';
+  const cli=document.getElementById('f-cli').value||'（未填）';
+  const con=document.getElementById('f-con').value||'';
+  const tax=document.getElementById('f-tax').value;
+  const ph=document.getElementById('f-ph').value;
+  const ad=document.getElementById('f-ad').value;
+  const hdl=document.getElementById('f-hdl').value||'';
+  const note=document.getElementById('f-note').value;
+  const tot=document.getElementById('t-tot').textContent;
+  const tsub=document.getElementById('t-sub').textContent;
+  const ttax=document.getElementById('t-tax').textContent;
+  const taxVisible=document.getElementById('tr-tax').style.display!=='none';
+  const lbsub=document.getElementById('lb-sub').textContent;
+  const lbtax=document.getElementById('lb-tax').textContent;
+  const extVisible=document.getElementById('tr-ext').style.display!=='none';
+  const text=document.getElementById('t-ext').textContent;
+
+  let rowsH='';
+  if(qType==='bottle'){
+    let headCols = `<th style="padding:10px 12px;text-align:left;color:#6B6B63;font-weight:600;font-size:10.5px;letter-spacing:.3px;border-bottom:1.5px solid #22241F">品名</th>
+      <th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">批次</th>
+      <th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">容量</th>
+      <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">單價</th>`;
+    if(colDed) headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">標費</th>`;
+    if(colLogo) headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">LOGO</th>`;
+    headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">瓶數</th>
+      <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">小計</th>`;
+    rowsH+=`<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-top:18px"><thead><tr>${headCols}</tr></thead><tbody>`;
+    botItems.forEach(id=>{
+      const row=document.getElementById(`r-${id}`); if(!row) return;
+      const n=gs(row,'name'),lot=gs(row,'lot'),vol=gv(row,'vol'),p=gv(row,'price'),d=colDed?gv(row,'ded'):0,l=colLogo?gv(row,'logo'):0,q=gv(row,'qty');
+      const sub=(p+d+l)*q;
+      if(!n&&!sub) return;
+      let cells = `<td style="padding:11px 12px;font-weight:600;color:#22241F">${n||'—'}</td>
+        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${lot}</td>
+        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${vol?vol+'ml':'—'}</td>
+        <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+p.toLocaleString():'—'}</td>`;
+      if(colDed) cells += `<td style="padding:11px 8px;text-align:right;color:#6B6B63">${d?d:''}</td>`;
+      if(colLogo) cells += `<td style="padding:11px 8px;text-align:right;color:#6B6B63">${l?'$'+l:'—'}</td>`;
+      cells += `<td style="padding:11px 8px;text-align:right;color:#6B6B63">${q}</td>
+        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(sub).toLocaleString()}</td>`;
+      rowsH+=`<tr style="border-bottom:1px solid #EEEDE6">${cells}</tr>`;
+    });
+    if(extras.length){
+      const colspan = 3 + (colDed?1:0) + (colLogo?1:0) + 2;
+      extras.forEach(e=>{
+        rowsH+=`<tr style="border-bottom:1px solid #EEEDE6">
+          <td colspan="${colspan}" style="padding:9px 12px;color:#A6824A;font-style:italic;font-size:12px">${e.n}</td>
+          <td style="padding:9px 8px;text-align:right;color:#6B6B63">$${e.a.toLocaleString()}</td>
+        </tr>`;
+      });
+    }
+    rowsH+=`</tbody></table>`;
+  } else {
+    rowsH+=`<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-top:18px"><thead><tr>
+      <th style="padding:10px 12px;text-align:left;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">項目</th>
+      <th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">數量</th>
+      <th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">單位</th>
+      <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">單價</th>
+      <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">小計</th>
+    </tr></thead><tbody>`;
+
+    // group 1
+    const g1p=parseFloat(document.getElementById('ban-g1-price').value)||0;
+    const g1q=parseFloat(document.getElementById('ban-g1-qty').value)||0;
+    if(g1p||g1q){
+      const flavorStr = flavors.g1.length ? `（${flavors.g1.join('、')}）` : '';
+      rowsH+=`<tr style="border-bottom:1px solid #EEEDE6">
+        <td style="padding:11px 12px;font-weight:600;color:#22241F">客製化調酒<span style="font-weight:400;color:#6B6B63;font-size:11.5px">${flavorStr}</span></td>
+        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${g1q}</td>
+        <td style="padding:11px 8px;text-align:center;color:#6B6B63">杯</td>
+        <td style="padding:11px 8px;text-align:right;color:#6B6B63">${g1p?'$'+g1p.toLocaleString():'—'}</td>
+        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(g1p*g1q).toLocaleString()}</td>
+      </tr>`;
+    }
+    const g2p=parseFloat(document.getElementById('ban-g2-price').value)||0;
+    const g2q=parseFloat(document.getElementById('ban-g2-qty').value)||0;
+    if(g2p||g2q){
+      const flavorStr = flavors.g2.length ? `（${flavors.g2.join('、')}）` : '';
+      rowsH+=`<tr style="border-bottom:1px solid #EEEDE6">
+        <td style="padding:11px 12px;font-weight:600;color:#22241F">客製化無酒精雞尾酒<span style="font-weight:400;color:#6B6B63;font-size:11.5px">${flavorStr}</span></td>
+        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${g2q}</td>
+        <td style="padding:11px 8px;text-align:center;color:#6B6B63">杯</td>
+        <td style="padding:11px 8px;text-align:right;color:#6B6B63">${g2p?'$'+g2p.toLocaleString():'—'}</td>
+        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(g2p*g2q).toLocaleString()}</td>
+      </tr>`;
+    }
+    banFreeItems.forEach(id=>{
+      const row=document.getElementById(`bf-${id}`); if(!row) return;
+      const n=gs(row,'name'),u=gs(row,'unit'),p=gv(row,'price'),q=gv(row,'qty');
+      const sub=p*q;
+      if(!n&&!sub) return;
+      rowsH+=`<tr style="border-bottom:1px solid #EEEDE6">
+        <td style="padding:11px 12px;font-weight:600;color:#22241F">${n}</td>
+        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${q}</td>
+        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${u}</td>
+        <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+p.toLocaleString():'—'}</td>
+        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(sub).toLocaleString()}</td>
+      </tr>`;
+    });
+    // service fee
+    const mode=document.getElementById('svc-mode').value;
+    if(mode){
+      const labelMap={basic:'調酒師服務費及運費（基礎運費）',equip:'調酒師費（含設備）',travel:'調酒師費＋車馬費及酒水運費',travelonly:'車馬費'};
+      const a1=parseFloat(document.getElementById('svc-amt1').value)||0;
+      const a2=parseFloat(document.getElementById('svc-amt2').value)||0;
+      const q=parseFloat(document.getElementById('svc-qty').value)||1;
+      const sub=(a1+(mode==='travel'?a2:0))*q;
+      rowsH+=`<tr style="border-bottom:1px solid #EEEDE6">
+        <td style="padding:11px 12px;font-weight:600;color:#22241F">${labelMap[mode]}</td>
+        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${q}</td>
+        <td style="padding:11px 8px;text-align:center;color:#6B6B63">位</td>
+        <td style="padding:11px 8px;text-align:right;color:#6B6B63">$${(a1+(mode==='travel'?a2:0)).toLocaleString()}</td>
+        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(sub).toLocaleString()}</td>
+      </tr>`;
+    }
+    // addons
+    banAddonItems.forEach(id=>{
+      const row=document.getElementById(`ba-${id}`); if(!row) return;
+      const n=gs(row,'name'),u=gs(row,'unit'),p=gv(row,'price'),q=gv(row,'qty');
+      const sub=p*q;
+      if(!n&&!sub) return;
+      rowsH+=`<tr style="border-bottom:1px solid #EEEDE6">
+        <td style="padding:11px 12px;font-weight:600;color:#22241F">${n}</td>
+        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${q}</td>
+        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${u}</td>
+        <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+p.toLocaleString():'—'}</td>
+        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(sub).toLocaleString()}</td>
+      </tr>`;
+    });
+    rowsH+=`</tbody></table>`;
+  }
+
+  const venH=qType==='banquet'&&document.getElementById('f-ven').value?`
+    <div style="display:flex;gap:28px;font-size:12px;color:#6B6B63;margin-bottom:18px">
+      <span>佈置地點：<strong style="color:#22241F">${document.getElementById('f-ven').value}</strong></span>
+      ${document.getElementById('f-svc').value?`<span>供酒時間：${document.getElementById('f-svc').value}</span>`:''}
+    </div>`:'';
+
+  const imgH=imgs.length?`
+    <div style="margin-top:24px;display:flex;gap:10px;flex-wrap:wrap">
+      ${imgs.map(i=>`<img src="${i.url}" style="max-height:120px;border-radius:4px;border:1px solid #E5E2D8;object-fit:cover">`).join('')}
+    </div>`:'';
+
+  const payH=getPayTerms();
+
+  let cliRows='';
+  const cliFields=[[cli,'客戶名稱'],[con,'聯絡人'],[tax,'統一編號'],[ph,'聯絡電話'],[ad,'地址']];
+  cliFields.forEach(([v,l])=>{
+    if(v) cliRows+=`<div style="display:flex;gap:8px;font-size:12.5px;margin-bottom:7px;line-height:1.6"><span style="color:#A8A69C;min-width:62px">${l}</span><span style="color:#22241F">${v}</span></div>`;
+  });
+
+  document.getElementById('pcon').innerHTML=`
+  <div style="font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;padding:56px 60px;color:#22241F">
+
+  <!-- HEADER -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:26px;border-bottom:1.5px solid #22241F;margin-bottom:28px">
+    <div style="display:flex;align-items:flex-start;gap:14px">
+      <div style="width:3px;height:46px;background:#A6824A;border-radius:2px;margin-top:2px"></div>
+      <div>
+        <div style="font-size:23px;letter-spacing:4px;color:#22241F;font-weight:700;line-height:1.2">凱文南坡萬實業社</div>
+        <div style="font-size:9px;letter-spacing:1.8px;color:#A6824A;margin-top:7px;text-transform:uppercase;line-height:1.7;font-weight:600">KEVIN NUMBER 1 TAILORED.COCKTAIL<br>EST. 2023. TAIWAN</div>
+        <div style="font-size:11px;color:#A8A69C;margin-top:6px">新北市新莊區化成路554巷37號　(02)8991-0068　統編 92719710</div>
+      </div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:22px;font-weight:700;color:#22241F;letter-spacing:6px;margin-bottom:10px">報 價 單</div>
+      <div style="font-size:11.5px;color:#A8A69C;line-height:1.9">單號：<span style="color:#22241F;font-weight:600">${no}</span></div>
+      <div style="font-size:11.5px;color:#A8A69C;line-height:1.9">報價日：<span style="color:#22241F">${dt}</span></div>
+      <div style="font-size:11.5px;color:#A6824A;font-weight:700">有效至：${ex}</div>
+    </div>
+  </div>
+
+  <!-- CLIENT -->
+  ${venH}
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;margin-bottom:26px">
+    ${cliRows}
+  </div>
+
+  <!-- TABLE -->
+  ${rowsH}
+
+  <!-- TOTAL -->
+  <div style="display:flex;justify-content:flex-end;margin-top:22px">
+    <div style="background:#22241F;border-radius:4px;padding:18px 26px;min-width:230px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:rgba(255,255,255,.5);margin-bottom:6px"><span>${lbsub}</span><span>${tsub}</span></div>
+      ${taxVisible?`<div style="display:flex;justify-content:space-between;font-size:12px;color:rgba(255,255,255,.5);margin-bottom:6px"><span>${lbtax}</span><span>${ttax}</span></div>`:''}
+      ${extVisible?`<div style="display:flex;justify-content:space-between;font-size:12px;color:rgba(255,255,255,.5);margin-bottom:6px"><span>額外費用</span><span>${text}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between;font-size:17px;color:#C9A84C;font-weight:700;border-top:1px solid rgba(255,255,255,.18);padding-top:10px;margin-top:4px;letter-spacing:.3px"><span>總計</span><span>${tot}</span></div>
+    </div>
+  </div>
+
+  ${imgH}
+
+  <!-- PAYMENT -->
+  <div style="margin-top:28px;padding:14px 18px;background:#FAF9F5;border-left:2.5px solid #A6824A;font-size:12.5px;color:#22241F;line-height:1.7">
+    <span style="font-weight:700;color:#7C5E32">付款條件</span><br>${payH}
+  </div>
+
+  <!-- NOTES -->
+  <div style="margin-top:24px;padding-top:18px;border-top:1px solid #E5E2D8;font-size:11.5px;color:#6B6B63;line-height:1.9">
+    ${note?`<p style="margin-bottom:10px">${note}</p>`:''}
+    <p>以下客戶簡稱甲方，凱文南坡萬實業社簡稱乙方。雙方確認此報價單內容無誤並於雙方各執一份，以維雙方權利。</p>
+    <p style="margin-top:6px">匯款：陽信銀行中興分行 (108)　02142-00230-91　凱文南坡萬實業社黃彥愷</p>
+  </div>
+
+  <!-- SIGNATURE -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:32px">
+    <div style="border:1px solid #E5E2D8;border-radius:4px;padding:18px 20px">
+      <div style="font-size:11px;color:#A8A69C;margin-bottom:32px">甲方：${cli}</div>
+      <div style="border-top:1px dashed #D4D0C2;padding-top:9px;text-align:center;font-size:10px;color:#C5C2B5">公司簽章</div>
+    </div>
+    <div style="border:1px solid #E5E2D8;border-radius:4px;padding:18px 20px">
+      <div style="font-size:11px;color:#A8A69C;margin-bottom:5px">乙方：凱文南坡萬實業社</div>
+      <div style="font-size:11px;color:#A8A69C;margin-bottom:22px">處理人：${hdl}</div>
+      <div style="border-top:1px dashed #D4D0C2;padding-top:9px;text-align:center;font-size:10px;color:#C5C2B5">公司簽章</div>
+    </div>
+  </div>
+  </div>`;
+
+  document.getElementById('pov').style.display='block';
+}
+
+function closePreview(){document.getElementById('pov').style.display='none';}
+
+/* ===== 正式版 API 層 ===== */
+/* ============================================================
+   API 層 + 系統功能（登入 / 儲存 / 列表 / 匯出）
+   ============================================================ */
+const API_URL = "https://script.google.com/macros/s/AKfycbytSqCF0St1Gu8F_u8KW9rcKJnkkGAfrdaHYyrQ6wDKa19Z3TxZd-GRRi_3Ii3Ijv4i/exec";
+let AUTH_TOKEN = null;
+let currentPage = 'new';      // new | records
+let editingQuoteNo = null;    // 若非 null 表示正在編輯既有報價單
+
+/* ---- API 呼叫核心（GAS Web App 用 text/plain 避開 CORS preflight）---- */
+async function apiCall(payload){
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  });
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); }
+  catch(e){ throw new Error('伺服器回應格式錯誤：' + text.slice(0,120)); }
+  if(data.ok === false && data.error && data.error.indexOf('UNAUTHORIZED') === 0){
+    // token 失效，回登入頁
+    AUTH_TOKEN = null;
+    sessionStorage.removeItem('quote_token');
+    showLogin();
+    throw new Error('登入已過期，請重新登入');
+  }
+  return data;
+}
+
+/* ---- 登入 ---- */
+async function doLogin(){
+  const pin = document.getElementById('login-pin').value.trim();
+  const errEl = document.getElementById('login-err');
+  const btn = document.getElementById('login-btn');
+  errEl.textContent = '';
+  if(!pin){ errEl.textContent = '請輸入 PIN 碼'; return; }
+  btn.disabled = true; btn.textContent = '登入中…';
+  try {
+    const data = await apiCall({ action:'login', pin });
+    if(data.ok && data.token){
+      AUTH_TOKEN = data.token;
+      sessionStorage.setItem('quote_token', data.token);
+      hideLogin();
+      toast('登入成功','ok');
+    } else {
+      errEl.textContent = data.error || 'PIN 碼錯誤';
+    }
+  } catch(e){
+    errEl.textContent = e.message || '連線失敗，請稍後再試';
+  } finally {
+    btn.disabled = false; btn.textContent = '登入';
+  }
+}
+function showLogin(){ document.getElementById('login-overlay').style.display='flex'; }
+function hideLogin(){
+  document.getElementById('login-overlay').style.display='none';
+  document.getElementById('login-pin').value='';
+}
+
+/* ---- toast ---- */
+let toastTimer=null;
+function toast(msg, type){
+  const t=document.getElementById('toast');
+  document.getElementById('toast-msg').textContent=msg;
+  t.className='toast show'+(type==='ok'?' ok':type==='err'?' err':'');
+  const ic=t.querySelector('i');
+  ic.className = type==='err' ? 'ti ti-alert-triangle' : 'ti ti-check';
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>{ t.className='toast'+(type==='ok'?' ok':type==='err'?' err':''); }, 2800);
+}
+
+/* ---- 頁面切換 ---- */
+function gotoPage(p){
+  currentPage=p;
+  document.getElementById('page-new').classList.toggle('on', p==='new');
+  document.getElementById('page-records').classList.toggle('on', p==='records');
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
+  if(p==='new'){ document.getElementById('nav-new').classList.add('on'); }
+  if(p==='records'){ document.getElementById('nav-records').classList.add('on'); loadRecords(); }
+}
+
+/* ---- 收集表單資料成 quote 物件 ---- */
+function collectQuote(){
+  const g=id=>document.getElementById(id);
+  const val=id=>{const e=g(id);return e?e.value.trim():''};
+  const num=id=>{const e=g(id);return e?(parseFloat(e.value)||0):0};
+
+  const items=[];
+  if(qType==='bottle'){
+    botItems.forEach(rid=>{
+      const row=document.getElementById(`r-${rid}`); if(!row) return;
+      const name=gs(row,'name'); const sub=(gv(row,'price')+(colDed?gv(row,'ded'):0)+(colLogo?gv(row,'logo'):0))*gv(row,'qty');
+      if(!name && !sub) return;
+      items.push({ itemType:'bottle', name, lot:gs(row,'lot'), volume:gv(row,'vol'),
+        unitPrice:gv(row,'price'), deduction:colDed?gv(row,'ded'):0, logoFee:colLogo?gv(row,'logo'):0,
+        qty:gv(row,'qty'), unit:'瓶', subtotal:sub, flavorList:'' });
+    });
+  } else {
+    // banquet groups
+    const g1p=num('ban-g1-price'),g1q=num('ban-g1-qty');
+    if(g1p||g1q) items.push({ itemType:'banquet_group', name:'客製化調酒', lot:'', volume:'',
+      unitPrice:g1p, deduction:0, logoFee:0, qty:g1q, unit:'杯', subtotal:g1p*g1q, flavorList:flavors.g1.join('、') });
+    const g2p=num('ban-g2-price'),g2q=num('ban-g2-qty');
+    if(g2p||g2q) items.push({ itemType:'banquet_group', name:'客製化無酒精雞尾酒', lot:'', volume:'',
+      unitPrice:g2p, deduction:0, logoFee:0, qty:g2q, unit:'杯', subtotal:g2p*g2q, flavorList:flavors.g2.join('、') });
+    banFreeItems.forEach(rid=>{
+      const row=document.getElementById(`bf-${rid}`); if(!row) return;
+      const name=gs(row,'name'); const sub=gv(row,'price')*gv(row,'qty');
+      if(!name && !sub) return;
+      items.push({ itemType:'banquet_free', name, lot:'', volume:'', unitPrice:gv(row,'price'),
+        deduction:0, logoFee:0, qty:gv(row,'qty'), unit:gs(row,'unit'), subtotal:sub, flavorList:'' });
+    });
+    banAddonItems.forEach(rid=>{
+      const row=document.getElementById(`ba-${rid}`); if(!row) return;
+      const name=gs(row,'name'); const sub=gv(row,'price')*gv(row,'qty');
+      if(!name && !sub) return;
+      items.push({ itemType:'banquet_addon', name, lot:'', volume:'', unitPrice:gv(row,'price'),
+        deduction:0, logoFee:0, qty:gv(row,'qty'), unit:gs(row,'unit'), subtotal:sub, flavorList:'' });
+    });
+  }
+  // bottle extras 也放進 items
+  if(qType==='bottle'){
+    extras.forEach(e=>{
+      items.push({ itemType:'extra', name:e.n, lot:'', volume:'', unitPrice:e.a,
+        deduction:0, logoFee:0, qty:1, unit:'', subtotal:e.a, flavorList:'' });
+    });
+  }
+
+  const numFromText=id=>parseFloat((document.getElementById(id).textContent||'0').replace(/[$,]/g,''))||0;
+  const svcMode=g('svc-mode')?g('svc-mode').value:'';
+
+  return {
+    quoteNo: editingQuoteNo || val('f-no'),
+    quoteType: qType,
+    clientName: val('f-cli'), contactName: val('f-con'), clientTaxId: val('f-tax'),
+    contactPhone: val('f-ph'), clientAddress: val('f-ad'),
+    quoteDate: val('f-dt'), expiryDate: val('f-ex'), handler: val('f-hdl'),
+    itemsSubtotal: numFromText('t-sub'), taxAmount: numFromText('t-tax'),
+    extrasTotal: numFromText('t-ext'), grandTotal: numFromText('t-tot'),
+    priceMode: taxMode, taxRate: num('taxrate'),
+    paymentType: String(payTab), paymentDetail: getPayTerms(),
+    remark: val('f-note'), imageLinks: '', status: '草稿',
+    venue: val('f-ven'), entryTime: val('f-ent'), serviceTime: val('f-svc'), exitTime: val('f-ext'),
+    svcMode: svcMode, svcAmount: 0,
+    items
+  };
+}
+
+/* ---- 儲存（新增 or 更新）---- */
+async function saveQuote(){
+  const cli=document.getElementById('f-cli').value.trim();
+  const con=document.getElementById('f-con').value.trim();
+  if(!cli || !con){ toast('請填寫客戶名稱與聯絡人','err'); return; }
+  if(!AUTH_TOKEN){ showLogin(); return; }
+  const quote=collectQuote();
+  const btn=document.getElementById('btn-save');
+  if(btn){ btn.disabled=true; }
+  try {
+    let data;
+    if(editingQuoteNo){
+      data=await apiCall({ action:'updateQuote', token:AUTH_TOKEN, quoteNo:editingQuoteNo, quote });
+    } else {
+      data=await apiCall({ action:'createQuote', token:AUTH_TOKEN, quote });
+    }
+    if(data.ok){
+      editingQuoteNo=data.quoteNo;
+      toast('已儲存：'+data.quoteNo,'ok');
+    } else {
+      toast(data.error||'儲存失敗','err');
+    }
+  } catch(e){
+    toast(e.message||'儲存失敗','err');
+  } finally {
+    if(btn){ btn.disabled=false; }
+  }
+}
+
+/* ---- 載入報價記錄列表 ---- */
+async function loadRecords(){
+  const body=document.getElementById('rec-body');
+  body.innerHTML='<tr><td colspan="6" class="rec-empty">載入中…</td></tr>';
+  try {
+    const filters={};
+    const kw=document.getElementById('rec-search').value.trim();
+    const tf=document.getElementById('rec-type-filter').value;
+    if(kw) filters.clientName=kw;
+    if(tf) filters.quoteType=tf;
+    const data=await apiCall({ action:'getQuotes', token:AUTH_TOKEN, filters });
+    if(!data.ok){ body.innerHTML=`<tr><td colspan="6" class="rec-empty">${data.error||'載入失敗'}</td></tr>`; return; }
+    const quotes=(data.quotes||[]).filter(q=>q.status!=='已刪除');
+    if(quotes.length===0){ body.innerHTML='<tr><td colspan="6" class="rec-empty">尚無報價單記錄</td></tr>'; return; }
+    body.innerHTML=quotes.map(q=>{
+      const typeBadge=q.quoteType==='bottle'
+        ? '<span class="rec-badge bottle">瓶裝酒代工</span>'
+        : '<span class="rec-badge banquet">宴會酒水</span>';
+      const total='$'+Math.round(q.grandTotal||0).toLocaleString();
+      return `<tr class="clickable" onclick="openRecord('${q.quoteNo}')">
+        <td style="font-weight:600">${q.quoteNo||'—'}</td>
+        <td>${q.clientName||'—'}</td>
+        <td>${typeBadge}</td>
+        <td>${q.quoteDate||'—'}</td>
+        <td style="font-weight:600">${total}</td>
+        <td class="rec-actions" onclick="event.stopPropagation()">
+          <button class="rec-act-btn" onclick="openRecord('${q.quoteNo}')">開啟</button>
+          <button class="rec-act-btn del" onclick="deleteRecord('${q.quoteNo}','${(q.clientName||'').replace(/'/g,'')}')">刪除</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e){
+    body.innerHTML=`<tr><td colspan="6" class="rec-empty">${e.message||'載入失敗'}</td></tr>`;
+  }
+}
+
+/* ---- 開啟既有報價單（載入到編輯表單）---- */
+async function openRecord(quoteNo){
+  try {
+    const data=await apiCall({ action:'getQuoteById', token:AUTH_TOKEN, quoteNo });
+    if(!data.ok){ toast(data.error||'讀取失敗','err'); return; }
+    loadQuoteIntoForm(data.quote);
+    gotoPage('new');
+    toast('已載入 '+quoteNo,'ok');
+  } catch(e){ toast(e.message||'讀取失敗','err'); }
+}
+
+/* ---- 刪除報價單 ---- */
+async function deleteRecord(quoteNo, cliName){
+  if(!confirm(`確定刪除報價單 ${quoteNo}（${cliName}）？\n此動作會將其標記為已刪除。`)) return;
+  try {
+    const data=await apiCall({ action:'deleteQuote', token:AUTH_TOKEN, quoteNo });
+    if(data.ok){ toast('已刪除 '+quoteNo,'ok'); loadRecords(); }
+    else toast(data.error||'刪除失敗','err');
+  } catch(e){ toast(e.message||'刪除失敗','err'); }
+}
+
+/* ---- 把 quote 物件灌回表單 ---- */
+function loadQuoteIntoForm(q){
+  editingQuoteNo=q.quoteNo;
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v||''};
+  setType(q.quoteType||'bottle');
+  set('f-cli',q.clientName); set('f-con',q.contactName); set('f-tax',q.clientTaxId);
+  set('f-ph',q.contactPhone); set('f-ad',q.clientAddress);
+  set('f-dt',q.quoteDate); set('f-hdl',q.handler);
+  set('f-ven',q.venue); set('f-ent',q.entryTime); set('f-svc',q.serviceTime); set('f-ext',q.exitTime);
+  set('f-note',q.remark);
+  set('taxrate',q.taxRate||5);
+  if(q.quoteNo){ document.getElementById('f-no').value=q.quoteNo; document.getElementById('pl-no').textContent=q.quoteNo; }
+  setTaxMode(q.priceMode||'inc');
+  onDate();
+  const items=q.items||[];
+  if(q.quoteType==='bottle'){
+    document.getElementById('itbody-bot').innerHTML=''; botItems=[];
+    extras=[];
+    items.forEach(it=>{
+      if(it.itemType==='extra'){ extras.push({id:Date.now()+Math.random(),n:it.name,a:it.unitPrice||it.subtotal||0}); }
+      else { addBotRow({name:it.name,lot:it.lot,vol:it.volume,price:it.unitPrice,ded:it.deduction,logo:it.logoFee,qty:it.qty}); }
+    });
+    if(botItems.length===0) addBotRow();
+    renderExt();
+  } else {
+    flavors={g1:[],g2:[]};
+    document.getElementById('ban-free-body').innerHTML=''; banFreeItems=[];
+    document.getElementById('ban-addon-body').innerHTML=''; banAddonItems=[];
+    items.forEach(it=>{
+      if(it.itemType==='banquet_group'){
+        if(it.name==='客製化調酒'){ set('ban-g1-price',it.unitPrice); set('ban-g1-qty',it.qty); flavors.g1=it.flavorList?String(it.flavorList).split('、').filter(Boolean):[]; }
+        else { set('ban-g2-price',it.unitPrice); set('ban-g2-qty',it.qty); flavors.g2=it.flavorList?String(it.flavorList).split('、').filter(Boolean):[]; }
+      } else if(it.itemType==='banquet_free'){
+        addBanFreeRow(); const rid=banFreeItems[banFreeItems.length-1]; const row=document.getElementById(`bf-${rid}`);
+        if(row){ row.querySelector('[data-f=name]').value=it.name||''; row.querySelector('[data-f=qty]').value=it.qty||''; row.querySelector('[data-f=unit]').value=it.unit||''; row.querySelector('[data-f=price]').value=it.unitPrice||''; }
+      } else if(it.itemType==='banquet_addon'){
+        addBanAddonRow({name:it.name,qty:it.qty,unit:it.unit,price:it.unitPrice});
+      }
+    });
+    if(banFreeItems.length===0) addBanFreeRow();
+    if(banAddonItems.length===0) addBanAddonRow();
+    if(q.svcMode){ set('svc-mode',q.svcMode); onSvcModeChange(); }
+    renderFlavors('g1'); renderFlavors('g2');
+  }
+  // payment
+  const pt=parseInt(q.paymentType)||0; setPay(pt);
+  if(pt===3 && q.paymentDetail){ const e=document.getElementById('p3-txt'); if(e)e.value=q.paymentDetail; }
+  calc();
+}
+
+/* ---- 開新（清空編輯狀態）---- */
+function newQuote(){
+  editingQuoteNo=null;
+  resetAll();
+  gotoPage('new');
+}
+
+/* ---- PDF 匯出（瀏覽器列印）---- */
+function exportPDF(){
+  openPreview();
+  setTimeout(()=>{
+    const pcon=document.getElementById('pcon').innerHTML;
+    const w=window.open('','_blank');
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>報價單</title>
+      <style>@page{size:A4;margin:14mm}body{margin:0;font-family:-apple-system,'Microsoft JhengHei',sans-serif}</style>
+      </head><body>${pcon}</body></html>`);
+    w.document.close();
+    setTimeout(()=>{ w.print(); }, 400);
+  }, 200);
+}
+
+/* ---- 啟動：檢查 session token ---- */
+(function initAuth(){
+  const saved=sessionStorage.getItem('quote_token');
+  if(saved){ AUTH_TOKEN=saved; hideLogin(); }
+  else { showLogin(); }
+})();
+
+</script>
+</body>
+</html>
