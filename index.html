@@ -285,6 +285,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
       <button class="btn btn-dk" onclick="openPreview()"><i class="ti ti-eye"></i>預覽</button>
       <button class="btn btn-dk" id="btn-save" onclick="saveQuote()"><i class="ti ti-device-floppy"></i>儲存</button>
       <button class="btn btn-gold" onclick="exportPDF()"><i class="ti ti-download"></i>匯出 PDF</button>
+      <button class="btn btn-dk" id="btn-gendoc" onclick="generateOfficialDocument()"><i class="ti ti-file-text"></i>正式文件</button>
     </div>
   </div>
 
@@ -617,7 +618,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
       <span>報價單預覽</span>
       <div class="phbtns">
         <button class="btn btn-gold" style="font-size:12px;padding:6px 13px" onclick="exportPDF()"><i class="ti ti-file-type-pdf"></i>列印 / PDF</button>
-        <button class="btn btn-g" style="font-size:12px;padding:6px 13px;color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.2)" onclick="exportPDF()"><i class="ti ti-file-word"></i>列印</button>
+        <button class="btn btn-g" style="font-size:12px;padding:6px 13px;color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.2)" onclick="generateOfficialDocument()"><i class="ti ti-file-text"></i>正式文件</button>
         <button style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;font-size:20px;line-height:1;margin-left:4px" onclick="closePreview()">✕</button>
       </div>
     </div>
@@ -1565,6 +1566,41 @@ async function saveQuote(){
   }
 }
 
+/* ---- 產生正式 PDF/Word 文件（GAS 動態建立 Google Doc）---- */
+async function generateOfficialDocument(){
+  if(!AUTH_TOKEN){ showLogin(); return; }
+  if(!editingQuoteNo){
+    toast('請先「儲存」報價單後再產生正式文件','err');
+    return;
+  }
+  const btn=document.getElementById('btn-gendoc');
+  if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader"></i>產生中…'; }
+  try {
+    const data=await apiCall({ action:'generateQuoteDocument', token:AUTH_TOKEN, quoteNo:editingQuoteNo });
+    if(!data.ok){ toast(data.error||'產生失敗','err'); return; }
+    downloadBase64_(data.pdfBase64, 'application/pdf', data.fileNameBase+'.pdf');
+    downloadBase64_(data.docxBase64, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', data.fileNameBase+'.docx');
+    toast('已產生 PDF / Word 並開始下載','ok');
+  } catch(e){
+    toast(e.message||'產生失敗','err');
+  } finally {
+    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-file-text"></i>正式文件'; }
+  }
+}
+
+function downloadBase64_(base64, mime, filename){
+  if(!base64) return;
+  const byteChars=atob(base64);
+  const byteNumbers=new Array(byteChars.length);
+  for(let i=0;i<byteChars.length;i++) byteNumbers[i]=byteChars.charCodeAt(i);
+  const byteArray=new Uint8Array(byteNumbers);
+  const blob=new Blob([byteArray],{type:mime});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+}
 /* ---- 載入報價記錄列表 ---- */
 async function loadRecords(){
   const body=document.getElementById('rec-body');
