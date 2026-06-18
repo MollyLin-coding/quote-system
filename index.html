@@ -460,6 +460,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
           <button class="pres-btn" onclick="presQty('SGS 檢驗費',4000)">SGS $4,000/款</button>
           <button class="pres-btn" onclick="presQty('GS1條碼登記費',1500)">GS1 $1,500/款</button>
           <button class="pres-btn" onclick="pres('整批出貨免運',0)">免運 $0</button>
+          <button class="pres-btn" onclick="presAmt('運費')">+ 運費</button>
         </div>
       </div>
     </div>
@@ -519,7 +520,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
         <div class="pay-panel" id="pp1">
           <div class="fg fg3">
             <div class="fl"><label>到貨後幾日驗收</label><input class="fi" type="number" id="p1-vdays" placeholder="7" min="1"></div>
-            <div class="fl"><label>驗收無誤後幾日付款</label><input class="fi" type="number" id="p1-pdays" placeholder="30" min="1"></div>
             <div class="fl"><label>付款比例 <span class="opt">若需分期</span></label>
               <div style="display:flex;align-items:center;gap:6px"><input class="fi" type="number" id="p1-pct" placeholder="100" min="1" max="100" style="width:70px"><span style="color:var(--hint);font-size:13px">%</span></div>
             </div>
@@ -529,7 +529,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
         <div class="pay-panel" id="pp2">
           <div class="fg fg3">
             <div class="fl"><label>收貨後第幾個月</label>
-              <div style="display:flex;align-items:center;gap:6px"><input class="fi" type="number" id="p2-mon" placeholder="1" min="1"><span style="color:var(--hint);font-size:13px">月</span></div>
+              <div style="display:flex;align-items:center;gap:6px"><input class="fi" type="number" id="p2-mon" placeholder="1" value="1" min="1"><span style="color:var(--hint);font-size:13px">月</span></div>
             </div>
             <div class="fl"><label>該月幾號付款</label>
               <div style="display:flex;align-items:center;gap:6px"><input class="fi" type="number" id="p2-day" placeholder="15" min="1" max="31"><span style="color:var(--hint);font-size:13px">號</span></div>
@@ -566,7 +566,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
         <div style="font-size:10.5px;color:var(--hint);font-weight:600;letter-spacing:.4px;margin-bottom:8px">固定條款（自動附上）</div>
         <ul class="rem-ul">
           <li>雙方確認此報價單內容無誤並於雙方各執一份，以維雙方權利</li>
-          <li>匯款：陽信銀行中興分行 (108)，帳號 02142-00230-91，戶名：凱文南坡萬實業社黃彥愷</li>
+          <li>匯款資訊：陽信銀行中興分行 (108)，帳號 02142-00230-91，戶名：凱文南坡萬實業社黃彥愷</li>
+          <li>匯款完成後，敬請提供轉帳截圖或帳號後五碼，以便核對入帳</li>
         </ul>
       </div>
     </div>
@@ -912,14 +913,12 @@ function calc(){
     });
   }
 
-  let taxAmt=0, displaySub=rawSub;
+  let taxAmt=0;
   if(rate>0){
     if(taxMode==='inc'){
       taxAmt=Math.round(rawSub*rate/(1+rate));
-      displaySub=rawSub;
     } else {
       taxAmt=Math.round(rawSub*rate);
-      displaySub=rawSub+taxAmt;
     }
     document.getElementById('tr-tax').style.display='flex';
     document.getElementById('t-tax').textContent='$'+taxAmt.toLocaleString();
@@ -927,8 +926,9 @@ function calc(){
     document.getElementById('tr-tax').style.display='none';
   }
 
+  const displaySub = rawSub;
   const extTotal = qType==='bottle' ? extras.reduce((s,e)=>s+e.a,0) : 0;
-  const grandTotal=displaySub+extTotal;
+  const grandTotal = rawSub + (taxMode==='exc' ? taxAmt : 0) + extTotal;
   document.getElementById('t-sub').textContent='$'+Math.round(displaySub).toLocaleString();
   document.getElementById('t-ext').textContent='$'+extTotal.toLocaleString();
   document.getElementById('tr-ext').style.display = qType==='bottle' ? 'flex' : 'none';
@@ -990,6 +990,12 @@ function addExt(){
   document.getElementById('ea').value='';
 }
 function pres(n,a){pushExt(n,a);}
+function presAmt(n){
+  const s=prompt(`請輸入${n}金額`, '');
+  if(s===null) return;
+  const amt=parseFloat(s)||0;
+  pushExt(n, amt);
+}
 function presQty(n,unit){
   const def=botItems.length||1;
   const s=prompt(`請輸入需要${n}的款數（每款 $${unit.toLocaleString()}）`, def);
@@ -1029,6 +1035,7 @@ function resetAll(skipConfirm){
     else if(el.id==='f-hdl') el.value='林湘珆 Molly';
     else if(el.type==='number'&&el.id==='dep-pct') el.value='30';
     else if(el.type==='number'&&el.id==='taxrate') el.value='5';
+    else if(el.type==='number'&&el.id==='p2-mon') el.value='1';
     else if(el.tagName==='SELECT') el.value='';
     else if(!el.readOnly) el.value='';
   });
@@ -1067,10 +1074,9 @@ function getPayTerms(){
   }
   if(payTab===1){
     const v=document.getElementById('p1-vdays')?.value||'7';
-    const p=document.getElementById('p1-pdays')?.value||'30';
     const pct=document.getElementById('p1-pct')?.value||'100';
     const n=document.getElementById('p1-note')?.value;
-    let t=`乙方交付商品後，甲方應於 ${v} 日內完成驗收；驗收無誤後，甲方應於 ${p} 日內支付款項新台幣 ${tot} 元整之 ${pct}%。`;
+    let t=`乙方交付商品後，甲方應於 ${v} 日內完成驗收，驗收無誤後即應支付款項新台幣 ${tot} 元整之 ${pct}%。`;
     if(n) t+=`<br>付款條件備註：${n}`;
     return t;
   }
@@ -1089,7 +1095,7 @@ function openPreview(){
   const no=document.getElementById('f-no').value||'—';
   const dt=document.getElementById('f-dt').value||'—';
   const ex=document.getElementById('f-ex').value||'—';
-  const cli=document.getElementById('f-cli').value||'（未填）';
+  const cli=document.getElementById('f-cli').value||'';
   const tagLot=document.getElementById('f-tag-lot')?.value||'';
   const tagCli=document.getElementById('f-tag-cli')?.value||'';
   const con=document.getElementById('f-con').value||'';
@@ -1291,7 +1297,8 @@ function openPreview(){
   <div style="margin-top:16px;padding-top:14px;border-top:1px solid #E5E2D8;font-size:11.5px;color:#6B6B63;line-height:1.7">
     ${note?`<p style="margin-bottom:10px">${note}</p>`:''}
     <p>以下客戶簡稱甲方，凱文南坡萬實業社簡稱乙方。雙方確認此報價單內容無誤並於雙方各執一份，以維雙方權利。</p>
-    <p style="margin-top:6px">匯款：陽信銀行中興分行 (108)　02142-00230-91　凱文南坡萬實業社黃彥愷</p>
+    <p style="margin-top:6px">匯款資訊：陽信銀行中興分行 (108)　02142-00230-91　凱文南坡萬實業社黃彥愷</p>
+    <p style="margin-top:4px">匯款完成後，敬請提供轉帳截圖或帳號後五碼，以便核對入帳，謝謝。</p>
   </div>
 
   </div>`;
