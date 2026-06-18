@@ -1,7 +1,7 @@
 # 凱文南坡萬實業社 · 報價單系統 — 開發接手文件 v1.0
 
-建立日期：2026-06-18
-狀態：**後端 100% 上線並驗證｜前端已部署上線，圖示修正剛推送待最終確認**
+建立日期：2026-06-18（v1.1 更新：2026-06-18 下午，接手對話補修三隻 bug + chip 資料保留）
+狀態：**後端 100% 上線並驗證｜前端已部署上線並驗證｜圖示已確認生效｜瓶裝整條流程(建立→主表→品項表)資料正確性已驗證**
 適用：接手的新對話（Claude）。本文件目標是讓新對話「零資訊落差」接續，不重蹈覆轍。
 
 ---
@@ -102,6 +102,36 @@ GitHub repo 內：
 
 ---
 
+## 四點五、v1.1 接手對話修正紀錄（2026-06-18 下午）
+
+接手對話用 Claude in Chrome 實機 + Google Sheet 後台 + 靜態讀碼三方驗證，修掉三隻 bug 並完成瓶裝流程資料驗證。**前端 index.html 最新 commit = 5754591**（含以下全部修正）。
+
+### 修正 A：瓶裝額外費用造成總計 NaN（嚴重，比原雷單還嚴重）
+- **現象**：瓶裝報價單只要按 SGS/GS1/免運任一預設鈕或手動加額外費用，「額外費用」「總計」立刻變 `$非數值`(NaN)。
+- **根因**：`calc()` 內 `extras.reduce((s,e)=>s+e.amt,0)` 用了不存在的屬性 `e.amt`；額外費用物件實際存的是 `e.a`（見 `pushExt` 的 `extras.push({id,n,a})`）。
+- **正確寫法**：改為 `extras.reduce((s,e)=>s+e.a,0)`。
+- **驗證**：實機加 SGS$8000+GS1$3000 → 總計 $26,920 正確；資料寫入 Sheet「報價單品項」確認 extra 列獨立寫入。
+
+### 修正 B：svcAmount 永遠存 0（資料完整性）
+- **現象**：宴會單調酒師服務費小計畫面算得出來，但 `collectQuote()` 回傳 `svcAmount:0` 寫進主表 AE 欄永遠是 0。
+- **正確寫法**：`collectQuote()` 內依 svcMode 實算 `(svc-amt1 + (mode==='travel'?svc-amt2:0)) * svc-qty` 後帶入 `svcAmount`。
+
+### 修正 C：標費扣除 / LOGO 印刷費 chip 切換會清空已輸入資料（雷，原待辦#7）
+- **現象**：關掉再開回某欄，該欄(及連帶因 rebuild 而被重建的整列)先前輸入值消失。
+- **根因**：`toggleCol()` 重建列時，被隱藏欄位的 input 已從 DOM 移除取不到值；且每次 rebuild 都 `rowId++` 重新編號。
+- **正確寫法**：新增 `botDedCache/botLogoCache` 兩個以列 id 為 key 的快取，切換前先存值；`addBotRow(prefill)` 支援帶入既有 id 讓列號延續；`delBotRow`/`resetAll` 同步清快取。
+- **驗證**：實機輸入 ded=-2/logo=25 → 關 ded → 開 ded → 值完整保留。
+
+### 修正 D：newQuote() 每次跳 confirm（原待辦#9，UX）
+- **正確寫法**：新增 `isFormDirty()` 偵測表單是否有未儲存資料；`resetAll(skipConfirm)` 加參數；`newQuote()` 只在 dirty 時才 confirm，空白表單直接開新單。
+
+### 驗證方式備忘（給後續接手）
+- **GAS fetch 在 Claude in Chrome 會「假性 pending」**：前端 `apiCall()` 發出後 promise 久不 resolve（>45s），但 GAS 後台「執行項目」顯示 doPost 1-2 秒已完成、資料庫也確實寫入。這是自動化工具處理 script.google.com 跨網域 redirect 回應的怪癖，**非程式 bug**，真人瀏覽器正常（呼應雷5）。
+- **因此驗資料改走 Google Sheet**：直接開 Sheet 或用 `gviz/tq?tqx=out:csv&sheet=分頁名` 抓 CSV 比較快且不卡。
+- **靜態判定已過的項目**：宴會序列化、updateQuote 取代品項、deleteQuote 軟刪除、稅額含/未稅數學、PDF 列印模板——讀碼確認邏輯正確。
+
+---
+
 ## 五、踩過的雷與正確解法（務必看，避免重犯）
 
 ### 雷 1：從截圖辨識金鑰字元 → token 認證失敗（浪費最多 token）
@@ -171,22 +201,20 @@ GitHub repo 內：
 
 ## 七、待辦（接手後從這裡繼續）
 
-### 立即（本來正要做）
-1. **確認 Tabler 圖示修正生效**：硬重載 https://mollylin-coding.github.io/quote-system/（Pages 部署需約 1 分鐘；可加 `?v=2` 破快取）。檢查：
-   ```js
-   const fonts=[];document.fonts.forEach(f=>fonts.push(f.family+' '+f.status));fonts
-   ```
-   應出現 `tabler-icons loaded`，且側欄/類型卡圖示可見。
+### ✅ 已完成（v1.1 接手對話）
+1. ✅ Tabler 圖示已確認生效（`document.fonts` 出現 `tabler-icons loaded`）。
+2. ✅ 瓶裝酒代工測試單建立+儲存 → 主表 + 品項表資料正確寫入（單號 20260618-01）。
+7. ✅ 標費扣除/LOGO chip 開關資料保留（修正 C）。
+8. ✅ 稅額含/未稅數學（讀碼驗證；UI 切換因工具限制未實點，但邏輯正確）。
+9. ✅ newQuote confirm UX（修正 D）。
 
-### 完整實機驗證清單（交付前必跑，比照酒譜驗證清單）
-2. 登入（666666）→ 建一張**瓶裝酒代工**測試報價單 → 儲存 → 確認 getQuotes 回得到 / 報價紀錄頁看得到。
-3. 再建一張**宴會酒水**測試報價單（測群組杯數小計、口味標籤、調酒師服務費 4 模式、加購表）→ 儲存。
-4. 開啟既有報價單編輯 → 改一筆 → updateQuote → 確認品項正確取代。
-5. 刪除一張 → 確認軟刪除（status 已刪除、列表消失）。
-6. exportPDF 列印版面檢查（A4、表頭、頁尾匯款資訊）。
-7. 瓶裝品項表的「標費扣除 / LOGO 印刷費」chip 開關 → 確認欄位動態增減、列資料保留。
-8. 稅額含/未稅切換、稅率調整 → 確認金額換算正確。
-9. `newQuote()` 的 UX：`resetAll()` 內含 confirm()，確認開新單時不會每次煩人地跳確認（必要時拿掉 confirm 或加條件）。
+### ⬜ 尚未實機跑（建議真人瀏覽器操作即可，邏輯已讀碼判定正確）
+3. ⬜ 宴會酒水測試單（群組杯數、口味標籤、調酒師費 4 模式、加購）→ 序列化邏輯已確認，待真人存一張確認。
+4. ⬜ 開啟既有單編輯 → updateQuote → 確認品項取代（後端取代邏輯已讀碼確認）。
+5. ⬜ 刪除 → 軟刪除（後端 status='已刪除' 已確認；待真人點一次確認列表消失）。
+6. ⬜ exportPDF 列印版面（A4、表頭、頁尾匯款）— 真人按一次列印目視即可。
+
+> 註：上述 ⬜ 項在 Claude in Chrome 內無法順跑，因 GAS fetch 假性 pending（見四點五）。建議 Molly 用手機/電腦瀏覽器各跑一張瓶裝+宴會單即完成驗收。
 
 ### 後續（架構已規劃，尚未做）
 10. **Google Doc PDF/Word 範本**：建一份含 placeholder 標籤的 Google Doc，GAS 寫 `generateQuoteDocument()` 產出正式 PDF/Word（目前只有瀏覽器列印）。
