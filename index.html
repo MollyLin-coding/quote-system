@@ -505,6 +505,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
           <button class="ptab" onclick="setPay(1)">到貨驗收後付款</button>
           <button class="ptab" onclick="setPay(2)">隔月指定日付款</button>
           <button class="ptab" onclick="setPay(3)">自訂</button>
+          <button class="ptab" onclick="setPay(4)">不顯示此欄位</button>
         </div>
         <div class="pay-panel on" id="pp0">
           <div class="fg fg3" style="margin-bottom:14px">
@@ -545,6 +546,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
         </div>
         <div class="pay-panel" id="pp3">
           <div class="fl"><label>自訂付款條件</label><textarea class="fta" id="p3-txt" placeholder="請輸入完整付款條款說明…"></textarea></div>
+        </div>
+        <div class="pay-panel" id="pp4">
+          <div style="font-size:12px;color:var(--hint);font-style:italic;padding:6px 2px">已選擇不顯示，這張報價單列印/匯出時將完全不會出現「付款條件」這個區塊。</div>
         </div>
       </div>
     </div>
@@ -1110,6 +1114,7 @@ function resetAll(skipConfirm){
   document.getElementById('svc-detail-wrap').classList.remove('on');
   addBotRow();
   if(qType==='banquet'){ addBanFreeRow(); addBanAddonRow(); }
+  setPay(0);
   calc(); onDate(); upNo();
 }
 
@@ -1141,6 +1146,7 @@ function getPayTerms(){
     return `甲方應於收貨後第 ${mon} 個月 ${day} 號支付全額款項新台幣 ${tot} 元整，預估付款日：${est}。`;
   }
   if(payTab===3) return document.getElementById('p3-txt')?.value||'（請填寫自訂付款條款）';
+  if(payTab===4) return '';
   return '';
 }
 
@@ -1343,9 +1349,9 @@ function openPreview(){
   ${imgH}
 
   <!-- PAYMENT -->
-  <div style="margin-top:18px;padding:14px 18px;background:#FAF9F5;border-left:2.5px solid #A6824A;font-size:12.5px;color:#22241F;line-height:1.7">
+  ${payH?`<div style="margin-top:18px;padding:14px 18px;background:#FAF9F5;border-left:2.5px solid #A6824A;font-size:12.5px;color:#22241F;line-height:1.7">
     <span style="font-weight:700;color:#7C5E32">付款條件</span><br>${payH}
-  </div>
+  </div>`:''}
 
   <!-- NOTES -->
   <div style="margin-top:16px;padding-top:14px;border-top:1px solid #E5E2D8;font-size:11.5px;color:#6B6B63;line-height:1.7">
