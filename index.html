@@ -434,7 +434,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
             <div class="fl" id="svc-field-2-wrap" style="display:none"><label id="svc-label-2">車馬費</label><input class="fi" type="number" id="svc-amt2" placeholder="2000" oninput="calcBan()"></div>
             <div class="fl"><label>人數／單位</label><input class="fi" type="number" id="svc-qty" placeholder="2" value="1" oninput="calcBan()"></div>
           </div>
-          <div style="margin-top:10px;text-align:right;font-size:12.5px;font-weight:700;color:var(--ink)">小計：<span id="svc-sub">$0</span></div>
+          <div style="margin-top:10px;display:flex;justify-content:flex-end;align-items:center;gap:6px">
+            <label style="font-size:12.5px;color:var(--hint)">小計（可反向輸入，自動回算單價）：</label>
+            <span style="font-size:12.5px;color:var(--ink);font-weight:700">$</span>
+            <input class="fi" type="number" id="svc-sub" style="width:110px;text-align:right;font-weight:700" placeholder="0" oninput="svcReverseCalc()">
+          </div>
         </div>
       </div>
     </div>
@@ -906,7 +910,18 @@ function calcBan(){
     const q=parseFloat(document.getElementById('svc-qty').value)||1;
     svcSub=(a1+(mode==='travel'?a2:0))*q;
   }
-  document.getElementById('svc-sub').textContent='$'+Math.round(svcSub).toLocaleString();
+  document.getElementById('svc-sub').value = svcSub?Math.round(svcSub):'';
+  calc();
+}
+
+function svcReverseCalc(){
+  const mode=document.getElementById('svc-mode').value;
+  if(!mode) return;
+  const sub=parseFloat(document.getElementById('svc-sub').value)||0;
+  const q=parseFloat(document.getElementById('svc-qty').value)||1;
+  const a2=mode==='travel'?(parseFloat(document.getElementById('svc-amt2').value)||0):0;
+  const a1 = q>0 ? (sub/q - a2) : 0;
+  document.getElementById('svc-amt1').value = a1?Math.round(a1*100)/100:'';
   calc();
 }
 
