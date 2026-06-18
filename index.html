@@ -459,10 +459,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
           <input id="ea" type="number" placeholder="金額" style="width:90px" class="fi">
           <button class="pres-btn" onclick="addExt()">+ 加入</button>
           <div style="width:1px;height:20px;background:var(--bd);margin:0 2px"></div>
-          <button class="pres-btn" onclick="presQty('SGS 檢驗費',4000)">SGS $4,000/款</button>
-          <button class="pres-btn" onclick="presQty('GS1條碼登記費',1500)">GS1 $1,500/款</button>
-          <button class="pres-btn" onclick="pres('整批出貨免運',0)">免運 $0</button>
-          <button class="pres-btn" onclick="presAmt('運費')">+ 運費</button>
+          <select class="fi" id="ext-preset" style="width:auto;min-width:180px" onchange="handleExtPreset(this)">
+            <option value="">+ 快速加入常用項目…</option>
+            <option value="sgs">SGS 檢驗費（$4,000/款）</option>
+            <option value="gs1">GS1 條碼登記費（$1,500/款）</option>
+            <option value="freeship">整批出貨免運（$0）</option>
+            <option value="shipping">運費（自填金額）</option>
+            <option value="customlabel">客製化前標（預設免費，可自填）</option>
+          </select>
         </div>
       </div>
     </div>
@@ -1029,11 +1033,20 @@ function addExt(){
   document.getElementById('ea').value='';
 }
 function pres(n,a){pushExt(n,a);}
-function presAmt(n){
-  const s=prompt(`請輸入${n}金額`, '');
+function presAmt(n,def){
+  const s=prompt(`請輸入${n}金額`, def!=null?String(def):'');
   if(s===null) return;
   const amt=parseFloat(s)||0;
   pushExt(n, amt);
+}
+function handleExtPreset(sel){
+  const v=sel.value;
+  sel.value='';
+  if(v==='sgs') presQty('SGS 檢驗費',4000);
+  else if(v==='gs1') presQty('GS1條碼登記費',1500);
+  else if(v==='freeship') pres('整批出貨免運',0);
+  else if(v==='shipping') presAmt('運費');
+  else if(v==='customlabel') presAmt('客製化前標',0);
 }
 function presQty(n,unit){
   const def=botItems.length||1;
