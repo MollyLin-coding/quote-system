@@ -655,6 +655,7 @@ function setType(t){
 }
 
 // ── COLUMN TOGGLES (bottle) ──
+let botDedCache={}, botLogoCache={};
 function toggleCol(which){
   if(which==='ded') colDed=!colDed;
   if(which==='logo') colLogo=!colLogo;
@@ -663,7 +664,12 @@ function toggleCol(which){
   rebuildBotHeader();
   const oldData = botItems.map(id=>{
     const row=document.getElementById(`r-${id}`);
-    return row ? {name:gs(row,'name'),lot:gs(row,'lot'),vol:gs(row,'vol'),price:gs(row,'price'),ded:gs(row,'ded'),logo:gs(row,'logo'),qty:gs(row,'qty')} : null;
+    if(!row) return null;
+    const dedEl=row.querySelector('[data-f="ded"]');
+    const logoEl=row.querySelector('[data-f="logo"]');
+    if(dedEl) botDedCache[id]=dedEl.value;
+    if(logoEl) botLogoCache[id]=logoEl.value;
+    return {id,name:gs(row,'name'),lot:gs(row,'lot'),vol:gs(row,'vol'),price:gs(row,'price'),ded:botDedCache[id]||'',logo:botLogoCache[id]||'',qty:gs(row,'qty')};
   }).filter(Boolean);
   document.getElementById('itbody-bot').innerHTML='';
   botItems=[];
@@ -683,8 +689,9 @@ function rebuildBotHeader(){
 }
 
 function addBotRow(prefill){
-  rowId++;
-  const id=rowId;
+  let id;
+  if(prefill && prefill.id!=null){ id=prefill.id; if(id>rowId) rowId=id; }
+  else { rowId++; id=rowId; }
   const div=document.createElement('div');
   div.id=`r-${id}`;
   let cols = ['2fr','1fr','68px','80px'];
@@ -710,6 +717,7 @@ function addBotRow(prefill){
 }
 function delBotRow(id){
   const el=document.getElementById(`r-${id}`); if(el) el.remove();
+  delete botDedCache[id]; delete botLogoCache[id];
   botItems=botItems.filter(i=>i!==id); calc();
 }
 
@@ -984,6 +992,7 @@ function resetAll(skipConfirm){
     else if(!el.readOnly) el.value='';
   });
   botItems=[]; banFreeItems=[]; banAddonItems=[]; extras=[]; imgs=[]; rowId=0;
+  botDedCache={}; botLogoCache={};
   flavors={g1:[],g2:[]};
   colDed=true; colLogo=true;
   document.getElementById('ctg-ded').classList.add('on');
