@@ -107,6 +107,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
 .itr:last-child{border-bottom:none}
 .itr input{border:1px solid var(--bd);border-radius:6px;padding:6px 8px;font-size:12px;color:var(--ink);background:transparent;width:100%;font-family:inherit}
 .itr input:focus{outline:none;border-color:var(--gold);background:var(--wh)}
+.itr textarea{border:1px solid var(--bd);border-radius:6px;padding:6px 8px;font-size:12px;color:var(--ink);background:transparent;width:100%;font-family:inherit;resize:none;line-height:1.5;min-height:30px}
+.itr textarea:focus{outline:none;border-color:var(--gold);background:var(--wh)}
 .itr .sub{font-size:12.5px;font-weight:700;color:var(--ink);text-align:right}
 .del{background:none;border:none;color:var(--bd);cursor:pointer;font-size:16px;line-height:1;padding:2px}
 .del:hover{color:#C0453F}
@@ -722,7 +724,7 @@ function addBotRow(prefill){
   let lotVal = (prefill && prefill.lot) ? prefill.lot : '';
   if(colLot && !lotVal) lotVal = 'Lot X';
   let h = `
-    <input placeholder="品名（可貼上多行自動拆成多筆）" oninput="calc()" onpaste="handleNamePaste(event,${id})" data-f="name" value="${prefill?.name||''}">`;
+    <textarea rows="1" placeholder="品名（Enter新增下一筆／Shift+Enter換行／可貼上多行自動拆成多筆）" oninput="calc()" onkeydown="handleNameKeydown(event,${id})" onpaste="handleNamePaste(event,${id})" data-f="name">${escHtml(prefill?.name||'')}</textarea>`;
   if(colLot) h += `<input placeholder="Lot31" oninput="calc()" data-f="lot" value="${lotVal}">`;
   h += `
     <input type="number" placeholder="500" list="vol-options" oninput="calc()" data-f="vol" value="${prefill?.vol||''}">
@@ -736,6 +738,27 @@ function addBotRow(prefill){
   div.innerHTML = h;
   document.getElementById('itbody-bot').appendChild(div);
   botItems.push(id);
+}
+
+function escHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function handleNameKeydown(ev,id){
+  if(ev.key!=='Enter') return;
+  if(ev.shiftKey) return;
+  ev.preventDefault();
+  const row=document.getElementById(`r-${id}`);
+  const nameInput=row.querySelector('[data-f="name"]');
+  const lines=nameInput.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  nameInput.value=lines[0]||'';
+  for(let i=1;i<lines.length;i++){ addBotRow({name:lines[i]}); }
+  addBotRow();
+  calc();
+  const newId=botItems[botItems.length-1];
+  const newRow=document.getElementById(`r-${newId}`);
+  const newNameInput=newRow?.querySelector('[data-f="name"]');
+  if(newNameInput) newNameInput.focus();
 }
 
 function handleNamePaste(ev,id){
