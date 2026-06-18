@@ -1694,6 +1694,22 @@ function newQuote(){
   gotoPage('new');
 }
 
+/* ---- 組合另存新檔預設檔名 ---- */
+function sanitizeFilename(s){
+  return String(s).replace(/[\\/:*?"<>|]/g,'-').trim();
+}
+function buildExportFilename(){
+  const tagCli=document.getElementById('f-tag-cli')?.value.trim();
+  const tagLot=document.getElementById('f-tag-lot')?.value.trim();
+  const cli=document.getElementById('f-cli')?.value.trim();
+  const parts=[];
+  if(tagCli) parts.push(tagCli);
+  else if(cli) parts.push(cli);
+  if(tagLot) parts.push(tagLot);
+  parts.push('報價單_凱文南坡萬實業社');
+  return sanitizeFilename(parts.join('_'));
+}
+
 /* ---- PDF 匯出（瀏覽器列印）---- */
 function exportPDF(){
   openPreview();
@@ -1701,7 +1717,8 @@ function exportPDF(){
     let pcon=document.getElementById('pcon').innerHTML;
     pcon = pcon.replace('padding:56px 60px', 'padding:0');
     const w=window.open('','_blank');
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>報價單</title>
+    const fname=buildExportFilename();
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${fname}</title>
       <style>
         @page{size:A4;margin:10mm}
         body{margin:0;font-family:-apple-system,'Microsoft JhengHei',sans-serif}
