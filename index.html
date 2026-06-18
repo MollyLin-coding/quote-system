@@ -308,11 +308,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
     </div>
 
     <div class="card">
-      <div class="ch"><i class="ti ti-user"></i><span>客戶資訊</span><span class="ch-opt">* 為輸出必填</span></div>
+      <div class="ch"><i class="ti ti-user"></i><span>客戶資訊</span><span class="ch-opt">全部選填</span></div>
       <div class="cb">
         <div class="fg fg2">
-          <div class="fl"><label>客戶名稱 *</label><input class="fi" id="f-cli" placeholder="請輸入客戶名稱" oninput="upNo()"></div>
-          <div class="fl"><label>聯絡人 * </label><input class="fi" id="f-con" placeholder="請輸入聯絡人姓名"></div>
+          <div class="fl"><label>客戶名稱</label><input class="fi" id="f-cli" placeholder="請輸入客戶名稱" oninput="upNo()"></div>
+          <div class="fl"><label>聯絡人</label><input class="fi" id="f-con" placeholder="請輸入聯絡人姓名"></div>
           <div class="fl"><label>客戶統編 <span class="opt">選填</span></label><input class="fi" id="f-tax" placeholder="請輸入統一編號"></div>
           <div class="fl"><label>聯絡電話 <span class="opt">選填</span></label><input class="fi" id="f-ph" placeholder="請輸入聯絡電話"></div>
           <div class="fl" style="grid-column:span 2"><label>聯絡地址 <span class="opt">選填</span></label><input class="fi" id="f-ad" placeholder="請輸入聯絡地址"></div>
@@ -329,6 +329,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
           <div class="fl"><label>報價日期</label><input class="fi" type="date" id="f-dt" oninput="onDate()"></div>
           <div class="fl"><label>有效至（自動+1月）</label><input class="fi ro" id="f-ex" readonly></div>
           <div class="fl"><label>處理人員</label><input class="fi" id="f-hdl" value="林湘珆 Molly"></div>
+        </div>
+        <div style="margin-top:16px">
+          <div class="sub-label">批次標籤 <span class="ln"></span> <span style="font-style:italic;color:var(--bd);font-weight:400">選填，僅供識別用，不影響正式資料</span></div>
+          <div class="fg fg2">
+            <div class="fl"><label>Lot / 日期標記</label><input class="fi" id="f-tag-lot" placeholder="如：Lot 31 或 2026/06/18"></div>
+            <div class="fl"><label>客戶名稱標籤</label><input class="fi" id="f-tag-cli" placeholder="如：南野子"></div>
+          </div>
         </div>
         <div id="ban-meta" style="display:none;margin-top:16px">
           <div class="sub-label">活動資訊 <span class="ln"></span> <span style="font-style:italic;color:var(--bd);font-weight:400">選填</span></div>
@@ -347,12 +354,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
       <div class="ch"><i class="ti ti-list-details"></i><span>品項明細</span></div>
       <div class="col-toggle-bar">
         <span><i class="ti ti-adjustments" style="font-size:13px;vertical-align:-2px"></i> 此批是否需要：</span>
-        <div class="ctg on" id="ctg-ded" onclick="toggleCol('ded')"><span class="dot"></span>標費扣除</div>
-        <div class="ctg on" id="ctg-logo" onclick="toggleCol('logo')"><span class="dot"></span>LOGO印刷費</div>
+        <div class="ctg" id="ctg-lot" onclick="toggleCol('lot')"><span class="dot"></span>出貨批次</div>
+        <div class="ctg" id="ctg-ded" onclick="toggleCol('ded')"><span class="dot"></span>前標費扣除</div>
+        <div class="ctg" id="ctg-logo" onclick="toggleCol('logo')"><span class="dot"></span>LOGO印刷費</div>
       </div>
-      <div id="ith-bot" class="ith" style="grid-template-columns:2fr 1fr 68px 80px 68px 68px 60px 88px 26px">
-        <span>品名</span><span>出貨批次</span><span>容量ml</span><span>單價</span><span id="th-ded">標費扣除</span><span id="th-logo">LOGO印刷</span><span>瓶數</span><span style="text-align:right">小計</span><span></span>
+      <div id="ith-bot" class="ith" style="grid-template-columns:2fr 68px 80px 60px 88px 26px">
+        <span>品名</span><span id="th-lot" style="display:none">出貨批次</span><span>容量ml</span><span>單價</span><span id="th-ded" style="display:none">前標費扣除</span><span id="th-logo" style="display:none">LOGO印刷</span><span>瓶數</span><span style="text-align:right">小計</span><span></span>
       </div>
+      <datalist id="vol-options"><option value="100"><option value="500"><option value="4000"></datalist>
       <div id="itbody-bot"></div>
       <button class="add-row" onclick="addBotRow()"><i class="ti ti-plus"></i> 新增品項</button>
     </div>
@@ -604,7 +613,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
 <script>
 let qType='bottle', taxMode='inc', payTab=0;
 let botItems=[],banFreeItems=[],banAddonItems=[],extras=[],imgs=[],rowId=0;
-let colDed=true, colLogo=true;
+let colDed=false, colLogo=false, colLot=false;
 let flavors={g1:[],g2:[]};
 
 (()=>{
@@ -612,7 +621,7 @@ let flavors={g1:[],g2:[]};
   const s=d=>(d<10?'0':'')+d;
   const v=`${t.getFullYear()}-${s(t.getMonth()+1)}-${s(t.getDate())}`;
   document.getElementById('f-dt').value=v;
-  onDate(); upNo(); addBotRow();
+  onDate(); upNo(); addBotRow(); rebuildBotHeader();
 })();
 
 function s2(n){return String(n).padStart(2,'0')}
@@ -655,21 +664,25 @@ function setType(t){
 }
 
 // ── COLUMN TOGGLES (bottle) ──
-let botDedCache={}, botLogoCache={};
+let botDedCache={}, botLogoCache={}, botLotCache={};
 function toggleCol(which){
   if(which==='ded') colDed=!colDed;
   if(which==='logo') colLogo=!colLogo;
+  if(which==='lot') colLot=!colLot;
   document.getElementById('ctg-ded').classList.toggle('on',colDed);
   document.getElementById('ctg-logo').classList.toggle('on',colLogo);
+  document.getElementById('ctg-lot').classList.toggle('on',colLot);
   rebuildBotHeader();
   const oldData = botItems.map(id=>{
     const row=document.getElementById(`r-${id}`);
     if(!row) return null;
     const dedEl=row.querySelector('[data-f="ded"]');
     const logoEl=row.querySelector('[data-f="logo"]');
+    const lotEl=row.querySelector('[data-f="lot"]');
     if(dedEl) botDedCache[id]=dedEl.value;
     if(logoEl) botLogoCache[id]=logoEl.value;
-    return {id,name:gs(row,'name'),lot:gs(row,'lot'),vol:gs(row,'vol'),price:gs(row,'price'),ded:botDedCache[id]||'',logo:botLogoCache[id]||'',qty:gs(row,'qty')};
+    if(lotEl) botLotCache[id]=lotEl.value;
+    return {id,name:gs(row,'name'),lot:lotEl?lotEl.value:(botLotCache[id]||''),vol:gs(row,'vol'),price:gs(row,'price'),ded:botDedCache[id]||'',logo:botLogoCache[id]||'',qty:gs(row,'qty')};
   }).filter(Boolean);
   document.getElementById('itbody-bot').innerHTML='';
   botItems=[];
@@ -679,11 +692,14 @@ function toggleCol(which){
 }
 
 function rebuildBotHeader(){
-  let cols = ['2fr','1fr','68px','80px'];
+  let cols = ['2fr'];
+  if(colLot) cols.push('1fr');
+  cols.push('68px','80px');
   if(colDed) cols.push('68px');
   if(colLogo) cols.push('68px');
   cols.push('60px','88px','26px');
   document.getElementById('ith-bot').style.gridTemplateColumns = cols.join(' ');
+  document.getElementById('th-lot').style.display = colLot?'':'none';
   document.getElementById('th-ded').style.display = colDed?'':'none';
   document.getElementById('th-logo').style.display = colLogo?'':'none';
 }
@@ -694,16 +710,21 @@ function addBotRow(prefill){
   else { rowId++; id=rowId; }
   const div=document.createElement('div');
   div.id=`r-${id}`;
-  let cols = ['2fr','1fr','68px','80px'];
+  let cols = ['2fr'];
+  if(colLot) cols.push('1fr');
+  cols.push('68px','80px');
   if(colDed) cols.push('68px');
   if(colLogo) cols.push('68px');
   cols.push('60px','88px','26px');
   div.className='itr';
   div.style.gridTemplateColumns = cols.join(' ');
+  let lotVal = (prefill && prefill.lot) ? prefill.lot : '';
+  if(colLot && !lotVal) lotVal = 'Lot X';
   let h = `
-    <input placeholder="品名" oninput="calc()" data-f="name" value="${prefill?.name||''}">
-    <input placeholder="Lot31" oninput="calc()" data-f="lot" value="${prefill?.lot||''}">
-    <input type="number" placeholder="500" oninput="calc()" data-f="vol" value="${prefill?.vol||''}">
+    <input placeholder="品名（可貼上多行自動拆成多筆）" oninput="calc()" onpaste="handleNamePaste(event,${id})" data-f="name" value="${prefill?.name||''}">`;
+  if(colLot) h += `<input placeholder="Lot31" oninput="calc()" data-f="lot" value="${lotVal}">`;
+  h += `
+    <input type="number" placeholder="500" list="vol-options" oninput="calc()" data-f="vol" value="${prefill?.vol||''}">
     <input type="number" placeholder="375" oninput="calc()" data-f="price" value="${prefill?.price||''}">`;
   if(colDed) h += `<input type="number" placeholder="-2" oninput="calc()" data-f="ded" value="${prefill?.ded||''}">`;
   if(colLogo) h += `<input type="number" placeholder="25" oninput="calc()" data-f="logo" value="${prefill?.logo||''}">`;
@@ -715,9 +736,22 @@ function addBotRow(prefill){
   document.getElementById('itbody-bot').appendChild(div);
   botItems.push(id);
 }
+
+function handleNamePaste(ev,id){
+  const text=(ev.clipboardData||window.clipboardData).getData('text');
+  if(!text || !/\r?\n/.test(text)) return;
+  ev.preventDefault();
+  const lines=text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  if(!lines.length) return;
+  const row=document.getElementById(`r-${id}`);
+  const nameInput=row.querySelector('[data-f="name"]');
+  nameInput.value=lines[0];
+  for(let i=1;i<lines.length;i++){ addBotRow({name:lines[i]}); }
+  calc();
+}
 function delBotRow(id){
   const el=document.getElementById(`r-${id}`); if(el) el.remove();
-  delete botDedCache[id]; delete botLogoCache[id];
+  delete botDedCache[id]; delete botLogoCache[id]; delete botLotCache[id];
   botItems=botItems.filter(i=>i!==id); calc();
 }
 
@@ -999,11 +1033,12 @@ function resetAll(skipConfirm){
     else if(!el.readOnly) el.value='';
   });
   botItems=[]; banFreeItems=[]; banAddonItems=[]; extras=[]; imgs=[]; rowId=0;
-  botDedCache={}; botLogoCache={};
+  botDedCache={}; botLogoCache={}; botLotCache={};
   flavors={g1:[],g2:[]};
-  colDed=true; colLogo=true;
-  document.getElementById('ctg-ded').classList.add('on');
-  document.getElementById('ctg-logo').classList.add('on');
+  colDed=false; colLogo=false; colLot=false;
+  document.getElementById('ctg-ded').classList.remove('on');
+  document.getElementById('ctg-logo').classList.remove('on');
+  document.getElementById('ctg-lot').classList.remove('on');
   rebuildBotHeader();
   document.getElementById('itbody-bot').innerHTML='';
   document.getElementById('ban-free-body').innerHTML='';
@@ -1055,6 +1090,8 @@ function openPreview(){
   const dt=document.getElementById('f-dt').value||'—';
   const ex=document.getElementById('f-ex').value||'—';
   const cli=document.getElementById('f-cli').value||'（未填）';
+  const tagLot=document.getElementById('f-tag-lot')?.value||'';
+  const tagCli=document.getElementById('f-tag-cli')?.value||'';
   const con=document.getElementById('f-con').value||'';
   const tax=document.getElementById('f-tax').value;
   const ph=document.getElementById('f-ph').value;
@@ -1072,11 +1109,11 @@ function openPreview(){
 
   let rowsH='';
   if(qType==='bottle'){
-    let headCols = `<th style="padding:10px 12px;text-align:left;color:#6B6B63;font-weight:600;font-size:10.5px;letter-spacing:.3px;border-bottom:1.5px solid #22241F">品名</th>
-      <th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">批次</th>
-      <th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">容量</th>
+    let headCols = `<th style="padding:10px 12px;text-align:left;color:#6B6B63;font-weight:600;font-size:10.5px;letter-spacing:.3px;border-bottom:1.5px solid #22241F">品名</th>`;
+    if(colLot) headCols += `<th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">批次</th>`;
+    headCols += `<th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">容量</th>
       <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">單價</th>`;
-    if(colDed) headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">標費</th>`;
+    if(colDed) headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">前標費</th>`;
     if(colLogo) headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">LOGO</th>`;
     headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">瓶數</th>
       <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">小計</th>`;
@@ -1086,9 +1123,9 @@ function openPreview(){
       const n=gs(row,'name'),lot=gs(row,'lot'),vol=gv(row,'vol'),p=gv(row,'price'),d=colDed?gv(row,'ded'):0,l=colLogo?gv(row,'logo'):0,q=gv(row,'qty');
       const sub=(p+d+l)*q;
       if(!n&&!sub) return;
-      let cells = `<td style="padding:11px 12px;font-weight:600;color:#22241F">${n||'—'}</td>
-        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${lot}</td>
-        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${vol?vol+'ml':'—'}</td>
+      let cells = `<td style="padding:11px 12px;font-weight:600;color:#22241F">${n||'—'}</td>`;
+      if(colLot) cells += `<td style="padding:11px 8px;text-align:center;color:#6B6B63">${lot}</td>`;
+      cells += `<td style="padding:11px 8px;text-align:center;color:#6B6B63">${vol?vol+'ml':'—'}</td>
         <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+p.toLocaleString():'—'}</td>`;
       if(colDed) cells += `<td style="padding:11px 8px;text-align:right;color:#6B6B63">${d?d:''}</td>`;
       if(colLogo) cells += `<td style="padding:11px 8px;text-align:right;color:#6B6B63">${l?'$'+l:'—'}</td>`;
@@ -1097,7 +1134,7 @@ function openPreview(){
       rowsH+=`<tr style="border-bottom:1px solid #EEEDE6">${cells}</tr>`;
     });
     if(extras.length){
-      const colspan = 3 + (colDed?1:0) + (colLogo?1:0) + 2;
+      const colspan = 4 + (colLot?1:0) + (colDed?1:0) + (colLogo?1:0);
       extras.forEach(e=>{
         rowsH+=`<tr style="border-bottom:1px solid #EEEDE6">
           <td colspan="${colspan}" style="padding:9px 12px;color:#A6824A;font-style:italic;font-size:12px">${e.n}</td>
@@ -1210,15 +1247,14 @@ function openPreview(){
 
   <!-- HEADER -->
   <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:18px;border-bottom:1.5px solid #22241F;margin-bottom:20px">
-    <div style="display:flex;align-items:flex-start;gap:16px">
-      <img src="https://raw.githubusercontent.com/MollyLin-coding/quote-system/main/assets/logo.png" style="height:50px;width:auto;display:block;margin-top:2px">
-      <div>
-        <div style="font-size:9px;letter-spacing:1.8px;color:#A6824A;margin-top:8px;text-transform:uppercase;line-height:1.7;font-weight:600">KEVIN NUMBER 1 TAILORED.COCKTAIL<br>EST. 2023. TAIWAN</div>
-        <div style="font-size:11px;color:#A8A69C;margin-top:6px">新北市新莊區化成路554巷37號　(02)8991-0068　統編 92719710</div>
-      </div>
+    <div>
+      <img src="https://raw.githubusercontent.com/MollyLin-coding/quote-system/main/assets/logo.png" style="height:32px;width:auto;display:block">
+      <div style="font-size:9px;letter-spacing:1.8px;color:#A6824A;margin-top:7px;text-transform:uppercase;line-height:1.7;font-weight:600">KEVIN NUMBER 1 TAILORED.COCKTAIL<br>EST. 2023. TAIWAN</div>
+      <div style="font-size:11px;color:#A8A69C;margin-top:6px">新北市新莊區化成路554巷37號　(02)8991-0068　統編 92719710</div>
     </div>
     <div style="text-align:right">
       <div style="font-size:22px;font-weight:700;color:#22241F;letter-spacing:6px;margin-bottom:10px">報 價 單</div>
+      ${(tagLot||tagCli)?`<div style="font-size:11px;color:#A6824A;font-weight:600;letter-spacing:.5px;margin-bottom:8px">${[tagLot,tagCli].filter(Boolean).join('　・　')}</div>`:''}
       <div style="font-size:11.5px;color:#A8A69C;line-height:1.9">單號：<span style="color:#22241F;font-weight:600">${no}</span></div>
       <div style="font-size:11.5px;color:#A8A69C;line-height:1.9">報價日：<span style="color:#22241F">${dt}</span></div>
       <div style="font-size:11.5px;color:#A6824A;font-weight:700">有效至：${ex}</div>
@@ -1258,19 +1294,6 @@ function openPreview(){
     <p style="margin-top:6px">匯款：陽信銀行中興分行 (108)　02142-00230-91　凱文南坡萬實業社黃彥愷</p>
   </div>
 
-  <!-- SIGNATURE -->
-  <div style="display:flex;justify-content:space-between;margin-top:24px;gap:20px;page-break-inside:avoid">
-    <div style="flex:1;border:1px solid #E5E2D8;border-radius:4px;padding:14px 18px;display:flex;flex-direction:column">
-      <div style="font-size:11px;color:#A8A69C">甲方：${cli}</div>
-      <div style="height:4cm"></div>
-      <div style="border-top:1px dashed #D4D0C2;padding-top:8px;text-align:center;font-size:10px;color:#C5C2B5">簽章（選填）</div>
-    </div>
-    <div style="flex:1;border:1px solid #E5E2D8;border-radius:4px;padding:14px 18px;display:flex;flex-direction:column">
-      <div style="font-size:11px;color:#A8A69C">乙方：凱文南坡萬實業社</div>
-      <div style="height:4cm"></div>
-      <div style="border-top:1px dashed #D4D0C2;padding-top:8px;text-align:center;font-size:10px;color:#C5C2B5">簽章（選填）</div>
-    </div>
-  </div>
   </div>`;
 
   document.getElementById('pov').style.display='block';
@@ -1436,9 +1459,6 @@ function collectQuote(){
 
 /* ---- 儲存（新增 or 更新）---- */
 async function saveQuote(){
-  const cli=document.getElementById('f-cli').value.trim();
-  const con=document.getElementById('f-con').value.trim();
-  if(!cli || !con){ toast('請填寫客戶名稱與聯絡人','err'); return; }
   if(!AUTH_TOKEN){ showLogin(); return; }
   const quote=collectQuote();
   const btn=document.getElementById('btn-save');
@@ -1538,6 +1558,14 @@ function loadQuoteIntoForm(q){
   if(q.quoteType==='bottle'){
     document.getElementById('itbody-bot').innerHTML=''; botItems=[];
     extras=[];
+    const realItems = items.filter(it=>it.itemType!=='extra');
+    colLot = realItems.some(it=>it.lot);
+    colDed = realItems.some(it=>it.deduction);
+    colLogo = realItems.some(it=>it.logoFee);
+    document.getElementById('ctg-lot').classList.toggle('on',colLot);
+    document.getElementById('ctg-ded').classList.toggle('on',colDed);
+    document.getElementById('ctg-logo').classList.toggle('on',colLogo);
+    rebuildBotHeader();
     items.forEach(it=>{
       if(it.itemType==='extra'){ extras.push({id:Date.now()+Math.random(),n:it.name,a:it.unitPrice||it.subtotal||0}); }
       else { addBotRow({name:it.name,lot:it.lot,vol:it.volume,price:it.unitPrice,ded:it.deduction,logo:it.logoFee,qty:it.qty}); }
@@ -1608,7 +1636,7 @@ function exportPDF(){
     const w=window.open('','_blank');
     w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>報價單</title>
       <style>
-        @page{size:A4;margin:10mm 20mm}
+        @page{size:A4;margin:10mm}
         body{margin:0;font-family:-apple-system,'Microsoft JhengHei',sans-serif}
         table{page-break-inside:auto}
         tr{page-break-inside:avoid}
