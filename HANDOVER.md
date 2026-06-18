@@ -1,8 +1,61 @@
-# 凱文南坡萬實業社 · 報價單系統 — 開發接手文件 v1.0
+# 凱文南坡萬實業社 · 報價單系統 — 開發接手文件 v1.1
 
 建立日期：2026-06-18（v1.1 更新：2026-06-18 下午，接手對話補修三隻 bug + chip 資料保留）
 狀態：**後端 100% 上線並驗證｜前端已部署上線並驗證｜圖示已確認生效｜瓶裝整條流程(建立→主表→品項表)資料正確性已驗證**
 適用：接手的新對話（Claude）。本文件目標是讓新對話「零資訊落差」接續，不重蹈覆轍。
+
+---
+
+## ★ 新對話 60 秒快速接手（先讀這段，照做不繞圈、不燒 token）
+
+### A. 重要網址 / ID
+- 線上系統：https://mollylin-coding.github.io/quote-system/ （PIN：`666666`）
+- GitHub repo（**Public**）：https://github.com/MollyLin-coding/quote-system
+- 資料庫 Sheet ID：`16AzAcXu_rV8ZZoZJIlyC3HiZkvCcVAnaN1hd4fUTDJ0`（分頁：報價單主表 / 報價單品項）
+- GAS Script ID：`1ULEfHbKEkBrnttftDah9wz_d3dAViqRoS-vflWxp34xIe_65GyaM-o7e`
+- GAS Web App URL：`https://script.google.com/macros/s/AKfycbytSqCF0St1Gu8F_u8KW9rcKJnkkGAfrdaHYyrQ6wDKa19Z3TxZd-GRRi_3Ii3Ijv4i/exec`
+- 全部資源帳號：`wklin18@gmail.com`
+
+### B. 部署 Token（quote-system-deploy-v2）
+| 欄位 | 值 |
+|---|---|
+| 名稱 | `quote-system-deploy-v2` |
+| 類型 | GitHub Fine-grained PAT |
+| 權限 | Contents (Read/Write) + Metadata (Read) |
+| 範圍 | 僅 `MollyLin-coding/quote-system` |
+| 效期 | 2026-07-17 |
+| 管理頁 | https://github.com/settings/tokens |
+| 密鑰字串 | **不寫在此（repo 為 Public，寫入會被 GitHub 自動撤銷並外洩）。由 Molly 於需要推送時當場貼給對話。** 格式 `github_pat_…` |
+
+> **安全鐵則**：絕不把 token 字串 commit 進任何檔案。需要推送時，請 Molly 從密碼管理器貼上，對話僅在當下的 curl/python 指令中使用，不寫檔。
+
+### C. 讀 repo 的「唯一有效」方式（其他都會失敗，別試）
+- ❌ `web_fetch` raw.githubusercontent / github blob → 回 "URL not in prior search"。
+- ❌ 未帶 token 的 `api.github.com` → 403 rate limit。
+- ✅ **直接下載 tarball 解壓**（最快、免 token）：
+  ```bash
+  curl -sL -o /tmp/r.tar.gz https://codeload.github.com/MollyLin-coding/quote-system/tar.gz/refs/heads/main
+  cd /home/claude && tar -xzf /tmp/r.tar.gz   # → quote-system-main/
+  ```
+
+### D. 驗證鐵則（上次燒最多 token 的坑，務必照做）
+1. **不要在 Claude in Chrome 裡跑前端→GAS 的 UI 一條龍**。`apiCall()`/`fetch` 打 script.google.com 會「假性 pending」（promise 卡 >45s 不 resolve），但 GAS 後台 doPost 其實 1–2 秒就完成、資料也寫入了。**這是工具處理跨網域 redirect 的怪癖，不是 bug，真人瀏覽器正常。**
+2. **驗資料一律走 Google Sheet**，別等前端回應；用 fire-and-poll，不要用 await（await 也會卡）：
+   ```js
+   window.__csv='pending';
+   fetch("https://docs.google.com/spreadsheets/d/16AzAcXu_rV8ZZoZJIlyC3HiZkvCcVAnaN1hd4fUTDJ0/gviz/tq?tqx=out:csv&sheet="+encodeURIComponent('報價單品項'))
+     .then(r=>r.text()).then(t=>{window.__csv=t}).catch(e=>{window.__csv='ERR:'+e.message});
+   // 下一個 tool call 再讀 window.__csv
+   ```
+3. **能讀碼判定就讀碼判定**，別用 UI 反覆試。上次三隻 bug 全是讀 `index.html` 抓到的，不是點出來的。
+4. **GAS 後台執行記錄**（查伺服器是否真的跑成功）：`.../projects/<ScriptID>/executions` → 用 `document.body.innerText` 抓表格，別截圖。
+5. **Google Sheet 切分頁**：頁面常有「目前登入帳戶」popup 擋住 tab 點擊 → 直接用 D-2 的 gviz CSV，別跟 popup 纏鬥。
+6. **Chrome 截圖偶發 "renderer frozen / timeout"**：重試一次通常就好；能用 `javascript_tool` 抓 DOM/innerText 就別截圖。
+7. **登入別用點的**：PIN 欄自動帶 `666666`，直接 console `await doLogin()` 最穩。
+
+### E. 還沒做的驗收（邏輯已讀碼確認 OK，只差真人點一輪）
+宴會單存檔、編輯既有單(updateQuote)、軟刪除、PDF 列印版面、稅額含/未稅 UI 切換。
+→ 建議 Molly 用手機/電腦各存一張瓶裝+宴會單目視即可結案；新對話不需在自動化工具內硬跑（會卡，見 D-1）。
 
 ---
 
