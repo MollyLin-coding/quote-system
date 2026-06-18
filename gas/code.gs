@@ -16,6 +16,7 @@
  * - getQuoteById     取得單張報價單完整資料
  * - updateQuote      更新報價單
  * - deleteQuote       刪除報價單（軟刪除，標記狀態）
+ * - generateQuoteDocument  產生正式 PDF/Word 文件（Google Doc 動態建立，不靠範本檔）
  * ===================================================================
  */
 
@@ -231,6 +232,9 @@ function handleRequest_(e) {
       case 'deleteQuote':
         requireAuth_(params);
         return jsonResponse_(handleDeleteQuote_(params));
+      case 'generateQuoteDocument':
+        requireAuth_(params);
+        return jsonResponse_(handleGenerateQuoteDocument_(params));
       default:
         return jsonResponse_({ ok: false, error: 'Unknown action: ' + action });
     }
@@ -548,6 +552,366 @@ function formatDateValue_(val) {
     return Utilities.formatDate(val, 'Asia/Taipei', 'yyyy-MM-dd');
   }
   return val;
+}
+
+// ===================================================================
+// 正式文件產生（PDF / Word）— generateQuoteDocument
+// 設計原則：不靠額外「範本 Google Doc」檔案，整份文件由程式碼直接建構，
+// 單一真實來源（這份 .gs），避免日後範本檔被手動改壞、或範本與程式碼對不上。
+// ===================================================================
+
+const DOC_OUTPUT_FOLDER_NAME = '報價單檔案';
+const LOGO_URL = 'https://raw.githubusercontent.com/MollyLin-coding/quote-system/main/assets/logo.png';
+
+const SVC_LABEL_MAP_ = {
+  basic: '調酒師服務費及運費（基礎運費）',
+  equip: '調酒師費（含設備）',
+  travel: '調酒師費＋車馬費及酒水運費',
+  travelonly: '車馬費'
+};
+
+function handleGenerateQuoteDocument_(params) {
+  const quoteNo = params.quoteNo;
+  if (!quoteNo) throw new Error('缺少 quoteNo');
+
+  const quote = getQuoteWithItems_(quoteNo);
+  if (!quote) return { ok: false, error: '找不到報價單：' + quoteNo };
+
+  const built = buildQuoteDoc_(quote);
+
+  // 把連結寫回主表 pdfUrl / docUrl，供之後查詢/分享
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const mainSheet = ss.getSheetByName(SHEET_MAIN);
+  const lastRow = mainSheet.getLastRow();
+  const data = mainSheet.getRange(2, 1, lastRow - 1, MAIN_HEADERS.length).getValues();
+  const rowIndex = data.findIndex(row => row[MAIN_COLS.quoteNo - 1] === quoteNo);
+  if (rowIndex !== -1) {
+    const sheetRow = rowIndex + 2;
+    mainSheet.getRange(sheetRow, MAIN_COLS.pdfUrl).setValue(built.pdfUrl);
+    mainSheet.getRange(sheetRow, MAIN_COLS.docUrl).setValue(built.docUrl);
+    mainSheet.getRange(sheetRow, MAIN_COLS.updatedAt).setValue(new Date().toISOString());
+  }
+
+  return {
+    ok: true,
+    quoteNo: quoteNo,
+    pdfUrl: built.pdfUrl,
+    docUrl: built.docUrl,
+    fileNameBase: built.fileNameBase,
+    pdfBase64: built.pdfBase64,
+    docxBase64: built.docxBase64
+  };
+}
+
+// 與 handleGetQuoteById_ 邏輯類似但獨立一份，刻意不共用／不改動已驗證過的
+// handleGetQuoteById_，降低改動既有已驗證功能的風險。
+function getQuoteWithItems_(quoteNo) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const mainSheet = ss.getSheetByName(SHEET_MAIN);
+  const lastRow = mainSheet.getLastRow();
+  if (lastRow < 2) return null;
+
+  const data = mainSheet.getRange(2, 1, lastRow - 1, MAIN_HEADERS.length).getValues();
+  const rowIndex = data.findIndex(row => row[MAIN_COLS.quoteNo - 1] === quoteNo);
+  if (rowIndex === -1) return null;
+
+  const quote = rowToQuoteObject_(data[rowIndex]);
+
+  const itemSheet = ss.getSheetByName(SHEET_ITEMS);
+  const itemLastRow = itemSheet.getLastRow();
+  quote.items = [];
+  if (itemLastRow >= 2) {
+    const itemData = itemSheet.getRange(2, 1, itemLastRow - 1, ITEM_HEADERS.length).getValues();
+    quote.items = itemData
+      .filter(row => row[ITEM_COLS.quoteNo - 1] === quoteNo)
+      .map(row => ({
+        itemType: row[ITEM_COLS.itemType - 1],
+        name: row[ITEM_COLS.name - 1],
+        lot: row[ITEM_COLS.lot - 1],
+        volume: row[ITEM_COLS.volume - 1],
+        unitPrice: row[ITEM_COLS.unitPrice - 1],
+        deduction: row[ITEM_COLS.deduction - 1],
+        logoFee: row[ITEM_COLS.logoFee - 1],
+        qty: row[ITEM_COLS.qty - 1],
+        unit: row[ITEM_COLS.unit - 1],
+        subtotal: row[ITEM_COLS.subtotal - 1],
+        flavorList: row[ITEM_COLS.flavorList - 1]
+      }));
+  }
+  return quote;
+}
+
+function buildQuoteDoc_(quote) {
+  const baseName = sanitizeFileName_(
+    (quote.clientName || '客戶') + '_' + quote.quoteNo + '_報價單_凱文南坡萬實業社'
+  );
+
+  const doc = DocumentApp.create(baseName);
+  const body = doc.getBody();
+  body.setMarginTop(28).setMarginBottom(28).setMarginLeft(40).setMarginRight(40);
+  body.clear();
+
+  appendHeader_(body, quote);
+  appendClientInfo_(body, quote);
+  if (quote.quoteType === 'bottle') {
+    appendBottleTable_(body, quote);
+  } else {
+    appendBanquetTable_(body, quote);
+  }
+  appendTotals_(body, quote);
+  appendPaymentSection_(body, quote);
+  appendNotesSection_(body, quote);
+
+  doc.saveAndClose();
+
+  const file = DriveApp.getFileById(doc.getId());
+  const folder = getOrCreateOutputFolder_();
+  folder.addFile(file);
+  try { DriveApp.getRootFolder().removeFile(file); } catch (e) { /* 忽略：不影響主要流程 */ }
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+  const pdfBlob = file.getAs('application/pdf').setName(baseName + '.pdf');
+  const pdfFile = folder.createFile(pdfBlob);
+  pdfFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+  const docxBlob = file.getAs('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+
+  return {
+    fileId: file.getId(),
+    pdfUrl: 'https://drive.google.com/uc?export=download&id=' + pdfFile.getId(),
+    docUrl: 'https://docs.google.com/document/d/' + file.getId() + '/export?format=docx',
+    fileNameBase: baseName,
+    pdfBase64: Utilities.base64Encode(pdfBlob.getBytes()),
+    docxBase64: Utilities.base64Encode(docxBlob.getBytes())
+  };
+}
+
+function getOrCreateOutputFolder_() {
+  const folders = DriveApp.getFoldersByName(DOC_OUTPUT_FOLDER_NAME);
+  if (folders.hasNext()) return folders.next();
+  return DriveApp.createFolder(DOC_OUTPUT_FOLDER_NAME);
+}
+
+function sanitizeFileName_(s) {
+  return String(s).replace(/[\\/:*?"<>|]/g, '-');
+}
+
+function fmtMoney_(n) {
+  n = Math.round(Number(n) || 0);
+  const neg = n < 0;
+  n = Math.abs(n);
+  const s = String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return (neg ? '-$' : '$') + s;
+}
+
+function appendHeader_(body, quote) {
+  const table = body.appendTable([['', '']]);
+  table.setBorderWidth(0);
+  const leftCell = table.getCell(0, 0);
+  const rightCell = table.getCell(0, 1);
+  leftCell.setWidth(330);
+  rightCell.setWidth(190);
+
+  leftCell.clear();
+  let logoInserted = false;
+  try {
+    const imgBlob = UrlFetchApp.fetch(LOGO_URL).getBlob();
+    const img = leftCell.appendImage(imgBlob);
+    const ratio = img.getWidth() / img.getHeight();
+    img.setHeight(26);
+    img.setWidth(Math.round(26 * ratio));
+    logoInserted = true;
+  } catch (e) { /* 抓圖失敗就退回純文字標題 */ }
+  if (!logoInserted) {
+    leftCell.appendParagraph('凱文南坡萬實業社').editAsText().setBold(true).setFontSize(13);
+  }
+  leftCell.appendParagraph('KEVIN NUMBER 1 TAILORED.COCKTAIL')
+    .editAsText().setFontSize(8).setForegroundColor('#A6824A');
+  leftCell.appendParagraph('EST. 2023. TAIWAN')
+    .editAsText().setFontSize(8).setForegroundColor('#A6824A');
+  leftCell.appendParagraph('新北市新莊區化成路554巷37號　(02)8991-0068　統編 92719710')
+    .editAsText().setFontSize(8).setForegroundColor('#A8A69C');
+
+  rightCell.clear();
+  const title = rightCell.appendParagraph('報　價　單');
+  title.setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
+  title.editAsText().setBold(true).setFontSize(18);
+
+  [
+    '單號：' + (quote.quoteNo || '-'),
+    '報價日：' + (quote.quoteDate || '-'),
+    '有效至：' + (quote.expiryDate || '-')
+  ].forEach(line => {
+    const p = rightCell.appendParagraph(line);
+    p.setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
+    p.editAsText().setFontSize(9).setForegroundColor('#6B6B63');
+  });
+
+  body.appendHorizontalRule();
+}
+
+function appendClientInfo_(body, quote) {
+  if (quote.quoteType === 'banquet' && quote.venue) {
+    const line = '佈置地點：' + quote.venue + (quote.serviceTime ? '　供酒時間：' + quote.serviceTime : '');
+    body.appendParagraph(line).editAsText().setFontSize(9).setForegroundColor('#6B6B63');
+  }
+
+  const fields = [
+    ['客戶名稱', quote.clientName],
+    ['聯絡人', quote.contactName],
+    ['統一編號', quote.clientTaxId],
+    ['聯絡電話', quote.contactPhone],
+    ['地址', quote.clientAddress]
+  ];
+  fields.forEach(pair => {
+    const label = pair[0], value = pair[1];
+    if (value) {
+      body.appendParagraph(label + '：' + value).editAsText().setFontSize(10);
+    }
+  });
+  body.appendParagraph('');
+}
+
+function appendBottleTable_(body, quote) {
+  const items = quote.items || [];
+  const bottleItems = items.filter(i => i.itemType === 'bottle');
+  const extraItems = items.filter(i => i.itemType === 'extra');
+
+  const hasLot = bottleItems.some(i => i.lot);
+  const hasDed = bottleItems.some(i => Number(i.deduction));
+  const hasLogo = bottleItems.some(i => Number(i.logoFee));
+
+  const header = ['品名'];
+  if (hasLot) header.push('批次');
+  header.push('容量', '單價');
+  if (hasDed) header.push('前標費扣除');
+  if (hasLogo) header.push('LOGO印刷費');
+  header.push('瓶數', '小計');
+
+  const rows = [header];
+
+  bottleItems.forEach(it => {
+    const r = [it.name || '-'];
+    if (hasLot) r.push(it.lot || '-');
+    r.push(it.volume ? (it.volume + 'ml') : '-', it.unitPrice ? fmtMoney_(it.unitPrice) : '-');
+    if (hasDed) r.push(Number(it.deduction) ? fmtMoney_(it.deduction) : '-');
+    if (hasLogo) r.push(Number(it.logoFee) ? fmtMoney_(it.logoFee) : '-');
+    r.push(String(it.qty || 0), fmtMoney_(it.subtotal));
+    rows.push(r);
+  });
+
+  extraItems.forEach(it => {
+    const r = new Array(header.length).fill('');
+    r[0] = it.name || '-';
+    r[header.length - 1] = fmtMoney_(it.subtotal);
+    rows.push(r);
+  });
+
+  styleItemsTable_(body.appendTable(rows));
+}
+
+function appendBanquetTable_(body, quote) {
+  const items = quote.items || [];
+  const header = ['項目', '數量', '單位', '單價', '小計'];
+  const rows = [header];
+
+  items.filter(i => i.itemType === 'banquet_group').forEach(it => {
+    const name = it.flavorList ? (it.name + '（' + it.flavorList + '）') : it.name;
+    rows.push([
+      name || '-', String(it.qty || 0), it.unit || '杯',
+      it.unitPrice ? fmtMoney_(it.unitPrice) : '-', fmtMoney_(it.subtotal)
+    ]);
+  });
+
+  items.filter(i => i.itemType === 'banquet_free').forEach(it => {
+    rows.push([
+      it.name || '-', String(it.qty || 0), it.unit || '-',
+      it.unitPrice ? fmtMoney_(it.unitPrice) : '-', fmtMoney_(it.subtotal)
+    ]);
+  });
+
+  if (quote.svcMode) {
+    const label = SVC_LABEL_MAP_[quote.svcMode] || '調酒師服務費';
+    rows.push([label, '1', '-', fmtMoney_(quote.svcAmount), fmtMoney_(quote.svcAmount)]);
+  }
+
+  items.filter(i => i.itemType === 'banquet_addon').forEach(it => {
+    rows.push([
+      it.name || '-', String(it.qty || 0), it.unit || '-',
+      it.unitPrice ? fmtMoney_(it.unitPrice) : '-', fmtMoney_(it.subtotal)
+    ]);
+  });
+
+  styleItemsTable_(body.appendTable(rows));
+}
+
+function styleItemsTable_(table) {
+  table.setBorderColor('#E5E2D8').setBorderWidth(1);
+  const headerRow = table.getRow(0);
+  for (let c = 0; c < headerRow.getNumCells(); c++) {
+    const cell = headerRow.getCell(c);
+    cell.setBackgroundColor('#22241F');
+    cell.editAsText().setForegroundColor('#FFFFFF').setBold(true).setFontSize(9);
+  }
+  for (let r = 1; r < table.getNumRows(); r++) {
+    const row = table.getRow(r);
+    for (let c = 0; c < row.getNumCells(); c++) {
+      row.getCell(c).editAsText().setFontSize(10);
+    }
+  }
+}
+
+function appendTotals_(body, quote) {
+  body.appendParagraph('');
+  const subLabel = quote.priceMode === 'inc' ? '品項合計（未稅，自動回算）' : '品項合計（未稅）';
+  addTotalLine_(body, subLabel, quote.itemsSubtotal, false);
+
+  if (Number(quote.taxRate) > 0) {
+    const taxLabel = quote.priceMode === 'inc' ? '其中稅額' : ('加計稅額（' + quote.taxRate + '%）');
+    addTotalLine_(body, taxLabel, quote.taxAmount, false);
+  }
+
+  if (quote.quoteType === 'bottle' && Number(quote.extrasTotal)) {
+    addTotalLine_(body, '額外費用', quote.extrasTotal, false);
+  }
+
+  addTotalLine_(body, '總計', quote.grandTotal, true);
+}
+
+function addTotalLine_(body, label, amount, isGrand) {
+  const p = body.appendParagraph(label + '：' + fmtMoney_(amount));
+  p.setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
+  if (isGrand) {
+    p.editAsText().setBold(true).setFontSize(13).setForegroundColor('#A6824A');
+  } else {
+    p.editAsText().setFontSize(10).setForegroundColor('#6B6B63');
+  }
+}
+
+function appendPaymentSection_(body, quote) {
+  const detail = quote.paymentDetail;
+  if (!detail) return;
+  body.appendParagraph('');
+  body.appendParagraph('付款條件').editAsText().setBold(true).setForegroundColor('#7C5E32').setFontSize(11);
+  String(detail).split('<br>').forEach(line => {
+    line = line.trim();
+    if (!line) return;
+    body.appendParagraph(line).editAsText().setFontSize(10);
+  });
+}
+
+function appendNotesSection_(body, quote) {
+  body.appendParagraph('');
+  if (quote.remark) {
+    body.appendParagraph(quote.remark).editAsText().setFontSize(9).setForegroundColor('#6B6B63');
+  }
+  [
+    '以下客戶簡稱甲方，凱文南坡萬實業社簡稱乙方。雙方確認此報價單內容無誤並於雙方各執一份，以維雙方權利。',
+    '匯款資訊：陽信銀行中興分行 (108)　02142-00230-91　凱文南坡萬實業社黃彥愷',
+    '匯款完成後，敬請提供轉帳截圖或帳號後五碼，以便核對入帳，謝謝。'
+  ].forEach(line => {
+    body.appendParagraph(line).editAsText().setFontSize(9).setForegroundColor('#6B6B63');
+  });
 }
 
 // ===================================================================
