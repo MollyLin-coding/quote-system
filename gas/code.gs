@@ -668,18 +668,28 @@ function buildQuoteDoc_(quote) {
   const folder = getOrCreateOutputFolder_();
   folder.addFile(file);
   try { DriveApp.getRootFolder().removeFile(file); } catch (e) { /* 忽略：不影響主要流程 */ }
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
   const pdfBlob = file.getAs('application/pdf').setName(baseName + '.pdf');
   const pdfFile = folder.createFile(pdfBlob);
   pdfFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
-  const docxBlob = file.getAs('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  // Google Doc 無法用 getAs() 轉成 .docx，需透過 Drive export endpoint 取得。
+  const docxExportUrl = 'https://docs.google.com/document/d/' + file.getId() +
+    '/export?format=docx';
+  const docxResponse = UrlFetchApp.fetch(docxExportUrl, {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    muteHttpExceptions: true
+  });
+  const docxBlob = docxResponse.getBlob().setName(baseName + '.docx');
+  const docxFile = folder.createFile(docxBlob);
+  docxFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+  // 原始 Google Doc 僅為中繼產物，PDF/docx 都產出後即可刪除，避免 Drive 累積垃圾。
+  try { file.setTrashed(true); } catch (e) { /* 忽略：不影響主要流程 */ }
 
   return {
-    fileId: file.getId(),
     pdfUrl: 'https://drive.google.com/uc?export=download&id=' + pdfFile.getId(),
-    docUrl: 'https://docs.google.com/document/d/' + file.getId() + '/export?format=docx',
+    docUrl: 'https://drive.google.com/uc?export=download&id=' + docxFile.getId(),
     fileNameBase: baseName,
     pdfBase64: Utilities.base64Encode(pdfBlob.getBytes()),
     docxBase64: Utilities.base64Encode(docxBlob.getBytes())
