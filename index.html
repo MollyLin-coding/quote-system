@@ -111,6 +111,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
 .itr textarea:focus{outline:none;border-color:var(--gold);background:var(--wh)}
 .itr .sub{font-size:12.5px;font-weight:700;color:var(--ink);text-align:right}
 .del{background:none;border:none;color:var(--bd);cursor:pointer;font-size:16px;line-height:1;padding:2px}
+.crow{border:1px solid var(--bd);border-radius:8px;padding:12px 14px;margin-bottom:10px;transition:.15s}
+.crow.free{background:var(--gold-pale)}
+.crow-top{display:grid;grid-template-columns:2fr 70px 70px 90px 90px 26px;gap:8px;align-items:center}
+.crow-top input{border:1px solid var(--bd);border-radius:6px;padding:6px 8px;font-size:12px;color:var(--ink);background:transparent;width:100%;font-family:inherit}
+.crow-top input:focus{outline:none;border-color:var(--gold);background:var(--wh)}
+.crow-top input[readonly]{background:var(--bg);color:var(--hint)}
+.crow-bottom{display:flex;gap:14px;align-items:center;margin-top:8px}
+.crow-note{flex:1}
+.crow-note input{width:100%;border:1px solid var(--bd);border-radius:6px;padding:5px 8px;font-size:11.5px;color:var(--sub);background:transparent;font-family:inherit}
+.crow-note input:focus{outline:none;border-color:var(--gold);background:var(--wh)}
+.crow-flags{display:flex;gap:14px;font-size:11.5px;color:var(--sub);align-items:center;white-space:nowrap}
+.crow-flags label{display:flex;gap:5px;align-items:center;cursor:pointer}
+
 .del:hover{color:#C0453F}
 .add-row{width:100%;padding:11px;background:transparent;border:none;border-top:1.5px dashed var(--bd);color:var(--hint);cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;gap:5px;transition:.15s}
 .add-row:hover{color:var(--ink);background:var(--bg)}
@@ -264,6 +277,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
     <button class="nb on" id="nav-new" onclick="newQuote()"><i class="ti ti-file-plus"></i>新增報價單</button>
     <button class="nb" id="nav-records" onclick="gotoPage('records')"><i class="ti ti-files"></i>報價紀錄</button>
     <button class="nb" onclick="openPreview()"><i class="ti ti-eye"></i>預覽報價單</button>
+    <button class="nb" id="nav-custom" onclick="gotoPage('custom')"><i class="ti ti-edit"></i>自訂報價單</button>
   </div>
   <div class="sb-foot">
     <div style="font-size:9.5px;color:rgba(239,233,216,.3);letter-spacing:2px;margin-bottom:8px;text-transform:uppercase">匯款資訊</div>
@@ -277,15 +291,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
 <div class="main">
   <div class="tb">
     <div class="tb-left">
-      <h1>報價單製作</h1>
-      <p>填寫後可即時預覽，並匯出 PDF / Word</p>
+      <h1 id="tb-title">報價單製作</h1>
+      <p id="tb-sub">填寫後可即時預覽，並匯出 PDF / Word</p>
     </div>
-    <div class="tb-right">
+    <div class="tb-right" id="tbr-standard">
       <button class="btn btn-g" onclick="resetAll()"><i class="ti ti-refresh"></i>清除</button>
       <button class="btn btn-dk" onclick="openPreview()"><i class="ti ti-eye"></i>預覽</button>
       <button class="btn btn-dk" id="btn-save" onclick="saveQuote()"><i class="ti ti-device-floppy"></i>儲存</button>
       <button class="btn btn-gold" onclick="exportPDF()"><i class="ti ti-download"></i>匯出 PDF</button>
       <button class="btn btn-dk" id="btn-gendoc" onclick="generateOfficialDocument()"><i class="ti ti-file-text"></i>正式文件</button>
+    </div>
+    <div class="tb-right" id="tbr-custom" style="display:none">
+      <button class="btn btn-g" onclick="resetCustom()"><i class="ti ti-refresh"></i>清除</button>
+      <button class="btn btn-g" onclick="loadKKBarSample()"><i class="ti ti-wand"></i>載入 KKBar 範例</button>
+      <button class="btn btn-dk" onclick="openCustomPreview()"><i class="ti ti-eye"></i>預覽</button>
+      <button class="btn btn-gold" onclick="exportCustomPDF()"><i class="ti ti-download"></i>匯出 PDF</button>
+      <button class="btn btn-dk" onclick="exportCustomWord()"><i class="ti ti-file-text"></i>匯出 Word</button>
     </div>
   </div>
 
@@ -589,6 +610,66 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
 
   </div>
 
+  <div class="page" id="page-custom">
+
+    <div class="pills">
+      <div class="pill"><i class="ti ti-hash" style="font-size:12px"></i>單號：<strong id="c-pl-no">—</strong></div>
+      <div class="pill"><i class="ti ti-calendar" style="font-size:12px"></i>報價日：<strong id="c-pl-dt">—</strong></div>
+      <div class="pill"><i class="ti ti-calendar-event" style="font-size:12px"></i>有效至：<strong id="c-pl-ex">—</strong></div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="ch"><i class="ti ti-file-description"></i><span>自訂報價單資訊</span><span class="ch-opt">完全自由填寫・不進資料庫・不動後端</span></div>
+      <div class="cb">
+        <div class="fg fg4">
+          <div class="fl"><label>單號</label><input class="fi" id="c-no" placeholder="例：20260708-01" oninput="syncCustomPills()"></div>
+          <div class="fl"><label>報價日</label><input class="fi" type="date" id="c-dt" oninput="syncCustomPills()"></div>
+          <div class="fl"><label>有效至</label><input class="fi" type="date" id="c-ex" oninput="syncCustomPills()"></div>
+          <div class="fl"><label>案名標籤 <span class="opt">選填</span></label><input class="fi" id="c-tag" placeholder="例：活動酒水 · KKBar"></div>
+        </div>
+        <div class="fg fg4" style="margin-top:14px">
+          <div class="fl"><label>客戶名稱</label><input class="fi" id="c-cli" placeholder="請輸入客戶名稱"></div>
+          <div class="fl"><label>聯絡人 <span class="opt">選填</span></label><input class="fi" id="c-con" placeholder="請輸入聯絡人姓名"></div>
+          <div class="fl"><label>計價方式</label>
+            <select class="fi" id="c-taxmode" onchange="calcCustom()">
+              <option value="inc">含稅價（內含稅額）</option>
+              <option value="exc">未稅價（外加稅額）</option>
+            </select>
+          </div>
+          <div class="fl"><label>稅率 (%)</label><input class="fi" type="number" id="c-taxrate" value="5" oninput="calcCustom()"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="ch"><i class="ti ti-table"></i><span>品項表格</span><span class="ch-opt">欄位標題可自行修改・支援手動小計 / 免費劃線 / 備註</span></div>
+      <div class="cb">
+        <div class="fg" style="grid-template-columns:2fr 70px 70px 90px 90px 26px;margin-bottom:10px">
+          <input class="fi" id="c-h-name" value="項目" style="font-weight:600">
+          <input class="fi" id="c-h-qty" value="數量" style="font-weight:600;text-align:center">
+          <input class="fi" id="c-h-unit" value="單位" style="font-weight:600;text-align:center">
+          <input class="fi" id="c-h-price" value="單價" style="font-weight:600;text-align:right">
+          <input class="fi" id="c-h-sub" value="小計" style="font-weight:600;text-align:right">
+          <div></div>
+        </div>
+        <div id="c-rows"></div>
+        <button class="btn btn-g" style="margin-top:10px" onclick="addCustomRow()"><i class="ti ti-plus"></i>新增項目</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ch"><i class="ti ti-calculator"></i><span>金額試算</span></div>
+      <div class="cb">
+        <div style="display:flex;justify-content:flex-end;gap:28px;font-size:13px;color:var(--sub)">
+          <div>品項合計：<strong id="c-t-sub" style="color:var(--ink)">$0</strong></div>
+          <div>稅額：<strong id="c-t-tax" style="color:var(--ink)">$0</strong></div>
+          <div>總計：<strong id="c-t-tot" style="color:var(--gold);font-size:16px">$0</strong></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
   <div class="page" id="page-records">
     <div class="rec-wrap">
       <div class="rec-toolbar">
@@ -617,8 +698,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
     <div class="phead">
       <span>報價單預覽</span>
       <div class="phbtns">
-        <button class="btn btn-gold" style="font-size:12px;padding:6px 13px" onclick="exportPDF()"><i class="ti ti-file-type-pdf"></i>列印 / PDF</button>
-        <button class="btn btn-g" style="font-size:12px;padding:6px 13px;color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.2)" onclick="generateOfficialDocument()"><i class="ti ti-file-text"></i>正式文件</button>
+        <button class="btn btn-gold" style="font-size:12px;padding:6px 13px" onclick="previewExportPDF()"><i class="ti ti-file-type-pdf"></i>列印 / PDF</button>
+        <button class="btn btn-g" id="pv-btn-secondary" style="font-size:12px;padding:6px 13px;color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.2)" onclick="previewSecondaryAction()"><i class="ti ti-file-text"></i>正式文件</button>
         <button style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;font-size:20px;line-height:1;margin-left:4px" onclick="closePreview()">✕</button>
       </div>
     </div>
@@ -629,6 +710,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
 <script>
 let qType='bottle', taxMode='inc', payTab=0;
 let botItems=[],banFreeItems=[],banAddonItems=[],extras=[],imgs=[],rowId=0;
+let customItems=[],previewKind='std';
 let colDed=false, colLogo=false, colLot=false;
 let flavors={g1:[],g2:[]};
 
@@ -1379,6 +1461,8 @@ function openPreview(){
 
   </div>`;
 
+  previewKind = 'std';
+  document.getElementById('pv-btn-secondary').innerHTML = '<i class="ti ti-file-text"></i>正式文件';
   document.getElementById('pov').style.display='block';
 }
 
@@ -1461,9 +1545,19 @@ function gotoPage(p){
   currentPage=p;
   document.getElementById('page-new').classList.toggle('on', p==='new');
   document.getElementById('page-records').classList.toggle('on', p==='records');
+  document.getElementById('page-custom').classList.toggle('on', p==='custom');
+  document.getElementById('tbr-standard').style.display = p==='custom' ? 'none' : 'flex';
+  document.getElementById('tbr-custom').style.display = p==='custom' ? 'flex' : 'none';
+  document.getElementById('tb-title').textContent = p==='custom' ? '自訂報價單' : '報價單製作';
+  document.getElementById('tb-sub').textContent = p==='custom' ? '自由建立非常規報價單，直接從前端匯出 PDF / Word，不進資料庫' : '填寫後可即時預覽，並匯出 PDF / Word';
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
   if(p==='new'){ document.getElementById('nav-new').classList.add('on'); }
   if(p==='records'){ document.getElementById('nav-records').classList.add('on'); loadRecords(); }
+  if(p==='custom'){
+    document.getElementById('nav-custom').classList.add('on');
+    if(customItems.length===0){ addCustomRow(); }
+    calcCustom();
+  }
 }
 
 /* ---- 收集表單資料成 quote 物件 ---- */
@@ -1781,6 +1875,313 @@ function exportPDF(){
     w.document.close();
     setTimeout(()=>{ w.print(); }, 400);
   }, 200);
+}
+
+/* ============================================================
+   自訂報價單模式（第三種模式，獨立運作，不進資料庫、不動 GAS）
+   ============================================================ */
+function syncCustomPills(){
+  document.getElementById('c-pl-no').textContent = document.getElementById('c-no').value.trim() || '—';
+  document.getElementById('c-pl-dt').textContent = document.getElementById('c-dt').value || '—';
+  document.getElementById('c-pl-ex').textContent = document.getElementById('c-ex').value || '—';
+}
+
+function addCustomRow(prefill){
+  prefill = prefill || {};
+  rowId++;
+  const id = rowId;
+  const div = document.createElement('div');
+  div.className = 'crow' + (prefill.free ? ' free' : '');
+  div.id = `cr-${id}`;
+  const manual = !!prefill.manual;
+  div.innerHTML = `
+    <div class="crow-top">
+      <input placeholder="品名" data-f="name" value="${escHtml(prefill.name||'')}" oninput="calcCustom()">
+      <input type="number" placeholder="—" data-f="qty" value="${prefill.qty!=null?prefill.qty:''}" oninput="calcCustom()">
+      <input placeholder="—" data-f="unit" value="${escHtml(prefill.unit||'')}" oninput="calcCustom()">
+      <input type="number" placeholder="—" data-f="price" value="${prefill.price!=null?prefill.price:''}" oninput="calcCustom()">
+      <input type="number" placeholder="—" data-f="subval" value="${prefill.subval!=null?prefill.subval:''}" oninput="calcCustom()" ${manual?'':'readonly'}>
+      <button class="del" onclick="delCustomRow(${id})">✕</button>
+    </div>
+    <div class="crow-bottom">
+      <div class="crow-note"><input placeholder="備註說明（選填，顯示於品名下方小字）" data-f="note" value="${escHtml(prefill.note||'')}" oninput="calcCustom()"></div>
+      <div class="crow-flags">
+        <label><input type="checkbox" data-f="manual" ${manual?'checked':''} onchange="toggleCustomManual(${id})">手動小計</label>
+        <label><input type="checkbox" data-f="free" ${prefill.free?'checked':''} onchange="calcCustom()">免費</label>
+      </div>
+    </div>`;
+  document.getElementById('c-rows').appendChild(div);
+  customItems.push(id);
+  calcCustom();
+}
+
+function toggleCustomManual(id){
+  const row = document.getElementById(`cr-${id}`);
+  const manual = row.querySelector('[data-f="manual"]').checked;
+  const subInput = row.querySelector('[data-f="subval"]');
+  subInput.readOnly = !manual;
+  calcCustom();
+}
+
+function delCustomRow(id){
+  const el = document.getElementById(`cr-${id}`);
+  if(el) el.remove();
+  customItems = customItems.filter(i=>i!==id);
+  calcCustom();
+}
+
+function resetCustom(skipConfirm){
+  if(!skipConfirm && customItems.length){
+    if(!confirm('確定要清除目前自訂報價單內容？')) return;
+  }
+  document.getElementById('c-rows').innerHTML = '';
+  customItems = [];
+  ['c-tag','c-cli','c-con','c-no','c-dt','c-ex'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  document.getElementById('c-taxmode').value = 'inc';
+  document.getElementById('c-taxrate').value = '5';
+  const defaults = {'c-h-name':'項目','c-h-qty':'數量','c-h-unit':'單位','c-h-price':'單價','c-h-sub':'小計'};
+  Object.keys(defaults).forEach(id=>{ document.getElementById(id).value = defaults[id]; });
+  syncCustomPills();
+  addCustomRow();
+  calcCustom();
+}
+
+function calcCustom(){
+  syncCustomPills();
+  let itemsSum = 0;
+  customItems.forEach(id=>{
+    const row = document.getElementById(`cr-${id}`); if(!row) return;
+    const manual = row.querySelector('[data-f="manual"]').checked;
+    const free = row.querySelector('[data-f="free"]').checked;
+    const qty = gv(row,'qty'), price = gv(row,'price');
+    const subInput = row.querySelector('[data-f="subval"]');
+    let sub;
+    if(manual){
+      subInput.readOnly = false;
+      sub = subInput.value === '' ? 0 : (parseFloat(subInput.value)||0);
+    } else {
+      subInput.readOnly = true;
+      const raw = (qty && price) ? qty*price : 0;
+      subInput.value = raw ? raw : '';
+      sub = raw;
+    }
+    row.classList.toggle('free', free);
+    if(!free) itemsSum += sub;
+  });
+  const mode = document.getElementById('c-taxmode').value;
+  const rate = (parseFloat(document.getElementById('c-taxrate').value)||0)/100;
+  let tax = 0, total = 0;
+  if(mode === 'inc'){
+    total = itemsSum;
+    tax = rate>0 ? (total - total/(1+rate)) : 0;
+  } else {
+    tax = itemsSum*rate;
+    total = itemsSum+tax;
+  }
+  document.getElementById('c-t-sub').textContent = '$'+Math.round(itemsSum).toLocaleString();
+  document.getElementById('c-t-tax').textContent = '$'+Math.round(tax).toLocaleString();
+  document.getElementById('c-t-tot').textContent = '$'+Math.round(total).toLocaleString();
+}
+
+function parseMoney(s){ return parseFloat(String(s).replace(/[^0-9.\-]/g,''))||0; }
+
+/* ---- 自訂模式：KKBar 視覺樣式預覽 ---- */
+function openCustomPreview(){
+  calcCustom();
+  const GOLD='#A6824A', HEADGREY='#8A8880', LINE='#E8E5DD', BORDER='#E5E2D8', GREY='#6B6B63', GREY2='#A8A69C', INK='#22241F';
+
+  const tag = document.getElementById('c-tag').value.trim();
+  const cli = document.getElementById('c-cli').value.trim();
+  const con = document.getElementById('c-con').value.trim();
+  const no = document.getElementById('c-no').value.trim() || '—';
+  const dt = document.getElementById('c-dt').value || '—';
+  const ex = document.getElementById('c-ex').value || '—';
+  const mode = document.getElementById('c-taxmode').value;
+  const hName = document.getElementById('c-h-name').value.trim() || '項目';
+  const hQty = document.getElementById('c-h-qty').value.trim() || '數量';
+  const hUnit = document.getElementById('c-h-unit').value.trim() || '單位';
+  const hPrice = document.getElementById('c-h-price').value.trim() || '單價';
+  const hSub = document.getElementById('c-h-sub').value.trim() || '小計';
+
+  let rows = '';
+  customItems.forEach(id=>{
+    const row = document.getElementById(`cr-${id}`); if(!row) return;
+    const name = gs(row,'name'); if(!name) return;
+    const note = gs(row,'note');
+    const qty = gs(row,'qty'), unit = gs(row,'unit'), price = gs(row,'price');
+    const free = row.querySelector('[data-f="free"]').checked;
+    const subRaw = row.querySelector('[data-f="subval"]').value;
+    const qtyD = qty ? qty : '—', unitD = unit ? unit : '—';
+    const priceD = price ? ('$'+Math.round(parseFloat(price)).toLocaleString()) : '—';
+    let subD;
+    if(free){
+      const orig = subRaw ? ('$'+Math.round(parseFloat(subRaw)).toLocaleString()) : '—';
+      subD = `<span style="text-decoration:line-through;color:${GREY2}">${orig}</span> <span style="color:${GOLD};font-weight:700">免費</span>`;
+    } else {
+      subD = subRaw !== '' ? ('$'+Math.round(parseFloat(subRaw)).toLocaleString()) : '—';
+    }
+    rows += `<tr style="border-bottom:1px solid ${LINE}">
+      <td style="padding:11px 12px;color:${INK}">
+        <div style="font-weight:600">${escHtml(name)}</div>
+        ${note?`<div style="font-size:10.5px;color:${GREY2};margin-top:2px">${escHtml(note)}</div>`:''}
+      </td>
+      <td style="padding:11px 8px;text-align:center;color:${GREY}">${qtyD}</td>
+      <td style="padding:11px 8px;text-align:center;color:${GREY}">${unitD}</td>
+      <td style="padding:11px 8px;text-align:right;color:${GREY}">${priceD}</td>
+      <td style="padding:11px 8px;text-align:right;font-weight:700;color:${INK}">${subD}</td>
+    </tr>`;
+  });
+
+  const itemsSum = parseMoney(document.getElementById('c-t-sub').textContent);
+  const taxAmt = parseMoney(document.getElementById('c-t-tax').textContent);
+  const grand = parseMoney(document.getElementById('c-t-tot').textContent);
+  const lbSub = mode==='inc' ? '品項合計（含稅）' : '品項合計（未稅）';
+  const lbTax = mode==='inc' ? '其中稅額' : '加計稅額';
+
+  let cliRows = '';
+  if(cli) cliRows += `<div style="display:flex;gap:8px;font-size:12.5px;margin-bottom:7px;line-height:1.6"><span style="color:${GREY2};min-width:62px">客戶名稱</span><span style="color:${INK}">${escHtml(cli)}</span></div>`;
+  if(con) cliRows += `<div style="display:flex;gap:8px;font-size:12.5px;margin-bottom:7px;line-height:1.6"><span style="color:${GREY2};min-width:62px">聯絡人</span><span style="color:${INK}">${escHtml(con)}</span></div>`;
+
+  document.getElementById('pcon').innerHTML = `
+  <div style="font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;padding:56px 60px;color:${INK}">
+
+  <!-- HEADER -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:18px;border-bottom:1.5px solid ${INK};margin-bottom:20px">
+    <div>
+      <img src="https://raw.githubusercontent.com/MollyLin-coding/quote-system/main/assets/logo.png" style="height:32px;width:auto;display:block">
+      <div style="font-size:9px;letter-spacing:1.8px;color:${GOLD};margin-top:7px;text-transform:uppercase;line-height:1.7;font-weight:600">KEVIN NUMBER 1 TAILORED.COCKTAIL<br>EST. 2023. TAIWAN</div>
+      <div style="font-size:11px;color:${GREY2};margin-top:6px">新北市新莊區化成路554巷37號　(02)8991-0068　統編 92719710</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:22px;font-weight:700;color:${INK};letter-spacing:6px;margin-bottom:10px">報　價　單</div>
+      ${tag?`<div style="display:inline-block;font-size:11px;color:${GOLD};font-weight:700;letter-spacing:.5px;margin-bottom:8px;border:1px solid ${GOLD};border-radius:20px;padding:3px 12px">${escHtml(tag)}</div><br>`:''}
+      <div style="font-size:11.5px;color:${GREY2};line-height:1.9">單號：<span style="color:${INK};font-weight:600">${no}</span></div>
+      <div style="font-size:11.5px;color:${GREY2};line-height:1.9">報價日：<span style="color:${INK}">${dt}</span></div>
+      <div style="font-size:11.5px;color:${GOLD};font-weight:700">有效至：${ex}</div>
+    </div>
+  </div>
+
+  <!-- CLIENT -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;margin-bottom:18px">
+    ${cliRows}
+  </div>
+
+  <!-- TABLE -->
+  <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+    <thead><tr>
+      <th style="padding:10px 12px;text-align:left;color:${HEADGREY};font-weight:600;font-size:10.5px;letter-spacing:.3px;border-bottom:1.5px solid ${INK}">${escHtml(hName)}</th>
+      <th style="padding:10px 8px;text-align:center;color:${HEADGREY};font-weight:600;font-size:10.5px;border-bottom:1.5px solid ${INK}">${escHtml(hQty)}</th>
+      <th style="padding:10px 8px;text-align:center;color:${HEADGREY};font-weight:600;font-size:10.5px;border-bottom:1.5px solid ${INK}">${escHtml(hUnit)}</th>
+      <th style="padding:10px 8px;text-align:right;color:${HEADGREY};font-weight:600;font-size:10.5px;border-bottom:1.5px solid ${INK}">${escHtml(hPrice)}</th>
+      <th style="padding:10px 8px;text-align:right;color:${HEADGREY};font-weight:600;font-size:10.5px;border-bottom:1.5px solid ${INK}">${escHtml(hSub)}</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+
+  <!-- TOTAL -->
+  <div style="display:flex;justify-content:flex-end;margin-top:18px">
+    <div style="min-width:250px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:${GREY};padding:5px 2px"><span>${lbSub}</span><span>$${Math.round(itemsSum).toLocaleString()}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:${GREY};padding:5px 2px"><span>${lbTax}</span><span>$${Math.round(taxAmt).toLocaleString()}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:18px;color:${INK};font-weight:700;border-top:1.5px solid ${INK};padding-top:10px;margin-top:4px;letter-spacing:.3px"><span>總計</span><span style="color:${GOLD}">$${Math.round(grand).toLocaleString()}</span></div>
+    </div>
+  </div>
+
+  <!-- NOTES（固定頁尾三行） -->
+  <div style="margin-top:20px;padding-top:14px;border-top:1px solid ${BORDER};font-size:11.5px;color:${GREY};line-height:1.7">
+    <p>以下客戶簡稱甲方，凱文南坡萬實業社簡稱乙方。雙方確認此報價單內容無誤並於雙方各執一份，以維雙方權利。</p>
+    <p style="margin-top:6px">匯款資訊：陽信銀行中興分行 (108)　02142-00230-91　凱文南坡萬實業社黃彥愷</p>
+    <p style="margin-top:4px">匯款完成後，敬請提供轉帳截圖或帳號後五碼，以便核對入帳，謝謝。</p>
+  </div>
+
+  </div>`;
+
+  previewKind = 'custom';
+  const btn2 = document.getElementById('pv-btn-secondary');
+  btn2.innerHTML = '<i class="ti ti-file-text"></i>匯出 Word';
+  document.getElementById('pov').style.display = 'block';
+}
+
+/* ---- 預覽視窗內按鈕：依模式分派 ---- */
+function previewExportPDF(){
+  if(previewKind === 'custom') exportCustomPDF(); else exportPDF();
+}
+function previewSecondaryAction(){
+  if(previewKind === 'custom') exportCustomWord(); else generateOfficialDocument();
+}
+
+/* ---- 自訂模式：檔名 ---- */
+function buildCustomExportFilename(){
+  const cli = document.getElementById('c-cli').value.trim() || '客戶';
+  const no = document.getElementById('c-no').value.trim() || '單號';
+  return sanitizeFilename(`${cli}_${no}_報價單_凱文南坡萬實業社`);
+}
+
+/* ---- 自訂模式：PDF 匯出（瀏覽器列印，同正規模式做法）---- */
+function exportCustomPDF(){
+  openCustomPreview();
+  setTimeout(()=>{
+    let pcon = document.getElementById('pcon').innerHTML;
+    pcon = pcon.replace('padding:56px 60px', 'padding:0');
+    const w = window.open('', '_blank');
+    const fname = buildCustomExportFilename();
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${fname}</title>
+      <style>
+        @page{size:A4;margin:10mm}
+        body{margin:0;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif}
+        table{page-break-inside:auto}
+        tr{page-break-inside:avoid}
+        img{page-break-inside:avoid}
+      </style>
+      </head><body>${pcon}</body></html>`);
+    w.document.close();
+    setTimeout(()=>{ w.print(); }, 400);
+  }, 200);
+}
+
+/* ---- 自訂模式：Word 匯出（純前端，MS Office HTML 格式，不動 GAS）---- */
+function exportCustomWord(){
+  openCustomPreview();
+  setTimeout(()=>{
+    const pcon = document.getElementById('pcon').innerHTML;
+    const fname = buildCustomExportFilename();
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+    <head><meta charset="UTF-8"><title>${fname}</title>
+    <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->
+    <style>body{font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif}</style>
+    </head><body>${pcon}</body></html>`;
+    const blob = new Blob(['﻿', html], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname + '.doc';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 3000);
+  }, 200);
+}
+
+/* ---- 自訂模式：載入 KKBar 範例資料（測試 / 預設值用）---- */
+function loadKKBarSample(){
+  resetCustom(true);
+  document.getElementById('c-tag').value = '活動酒水 · KKBar';
+  document.getElementById('c-cli').value = 'KKBar';
+  document.getElementById('c-con').value = '小六';
+  document.getElementById('c-no').value = '20260708-01';
+  document.getElementById('c-dt').value = '2026-07-08';
+  document.getElementById('c-ex').value = '2026-08-08';
+  document.getElementById('c-taxmode').value = 'inc';
+  document.getElementById('c-taxrate').value = '5';
+  document.getElementById('c-rows').innerHTML = '';
+  customItems = [];
+  addCustomRow({name:'Flutterfly（40,000ml）', note:'兩款合計 / 含加急客製打版工本費', manual:true, subval:39000});
+  addCustomRow({name:'Taiwan Vibes 2.0（40,000ml）', manual:true, subval:''});
+  addCustomRow({name:'酒吧車租借', qty:5, unit:'日', price:2500, free:true, note:'商會友情支援'});
+  addCustomRow({name:'氣瓶', qty:1, unit:'瓶', price:1000});
+  addCustomRow({name:'運費', qty:1, unit:'式', price:1500});
+  syncCustomPills();
+  calcCustom();
+  toast('已載入 KKBar 範例資料','ok');
 }
 
 /* ---- 啟動：檢查 session token ---- */
