@@ -373,6 +373,55 @@ Molly 看了實際輸出畫面截圖後又提出一輪修改，**前端 index.ht
 
 ---
 
+## 四點十六、自訂報價單模式（對話 A：前端 UI，2026-07-09）
+
+**前端 index.html 最新 commit = 3d84495**。新增第三種模式「自訂報價單」，與既有瓶裝/宴會兩種模式完全獨立、互不影響。
+
+### 範圍與原則
+- **只改 index.html，沒動 gas/code.gs、沒碰 Google Sheet、沒重新部署 GAS**——零部署風險。
+- 自訂模式**不進資料庫**（沒有儲存/正式文件按鈕），純前端建立 → 直接匯出 PDF / Word。
+- 側邊欄新增「自訂報價單」導覽鈕（`nav-custom` → `gotoPage('custom')` → `page-custom`），頂部工具列依頁面切換顯示 `tbr-standard` 或 `tbr-custom` 兩組按鈕。
+
+### 6 項自訂功能對照表
+
+| # | 功能 | 實作方式 |
+|---|---|---|
+| 1 | 手動填小計 | 每列「手動小計」checkbox，勾選後小計欄位變可編輯（`toggleCustomManual()`），未勾選則自動 = 單價×數量 |
+| 2 | 免費項目劃線 | 每列「免費」checkbox，`openCustomPreview()` 中該列顯示原價劃線 + 金色「免費」字樣，且**不列入總計**（`calcCustom()` 排除 free 列） |
+| 3 | 項目備註說明 | 每列備註欄，顯示於品名下方小字（`GREY2` 淡灰） |
+| 4 | 含稅/未稅切換 | `c-taxmode`：inc＝總計=品項合計，稅額=總計−總計/(1+稅率)（回算）；exc＝總計=品項合計+品項合計×稅率（外加），公式見 `calcCustom()` |
+| 5 | 自訂欄位標題 | 表格上方 5 個標題輸入框（`c-h-name/qty/unit/price/sub`），即時反映到預覽表頭 |
+| 6 | 案名標籤 | `c-tag` 輸入框，顯示於「報價單」大標右下方金色圓角標籤 |
+
+### 視覺樣式（比照 KKBar 活動酒水）
+`openCustomPreview()` 內以 inline style 組出 HTML（做法比照既有 `openPreview()`），色碼：GOLD `#A6824A`、HEADGREY `#8A8880`（表頭字）、LINE `#E8E5DD`（列分隔線）、BORDER `#E5E2D8`、GREY `#6B6B63`、GREY2 `#A8A69C`。表頭無底色、只有橫線分隔，總計區右對齊、字型 Noto Sans TC。頁尾固定三行文字與既有模式相同（甲乙方確認/匯款資訊/轉帳核對）。
+
+### 匯出
+- **PDF**：`exportCustomPDF()`，做法與既有 `exportPDF()` 相同——開新視窗寫入 HTML + `window.print()`，不用額外函式庫，避免中文字型嵌入問題。
+- **Word**：`exportCustomWord()`，純前端組 MS Office HTML namespace 文件（`<!--[if gte mso 9]>...`），包成 Blob 下載 `.doc`，**不經過 GAS**（既有的「正式文件」Word 匯出才是走 GAS Docs API，兩者是不同機制，互不影響）。
+- 檔名格式：`{客戶名}_{單號}_報價單_凱文南坡萬實業社`（`buildCustomExportFilename()`）。
+
+### 預覽視窗共用邏輯（重要，避免踩雷）
+既有的預覽 modal（`#pov`/`#pcon`）在自訂模式與標準模式間**共用同一組 DOM**，用全域變數 `previewKind`（'std'/'custom'）判斷預覽視窗內的兩顆按鈕要呼叫哪一組函式：
+- `previewExportPDF()` → 依 `previewKind` 分派 `exportPDF()` 或 `exportCustomPDF()`
+- `previewSecondaryAction()` → 分派 `generateOfficialDocument()` 或 `exportCustomWord()`
+- `openPreview()`（標準模式）與 `openCustomPreview()`（自訂模式）**都要記得把 `previewKind` 設回自己的值**、並更新 `pv-btn-secondary` 按鈕文字（「正式文件」⇄「匯出 Word」），否則會呼叫錯函式。**這次已修正並驗證**（見下方驗證方式）。
+
+### KKBar 範例資料
+`loadKKBarSample()`——一鍵載入交接筆記裡的範例（Flutterfly/Taiwan Vibes 手動小計、酒吧車免費劃線、氣瓶/運費一般計算），可當測試也可當 Molly 實際开單時的起始樣板。
+
+### 驗證方式（本次用 jsdom 完成，未上 Claude in Chrome 實跑）
+用 Node + jsdom 載入 `index.html`、執行 `runScripts:'dangerously'`，呼叫 `loadKKBarSample()` + `calcCustom()`，確認：
+- 總計 $41,500、稅額 $1,976（與交接筆記範例完全吻合）
+- 預覽 HTML 含免費劃線、KKBar 標籤、Flutterfly、頁尾三行文字
+- 檔名輸出 `KKBar_20260708-01_報價單_凱文南坡萬實業社`
+- `exportCustomPDF()`/`exportCustomWord()` 呼叫不拋錯、`window.print()`/下載觸發正常
+- 切回標準模式（`gotoPage('new')` → `setType('bottle')` → `openPreview()`）後 `page-custom` 內容與 5 筆列資料完全不受影響，`pv-btn-secondary` 正確變回「正式文件」
+
+**尚未做**：真人瀏覽器實際列印看 A4 排版、實際開啟 Word 檔看相容性。建議 Molly 上線後開一次自訂模式、載入 KKBar 範例、實際匯出 PDF/Word 目視確認。
+
+---
+
 ## 五、踩過的雷與正確解法（務必看，避免重犯）
 
 ### 雷 1：從截圖辨識金鑰字元 → token 認證失敗（浪費最多 token）
@@ -465,6 +514,9 @@ Molly 看了實際輸出畫面截圖後又提出一輪修改，**前端 index.ht
 
 ### ⬜ v2.0 順手發現、待 Molly 決定要不要修
 12. 載入舊宴會報價單編輯時，調酒師服務費的單價/人數欄位沒有還原（只有模式還原），因為資料庫只存了加總後金額，沒存拆解明細。詳見「四點十五」章節。
+
+### ⬜ 自訂報價單模式（對話 A，已完成邏輯+樣式+匯出，待真人驗收）
+13. 已用 jsdom 驗證計算邏輯、預覽 HTML、PDF/Word 匯出、與既有模式互不影響（詳見「四點十六」）。**未在真實瀏覽器測過**：A4 列印排版目視、Word 檔案在 Microsoft Word 開啟後的相容性。建議 Molly 上線後開一次自訂模式、按「載入 KKBar 範例」實際匯出確認。
 
 ---
 
