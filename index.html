@@ -1249,7 +1249,8 @@ function getPayTerms(){
 }
 
 // ── PREVIEW ──
-function openPreview(){
+/* ---- 標準模式（瓶裝／宴會）：組出報價單各區塊，預覽・PDF 共用 ---- */
+function buildStdDocParts(){
   const no=document.getElementById('f-no').value||'—';
   const dt=document.getElementById('f-dt').value||'—';
   const ex=document.getElementById('f-ex').value||'—';
@@ -1271,7 +1272,8 @@ function openPreview(){
   const extVisible=document.getElementById('tr-ext').style.display!=='none';
   const text=document.getElementById('t-ext').textContent;
 
-  let rowsH='';
+  let colgroup='', theadStr='';
+  const rows=[];
   if(qType==='bottle'){
     let headCols = `<th style="padding:10px 12px;text-align:left;color:#6B6B63;font-weight:600;font-size:10.5px;letter-spacing:.3px;border-bottom:1.5px solid #22241F">品名</th>`;
     if(colLot) headCols += `<th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">批次</th>`;
@@ -1281,7 +1283,14 @@ function openPreview(){
     if(colLogo) headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">LOGO</th>`;
     headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">瓶數</th>
       <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">小計</th>`;
-    rowsH+=`<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-top:18px"><thead><tr>${headCols}</tr></thead><tbody>`;
+    theadStr = `<thead><tr>${headCols}</tr></thead>`;
+    let cols = '<col>';
+    if(colLot) cols += '<col style="width:64px">';
+    cols += '<col style="width:70px"><col style="width:84px">';
+    if(colDed) cols += '<col style="width:70px">';
+    if(colLogo) cols += '<col style="width:72px">';
+    cols += '<col style="width:58px"><col style="width:104px">';
+    colgroup = `<colgroup>${cols}</colgroup>`;
     botItems.forEach(id=>{
       const row=document.getElementById(`r-${id}`); if(!row) return;
       const n=gs(row,'name'),lot=gs(row,'lot'),vol=gv(row,'vol'),p=gv(row,'price'),d=colDed?gv(row,'ded'):0,l=colLogo?gv(row,'logo'):0,q=gv(row,'qty');
@@ -1295,64 +1304,64 @@ function openPreview(){
       if(colLogo) cells += `<td style="padding:11px 8px;text-align:right;color:#6B6B63">${l?'$'+l:'—'}</td>`;
       cells += `<td style="padding:11px 8px;text-align:right;color:#6B6B63">${q}</td>
         <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(sub).toLocaleString()}</td>`;
-      rowsH+=`<tr style="border-bottom:1px solid #EEEDE6">${cells}</tr>`;
+      rows.push(`<tr style="border-bottom:1px solid #EEEDE6">${cells}</tr>`);
     });
     if(extras.length){
       const colspan = 4 + (colLot?1:0) + (colDed?1:0) + (colLogo?1:0);
       extras.forEach(e=>{
-        rowsH+=`<tr style="border-bottom:1px solid #EEEDE6">
+        rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
           <td colspan="${colspan}" style="padding:9px 12px;color:#A6824A;font-style:italic;font-size:12px">${e.n}</td>
           <td style="padding:9px 8px;text-align:right;color:#6B6B63">$${e.a.toLocaleString()}</td>
-        </tr>`;
+        </tr>`);
       });
     }
-    rowsH+=`</tbody></table>`;
   } else {
-    rowsH+=`<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-top:18px"><thead><tr>
+    theadStr = `<thead><tr>
       <th style="padding:10px 12px;text-align:left;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">項目</th>
       <th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">數量</th>
       <th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">單位</th>
       <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">單價</th>
       <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">小計</th>
-    </tr></thead><tbody>`;
+    </tr></thead>`;
+    colgroup = `<colgroup><col><col style="width:64px"><col style="width:64px"><col style="width:92px"><col style="width:118px"></colgroup>`;
 
     // group 1
     const g1p=parseFloat(document.getElementById('ban-g1-price').value)||0;
     const g1q=parseFloat(document.getElementById('ban-g1-qty').value)||0;
     if(g1p||g1q){
       const flavorStr = flavors.g1.length ? `（${flavors.g1.join('、')}）` : '';
-      rowsH+=`<tr style="border-bottom:1px solid #EEEDE6">
+      rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
         <td style="padding:11px 12px;font-weight:600;color:#22241F">客製化調酒<span style="font-weight:400;color:#6B6B63;font-size:11.5px">${flavorStr}</span></td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${g1q}</td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">杯</td>
         <td style="padding:11px 8px;text-align:right;color:#6B6B63">${g1p?'$'+g1p.toLocaleString():'—'}</td>
         <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(g1p*g1q).toLocaleString()}</td>
-      </tr>`;
+      </tr>`);
     }
     const g2p=parseFloat(document.getElementById('ban-g2-price').value)||0;
     const g2q=parseFloat(document.getElementById('ban-g2-qty').value)||0;
     if(g2p||g2q){
       const flavorStr = flavors.g2.length ? `（${flavors.g2.join('、')}）` : '';
-      rowsH+=`<tr style="border-bottom:1px solid #EEEDE6">
+      rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
         <td style="padding:11px 12px;font-weight:600;color:#22241F">客製化無酒精雞尾酒<span style="font-weight:400;color:#6B6B63;font-size:11.5px">${flavorStr}</span></td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${g2q}</td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">杯</td>
         <td style="padding:11px 8px;text-align:right;color:#6B6B63">${g2p?'$'+g2p.toLocaleString():'—'}</td>
         <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(g2p*g2q).toLocaleString()}</td>
-      </tr>`;
+      </tr>`);
     }
     banFreeItems.forEach(id=>{
       const row=document.getElementById(`bf-${id}`); if(!row) return;
       const n=gs(row,'name'),u=gs(row,'unit'),p=gv(row,'price'),q=gv(row,'qty');
       const sub=p*q;
       if(!n&&!sub) return;
-      rowsH+=`<tr style="border-bottom:1px solid #EEEDE6">
+      rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
         <td style="padding:11px 12px;font-weight:600;color:#22241F">${n}</td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${q}</td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${u}</td>
         <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+p.toLocaleString():'—'}</td>
         <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(sub).toLocaleString()}</td>
-      </tr>`;
+      </tr>`);
     });
     // service fee
     const mode=document.getElementById('svc-mode').value;
@@ -1362,13 +1371,13 @@ function openPreview(){
       const a2=parseFloat(document.getElementById('svc-amt2').value)||0;
       const q=parseFloat(document.getElementById('svc-qty').value)||1;
       const sub=(a1+(mode==='travel'?a2:0))*q;
-      rowsH+=`<tr style="border-bottom:1px solid #EEEDE6">
+      rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
         <td style="padding:11px 12px;font-weight:600;color:#22241F">${labelMap[mode]}</td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${q}</td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">位</td>
         <td style="padding:11px 8px;text-align:right;color:#6B6B63">$${(a1+(mode==='travel'?a2:0)).toLocaleString()}</td>
         <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(sub).toLocaleString()}</td>
-      </tr>`;
+      </tr>`);
     }
     // addons
     banAddonItems.forEach(id=>{
@@ -1376,16 +1385,16 @@ function openPreview(){
       const n=gs(row,'name'),u=gs(row,'unit'),p=gv(row,'price'),q=gv(row,'qty');
       const sub=p*q;
       if(!n&&!sub) return;
-      rowsH+=`<tr style="border-bottom:1px solid #EEEDE6">
+      rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
         <td style="padding:11px 12px;font-weight:600;color:#22241F">${n}</td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${q}</td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${u}</td>
         <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+p.toLocaleString():'—'}</td>
         <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(sub).toLocaleString()}</td>
-      </tr>`;
+      </tr>`);
     });
-    rowsH+=`</tbody></table>`;
   }
+  const mkTable = inner => `<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:12.5px;margin-top:14px">${colgroup}${inner}</table>`;
 
   const venH=qType==='banquet'&&document.getElementById('f-ven').value?`
     <div style="display:flex;gap:28px;font-size:12px;color:#6B6B63;margin-bottom:18px">
@@ -1406,10 +1415,8 @@ function openPreview(){
     if(v) cliRows+=`<div style="display:flex;gap:8px;font-size:12.5px;margin-bottom:7px;line-height:1.6"><span style="color:#A8A69C;min-width:62px">${l}</span><span style="color:#22241F">${v}</span></div>`;
   });
 
-  document.getElementById('pcon').innerHTML=`
-  <div style="font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;padding:56px 60px;color:#22241F">
-
-  <!-- HEADER -->
+  /* 統一頁首（每頁相同） */
+  const header=`
   <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:18px;border-bottom:1.5px solid #22241F;margin-bottom:20px">
     <div>
       <img src="https://raw.githubusercontent.com/MollyLin-coding/quote-system/main/assets/logo.png" style="height:32px;width:auto;display:block">
@@ -1423,18 +1430,13 @@ function openPreview(){
       <div style="font-size:11.5px;color:#A8A69C;line-height:1.9">報價日：<span style="color:#22241F">${dt}</span></div>
       <div style="font-size:11.5px;color:#A6824A;font-weight:700">有效至：${ex}</div>
     </div>
-  </div>
+  </div>`;
 
-  <!-- CLIENT -->
-  ${venH}
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;margin-bottom:18px">
-    ${cliRows}
-  </div>
+  const topFirst = venH + `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;margin-bottom:4px">${cliRows}</div>`;
+  const contNote = `<div style="font-size:10.5px;color:#A8A69C;letter-spacing:.5px;margin:0">品項明細（承前頁）</div>`;
 
-  <!-- TABLE -->
-  ${rowsH}
-
-  <!-- TOTAL -->
+  /* 尾段區塊（總計／圖片／付款條件／備註條款） */
+  const totals=`
   <div style="display:flex;justify-content:flex-end;margin-top:18px">
     <div style="min-width:250px">
       <div style="display:flex;justify-content:space-between;font-size:12px;color:#6B6B63;padding:5px 2px"><span>${lbsub}</span><span>${tsub}</span></div>
@@ -1442,25 +1444,40 @@ function openPreview(){
       ${extVisible?`<div style="display:flex;justify-content:space-between;font-size:12px;color:#6B6B63;padding:5px 2px"><span>額外費用</span><span>${text}</span></div>`:''}
       <div style="display:flex;justify-content:space-between;font-size:18px;color:#22241F;font-weight:700;border-top:1.5px solid #22241F;padding-top:10px;margin-top:4px;letter-spacing:.3px"><span>總計</span><span style="color:#A6824A">${tot}</span></div>
     </div>
-  </div>
-
-  ${imgH}
-
-  <!-- PAYMENT -->
-  ${payH?`<div style="margin-top:18px;padding:14px 18px;background:#FAF9F5;border-left:2.5px solid #A6824A;font-size:12.5px;color:#22241F;line-height:1.7">
-    <span style="font-weight:700;color:#7C5E32">付款條件</span><br>${payH}
-  </div>`:''}
-
-  <!-- NOTES -->
-  <div style="margin-top:16px;padding-top:14px;border-top:1px solid #E5E2D8;font-size:11.5px;color:#6B6B63;line-height:1.7">
-    ${note?`<p style="margin-bottom:10px">${note}</p>`:''}
-    <p>以下客戶簡稱甲方，凱文南坡萬實業社簡稱乙方。雙方確認此報價單內容無誤並於雙方各執一份，以維雙方權利。</p>
-    <p style="margin-top:6px">匯款資訊：陽信銀行中興分行 (108)　02142-00230-91　凱文南坡萬實業社黃彥愷</p>
-    <p style="margin-top:4px">匯款完成後，敬請提供轉帳截圖或帳號後五碼，以便核對入帳，謝謝。</p>
-  </div>
-
   </div>`;
 
+  const payBlock = payH?`<div style="margin-top:18px;padding:14px 18px;background:#FAF9F5;border-left:2.5px solid #A6824A;font-size:12.5px;color:#22241F;line-height:1.7">
+    <span style="font-weight:700;color:#7C5E32">付款條件</span><br>${payH}
+  </div>`:'';
+
+  const notesBlock=`
+  <div style="margin-top:16px;padding-top:14px;border-top:1px solid #E5E2D8;font-size:11.5px;color:#6B6B63;line-height:1.7">
+    ${note?`<p style="margin:0 0 10px">${note}</p>`:''}
+    <p style="margin:0">以下客戶簡稱甲方，凱文南坡萬實業社簡稱乙方。雙方確認此報價單內容無誤並於雙方各執一份，以維雙方權利。</p>
+    <p style="margin:6px 0 0">匯款資訊：陽信銀行中興分行 (108)　02142-00230-91　凱文南坡萬實業社黃彥愷</p>
+    <p style="margin:4px 0 0">匯款完成後，敬請提供轉帳截圖或帳號後五碼，以便核對入帳，謝謝。</p>
+  </div>`;
+
+  /* 統一頁尾：每頁標示頁數 */
+  const footer=(p,t)=>`
+  <div style="margin-top:auto;border-top:1px solid #E5E2D8;padding:12px 0 14px;display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:#A8A69C;letter-spacing:.4px">
+    <span>凱文南坡萬實業社　·　報價單 ${no}</span>
+    <span style="color:#6B6B63;font-weight:600">第 <span style="color:#A6824A">${p}</span> 頁，共 <span style="color:#A6824A">${t}</span> 頁</span>
+  </div>`;
+
+  return {header, topFirst, contNote, thead:theadStr, rows,
+          tailBlocks:[totals, imgH, payBlock, notesBlock], footer, mkTable,
+          font:"-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,'Microsoft JhengHei',sans-serif"};
+}
+
+function buildStdPagesHtml(extraPageStyle){
+  return buildQuotePagesHtml(buildStdDocParts(), extraPageStyle);
+}
+
+/* ---- 標準模式：預覽（多頁時逐頁顯示，每頁統一頁首＋頁尾頁碼）---- */
+function openPreview(){
+  const pages = buildStdPagesHtml('margin:0 auto 18px;box-shadow:0 4px 18px rgba(40,38,30,.22);');
+  document.getElementById('pcon').innerHTML = `<div style="background:#D6D4CC;padding:18px 0 1px">${pages}</div>`;
   previewKind = 'std';
   document.getElementById('pv-btn-secondary').innerHTML = '<i class="ti ti-file-text"></i>正式文件';
   document.getElementById('pov').style.display='block';
@@ -1855,26 +1872,22 @@ function buildExportFilename(){
   return sanitizeFilename(parts.join('_'));
 }
 
-/* ---- PDF 匯出（瀏覽器列印）---- */
+/* ---- 標準模式：PDF 匯出（瀏覽器列印；每頁固定 A4，與預覽分頁完全一致）---- */
 function exportPDF(){
-  openPreview();
-  setTimeout(()=>{
-    let pcon=document.getElementById('pcon').innerHTML;
-    pcon = pcon.replace('padding:56px 60px', 'padding:0');
-    const w=window.open('','_blank');
-    const fname=buildExportFilename();
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${fname}</title>
-      <style>
-        @page{size:A4;margin:10mm}
-        body{margin:0;font-family:-apple-system,'Microsoft JhengHei',sans-serif}
-        table{page-break-inside:auto}
-        tr{page-break-inside:avoid}
-        img{page-break-inside:avoid}
-      </style>
-      </head><body>${pcon}</body></html>`);
-    w.document.close();
-    setTimeout(()=>{ w.print(); }, 400);
-  }, 200);
+  const pages = buildStdPagesHtml();
+  const w=window.open('','_blank');
+  const fname=buildExportFilename();
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${fname}</title>
+    <style>
+      @page{size:A4;margin:10mm}
+      html,body{margin:0;padding:0}
+      .cpage{page-break-after:always}
+      .cpage:last-child{page-break-after:auto}
+      img{page-break-inside:avoid}
+    </style>
+    </head><body>${pages}</body></html>`);
+  w.document.close();
+  setTimeout(()=>{ w.print(); }, 500);
 }
 
 /* ============================================================
@@ -2109,55 +2122,68 @@ function buildCustomDocParts(){
   return {header, client, contNote, thead, rows, totals, terms, footer, mkTable};
 }
 
-/* ---- 量測各區塊高度後分頁，組出一頁頁的 A4 頁面 HTML ---- */
-function buildCustomPagesHtml(extraPageStyle){
-  calcCustom();
-  const P = buildCustomDocParts();
-
+/* ---- 共用分頁引擎：量測各區塊高度後分成一頁頁 A4（自訂／瓶裝／宴會三種模式共用）----
+   P = {header, topFirst, contNote, thead, rows[], tailBlocks[], footer(p,t), mkTable, font} */
+function buildQuotePagesHtml(P, extraPageStyle){
+  const font = P.font || "'Noto Sans TC','Microsoft JhengHei',sans-serif";
   /* 量測沙盒（寬度＝頁面內容寬，overflow:hidden 讓 margin 一併計入） */
   const sb = document.createElement('div');
-  sb.style.cssText = `position:absolute;visibility:hidden;left:-9999px;top:0;width:${CPAGE_W-CPAD_X*2}px;overflow:hidden;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif`;
+  sb.style.cssText = `position:absolute;visibility:hidden;left:-9999px;top:0;width:${CPAGE_W-CPAD_X*2}px;overflow:hidden;font-family:${font}`;
   document.body.appendChild(sb);
   const mh = h => { sb.innerHTML = h; return sb.getBoundingClientRect().height; };
+  /* 量測單列時把量測用表格的外距歸零（表格外距已計入每頁上段高度，不能重複算進每一列） */
+  const mhRow = h => { sb.innerHTML = h; if(sb.firstElementChild) sb.firstElementChild.style.margin = '0'; return sb.getBoundingClientRect().height; };
 
-  const topFirstH = mh(P.header + P.client + P.mkTable(P.thead));     // 第一頁上段
-  const topContH  = mh(P.header + P.contNote + P.mkTable(P.thead));   // 續頁上段
-  const headOnlyH = mh(P.header);                                     // 僅頁首（總計獨立頁用）
-  const rowHs = P.rows.map(r => mh(P.mkTable('<tbody>'+r+'</tbody>')));
-  const botH  = mh(P.totals + P.terms);                               // 總計＋條款
+  const hasRows = P.rows.length > 0;
+  const topFirstH = mh(P.header + P.topFirst + (hasRows ? P.mkTable(P.thead) : ''));
+  const topContH  = mh(P.header + P.contNote + (hasRows ? P.mkTable(P.thead) : ''));
+  const headOnlyH = mh(P.header);
+  const rowHs = P.rows.map(r => mhRow(P.mkTable('<tbody>'+r+'</tbody>')));
+  const tails = P.tailBlocks.filter(Boolean);
+  const tailHs = tails.map(b => mh(b));
   const footH = mh(P.footer(1,1));
   document.body.removeChild(sb);
 
   const avail = CPAGE_H - CPAD_T - footH - 10;  // 每頁可用內容高度（留 10px 安全餘裕）
 
-  /* 貪婪分頁：塞得下就繼續放同一頁 */
+  /* 品項列：貪婪分頁 */
   const pages = []; let i = 0;
   do{
-    let used = pages.length===0 ? topFirstH : topContH;
+    const first = pages.length === 0;
+    let used = first ? topFirstH : topContH;
+    const chunks = [P.header, first ? P.topFirst : P.contNote];
     const pageRows = [];
     while(i < P.rows.length && used + rowHs[i] <= avail){ used += rowHs[i]; pageRows.push(P.rows[i]); i++; }
     if(!pageRows.length && i < P.rows.length){ used += rowHs[i]; pageRows.push(P.rows[i]); i++; } // 單列超高的保險
-    pages.push({rows: pageRows, used, hasTable: true});
+    if(hasRows) chunks.push(P.mkTable(P.thead + '<tbody>' + pageRows.join('') + '</tbody>'));
+    pages.push({chunks, used});
   }while(i < P.rows.length);
 
-  /* 總計＋條款放最後一頁；放不下就另起一頁（只有頁首＋總計＋條款） */
-  if(pages[pages.length-1].used + botH > avail){
-    pages.push({rows: [], used: headOnlyH, hasTable: false});
-  }
+  /* 尾段區塊（總計/圖片/付款條件/條款）逐塊塞入，放不下就另起新頁（只帶頁首） */
+  tails.forEach((b, k)=>{
+    let pg = pages[pages.length-1];
+    if(pg.used + tailHs[k] > avail){
+      pg = {chunks:[P.header], used: headOnlyH};
+      pages.push(pg);
+    }
+    pg.chunks.push(b); pg.used += tailHs[k];
+  });
 
   /* 組頁面 */
   const total = pages.length;
-  return pages.map((pg, idx)=>{
-    const first = idx===0, last = idx===total-1;
-    let body = P.header;
-    if(pg.hasTable){
-      body += first ? P.client : P.contNote;
-      body += P.mkTable(P.thead + '<tbody>' + pg.rows.join('') + '</tbody>');
-    }
-    if(last) body += P.totals + P.terms;
-    body += P.footer(idx+1, total);
-    return `<div class="cpage" style="${extraPageStyle||''}width:${CPAGE_W}px;height:${CPAGE_H}px;box-sizing:border-box;padding:${CPAD_T}px ${CPAD_X}px 0;display:flex;flex-direction:column;overflow:hidden;background:#fff;color:#22241F;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif">${body}</div>`;
-  }).join('');
+  return pages.map((pg, idx)=>
+    `<div class="cpage" style="${extraPageStyle||''}width:${CPAGE_W}px;height:${CPAGE_H}px;box-sizing:border-box;padding:${CPAD_T}px ${CPAD_X}px 0;display:flex;flex-direction:column;overflow:hidden;background:#fff;color:#22241F;font-family:${font}">${pg.chunks.join('')}${P.footer(idx+1, total)}</div>`
+  ).join('');
+}
+
+/* ---- 自訂模式：分頁（委派給共用引擎） ---- */
+function buildCustomPagesHtml(extraPageStyle){
+  calcCustom();
+  const P = buildCustomDocParts();
+  return buildQuotePagesHtml({
+    header: P.header, topFirst: P.client, contNote: P.contNote, thead: P.thead,
+    rows: P.rows, tailBlocks: [P.totals + P.terms], footer: P.footer, mkTable: P.mkTable
+  }, extraPageStyle);
 }
 
 /* ---- 自訂模式：預覽（多頁時逐頁顯示，每頁統一頁首＋頁尾頁碼）---- */
