@@ -1072,7 +1072,7 @@ function calc(){
     document.getElementById('tr-tax').style.display='none';
   }
 
-  const displaySub = netSub;
+  const displaySub = taxMode==='inc' ? rawSub : netSub;  // 含稅模式顯示含稅合計，未稅回算值僅用於稅額計算
   const extTotal = qType==='bottle' ? extras.reduce((s,e)=>s+e.a,0) : 0;
   const grandTotal = (taxMode==='inc' ? rawSub : rawSub+taxAmt) + extTotal;
   document.getElementById('t-sub').textContent='$'+Math.round(displaySub).toLocaleString();
@@ -1088,7 +1088,7 @@ function setTaxMode(m){
   document.getElementById('tp-exc').classList.toggle('on',m==='exc');
   const status=document.getElementById('tax-status');
   if(m==='inc'){
-    document.getElementById('lb-sub').textContent='品項合計（未稅，自動回算）';
+    document.getElementById('lb-sub').textContent='品項合計（含稅）';
     document.getElementById('lb-tax').textContent='其中稅額';
     status.textContent='輸入含稅價，自動反推未稅金額與稅額';
   } else {
