@@ -515,8 +515,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
       <div class="ch"><i class="ti ti-calculator"></i><span>金額總計</span></div>
       <div class="cb">
         <div class="tot-box">
-          <div class="tr"><span id="lb-sub">品項合計（含稅）</span><span id="t-sub">$0</span></div>
-          <div class="tr" id="tr-tax" style="display:none"><span id="lb-tax">其中稅額</span><span id="t-tax">$0</span></div>
+          <div class="tr"><span id="lb-sub">合計（未稅）</span><span id="t-sub">$0</span></div>
+          <div class="tr" id="tr-tax" style="display:none"><span id="lb-tax">營業稅</span><span id="t-tax">$0</span></div>
           <div class="tr" id="tr-ext"><span>額外費用</span><span id="t-ext">$0</span></div>
           <div class="tr big"><span>總計</span><span id="t-tot">$0</span></div>
         </div>
@@ -661,8 +661,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
       <div class="ch"><i class="ti ti-calculator"></i><span>金額試算</span></div>
       <div class="cb">
         <div style="display:flex;justify-content:flex-end;gap:28px;font-size:13px;color:var(--sub)">
-          <div>品項合計：<strong id="c-t-sub" style="color:var(--ink)">$0</strong></div>
-          <div>稅額：<strong id="c-t-tax" style="color:var(--ink)">$0</strong></div>
+          <div>合計（未稅）：<strong id="c-t-sub" style="color:var(--ink)">$0</strong></div>
+          <div>營業稅：<strong id="c-t-tax" style="color:var(--ink)">$0</strong></div>
           <div>總計：<strong id="c-t-tot" style="color:var(--gold);font-size:16px">$0</strong></div>
         </div>
       </div>
@@ -1058,26 +1058,26 @@ function calc(){
     });
   }
 
-  let taxAmt=0, netSub=rawSub;
+  /* 額外費用一併計稅；顯示統一為發票格式：合計（未稅）／營業稅／總計（含稅、未稅模式皆同） */
+  const extTotal = qType==='bottle' ? extras.reduce((s,e)=>s+e.a,0) : 0;
+  const base = rawSub + extTotal;   // inc＝含稅總額、exc＝未稅總額
+  let taxAmt=0, netAll=base, grandTotal=base;
   if(rate>0){
     if(taxMode==='inc'){
-      netSub=rawSub/(1+rate);
-      taxAmt=Math.round(rawSub-netSub);
+      netAll = base/(1+rate);
+      grandTotal = base;
+      taxAmt = Math.round(grandTotal) - Math.round(netAll);   // 避免分行進位誤差，三行相加必等於總計
     } else {
-      taxAmt=Math.round(rawSub*rate);
+      taxAmt = Math.round(base*rate);
+      grandTotal = base + taxAmt;
     }
     document.getElementById('tr-tax').style.display='flex';
     document.getElementById('t-tax').textContent='$'+taxAmt.toLocaleString();
   } else {
     document.getElementById('tr-tax').style.display='none';
   }
-
-  const displaySub = taxMode==='inc' ? rawSub : netSub;  // 含稅模式顯示含稅合計，未稅回算值僅用於稅額計算
-  const extTotal = qType==='bottle' ? extras.reduce((s,e)=>s+e.a,0) : 0;
-  const grandTotal = (taxMode==='inc' ? rawSub : rawSub+taxAmt) + extTotal;
-  document.getElementById('t-sub').textContent='$'+Math.round(displaySub).toLocaleString();
-  document.getElementById('t-ext').textContent='$'+extTotal.toLocaleString();
-  document.getElementById('tr-ext').style.display = qType==='bottle' ? 'flex' : 'none';
+  document.getElementById('t-sub').textContent='$'+Math.round(netAll).toLocaleString();
+  document.getElementById('tr-ext').style.display='none';   // 額外費用已併入合計計稅（品項表內仍有明細列）
   document.getElementById('t-tot').textContent='$'+Math.round(grandTotal).toLocaleString();
   calcPay();
 }
@@ -1088,13 +1088,13 @@ function setTaxMode(m){
   document.getElementById('tp-exc').classList.toggle('on',m==='exc');
   const status=document.getElementById('tax-status');
   if(m==='inc'){
-    document.getElementById('lb-sub').textContent='品項合計（含稅）';
-    document.getElementById('lb-tax').textContent='其中稅額';
-    status.textContent='輸入含稅價，自動反推未稅金額與稅額';
+    document.getElementById('lb-sub').textContent='合計（未稅）';
+    document.getElementById('lb-tax').textContent='營業稅';
+    status.textContent='輸入含稅價：總計＝輸入金額，未稅與營業稅自動回算';
   } else {
-    document.getElementById('lb-sub').textContent='品項合計（未稅）';
-    document.getElementById('lb-tax').textContent='加計稅額';
-    status.textContent='輸入未稅價，自動加計稅額';
+    document.getElementById('lb-sub').textContent='合計（未稅）';
+    document.getElementById('lb-tax').textContent='營業稅';
+    status.textContent='輸入未稅價，自動加計營業稅';
   }
   calc();
 }
@@ -1985,16 +1985,18 @@ function calcCustom(){
   });
   const mode = document.getElementById('c-taxmode').value;
   const rate = (parseFloat(document.getElementById('c-taxrate').value)||0)/100;
-  let tax = 0, total = 0;
+  let tax = 0, total = 0, net = itemsSum;
   if(mode === 'inc'){
     total = itemsSum;
-    tax = rate>0 ? (total - total/(1+rate)) : 0;
+    net = rate>0 ? itemsSum/(1+rate) : itemsSum;
+    tax = Math.round(total) - Math.round(net);
   } else {
-    tax = itemsSum*rate;
-    total = itemsSum+tax;
+    net = itemsSum;
+    tax = Math.round(net*rate);
+    total = net + tax;
   }
-  document.getElementById('c-t-sub').textContent = '$'+Math.round(itemsSum).toLocaleString();
-  document.getElementById('c-t-tax').textContent = '$'+Math.round(tax).toLocaleString();
+  document.getElementById('c-t-sub').textContent = '$'+Math.round(net).toLocaleString();
+  document.getElementById('c-t-tax').textContent = '$'+tax.toLocaleString();
   document.getElementById('c-t-tot').textContent = '$'+Math.round(total).toLocaleString();
 }
 
@@ -2057,8 +2059,7 @@ function buildCustomDocParts(){
   const itemsSum = parseMoney(document.getElementById('c-t-sub').textContent);
   const taxAmt = parseMoney(document.getElementById('c-t-tax').textContent);
   const grand = parseMoney(document.getElementById('c-t-tot').textContent);
-  const lbSub = mode==='inc' ? '品項合計（含稅）' : '品項合計（未稅）';
-  const lbTax = mode==='inc' ? '其中稅額' : '加計稅額';
+  const lbSub = '合計（未稅）', lbTax = '營業稅';   // 發票格式，含稅／未稅模式顯示一致
 
   let cliRows = '';
   if(cli) cliRows += `<div style="display:flex;gap:8px;font-size:12.5px;margin-bottom:7px;line-height:1.6"><span style="color:${GREY2};min-width:62px">客戶名稱</span><span style="color:${INK}">${escHtml(cli)}</span></div>`;
