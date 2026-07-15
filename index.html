@@ -1987,9 +1987,16 @@ function calcCustom(){
 
 function parseMoney(s){ return parseFloat(String(s).replace(/[^0-9.\-]/g,''))||0; }
 
-/* ---- 自訂模式：KKBar 視覺樣式預覽 ---- */
-function openCustomPreview(){
-  calcCustom();
+/* ================================================================
+   自訂模式：KKBar 視覺樣式（多頁支援：每頁統一頁首＋頁尾頁碼）
+   規則：頁首每頁相同；表格跨頁時表頭重複並標示「品項明細（承前頁）」；
+        總計與三行條款只出現在最後一頁；頁尾每頁「第 X 頁，共 Y 頁」。
+   尺寸：A4 210×297mm、列印邊界 10mm → 內容 190×277mm ≈ 718×1047px @96dpi
+   ================================================================ */
+const CPAGE_W = 718, CPAGE_H = 1047, CPAD_T = 40, CPAD_X = 48;
+
+/* ---- 組出報價單各區塊（頁首/客戶/表頭/列/總計/條款/頁尾），預覽・列印・Word 共用 ---- */
+function buildCustomDocParts(){
   const GOLD='#A6824A', HEADGREY='#8A8880', LINE='#E8E5DD', BORDER='#E5E2D8', GREY='#6B6B63', GREY2='#A8A69C', INK='#22241F';
 
   const tag = document.getElementById('c-tag').value.trim();
@@ -2005,7 +2012,7 @@ function openCustomPreview(){
   const hPrice = document.getElementById('c-h-price').value.trim() || '單價';
   const hSub = document.getElementById('c-h-sub').value.trim() || '小計';
 
-  let rows = '';
+  const rows = [];
   customItems.forEach(id=>{
     const row = document.getElementById(`cr-${id}`); if(!row) return;
     const name = gs(row,'name'); if(!name) return;
@@ -2022,7 +2029,7 @@ function openCustomPreview(){
     } else {
       subD = subRaw !== '' ? ('$'+Math.round(parseFloat(subRaw)).toLocaleString()) : '—';
     }
-    rows += `<tr style="border-bottom:1px solid ${LINE}">
+    rows.push(`<tr style="border-bottom:1px solid ${LINE}">
       <td style="padding:11px 12px;color:${INK}">
         <div style="font-weight:600">${escHtml(name)}</div>
         ${note?`<div style="font-size:10.5px;color:${GREY2};margin-top:2px">${escHtml(note)}</div>`:''}
@@ -2031,7 +2038,7 @@ function openCustomPreview(){
       <td style="padding:11px 8px;text-align:center;color:${GREY}">${unitD}</td>
       <td style="padding:11px 8px;text-align:right;color:${GREY}">${priceD}</td>
       <td style="padding:11px 8px;text-align:right;font-weight:700;color:${INK}">${subD}</td>
-    </tr>`;
+    </tr>`);
   });
 
   const itemsSum = parseMoney(document.getElementById('c-t-sub').textContent);
@@ -2044,11 +2051,9 @@ function openCustomPreview(){
   if(cli) cliRows += `<div style="display:flex;gap:8px;font-size:12.5px;margin-bottom:7px;line-height:1.6"><span style="color:${GREY2};min-width:62px">客戶名稱</span><span style="color:${INK}">${escHtml(cli)}</span></div>`;
   if(con) cliRows += `<div style="display:flex;gap:8px;font-size:12.5px;margin-bottom:7px;line-height:1.6"><span style="color:${GREY2};min-width:62px">聯絡人</span><span style="color:${INK}">${escHtml(con)}</span></div>`;
 
-  document.getElementById('pcon').innerHTML = `
-  <div style="font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;padding:56px 60px;color:${INK}">
-
-  <!-- HEADER -->
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:18px;border-bottom:1.5px solid ${INK};margin-bottom:20px">
+  /* 統一頁首（每頁相同） */
+  const header = `
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:18px;border-bottom:1.5px solid ${INK};margin-bottom:18px">
     <div>
       <img src="https://raw.githubusercontent.com/MollyLin-coding/quote-system/main/assets/logo.png" style="height:32px;width:auto;display:block">
       <div style="font-size:9px;letter-spacing:1.8px;color:${GOLD};margin-top:7px;text-transform:uppercase;line-height:1.7;font-weight:600">KEVIN NUMBER 1 TAILORED.COCKTAIL<br>EST. 2023. TAIWAN</div>
@@ -2061,43 +2066,104 @@ function openCustomPreview(){
       <div style="font-size:11.5px;color:${GREY2};line-height:1.9">報價日：<span style="color:${INK}">${dt}</span></div>
       <div style="font-size:11.5px;color:${GOLD};font-weight:700">有效至：${ex}</div>
     </div>
-  </div>
+  </div>`;
 
-  <!-- CLIENT -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;margin-bottom:18px">
-    ${cliRows}
-  </div>
+  const client = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;margin-bottom:16px">${cliRows}</div>`;
+  const contNote = `<div style="font-size:10.5px;color:${GREY2};letter-spacing:.5px;margin:0 0 4px">品項明細（承前頁）</div>`;
 
-  <!-- TABLE -->
-  <table style="width:100%;border-collapse:collapse;font-size:12.5px">
-    <thead><tr>
+  const colgroup = `<colgroup><col><col style="width:64px"><col style="width:64px"><col style="width:92px"><col style="width:118px"></colgroup>`;
+  const thead = `<thead><tr>
       <th style="padding:10px 12px;text-align:left;color:${HEADGREY};font-weight:600;font-size:10.5px;letter-spacing:.3px;border-bottom:1.5px solid ${INK}">${escHtml(hName)}</th>
       <th style="padding:10px 8px;text-align:center;color:${HEADGREY};font-weight:600;font-size:10.5px;border-bottom:1.5px solid ${INK}">${escHtml(hQty)}</th>
       <th style="padding:10px 8px;text-align:center;color:${HEADGREY};font-weight:600;font-size:10.5px;border-bottom:1.5px solid ${INK}">${escHtml(hUnit)}</th>
       <th style="padding:10px 8px;text-align:right;color:${HEADGREY};font-weight:600;font-size:10.5px;border-bottom:1.5px solid ${INK}">${escHtml(hPrice)}</th>
       <th style="padding:10px 8px;text-align:right;color:${HEADGREY};font-weight:600;font-size:10.5px;border-bottom:1.5px solid ${INK}">${escHtml(hSub)}</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
+    </tr></thead>`;
+  const mkTable = inner => `<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:12.5px">${colgroup}${inner}</table>`;
 
-  <!-- TOTAL -->
+  /* 總計（僅最後一頁） */
+  const totals = `
   <div style="display:flex;justify-content:flex-end;margin-top:18px">
     <div style="min-width:250px">
       <div style="display:flex;justify-content:space-between;font-size:12px;color:${GREY};padding:5px 2px"><span>${lbSub}</span><span>$${Math.round(itemsSum).toLocaleString()}</span></div>
       <div style="display:flex;justify-content:space-between;font-size:12px;color:${GREY};padding:5px 2px"><span>${lbTax}</span><span>$${Math.round(taxAmt).toLocaleString()}</span></div>
       <div style="display:flex;justify-content:space-between;font-size:18px;color:${INK};font-weight:700;border-top:1.5px solid ${INK};padding-top:10px;margin-top:4px;letter-spacing:.3px"><span>總計</span><span style="color:${GOLD}">$${Math.round(grand).toLocaleString()}</span></div>
     </div>
-  </div>
-
-  <!-- NOTES（固定頁尾三行） -->
-  <div style="margin-top:20px;padding-top:14px;border-top:1px solid ${BORDER};font-size:11.5px;color:${GREY};line-height:1.7">
-    <p>以下客戶簡稱甲方，凱文南坡萬實業社簡稱乙方。雙方確認此報價單內容無誤並於雙方各執一份，以維雙方權利。</p>
-    <p style="margin-top:6px">匯款資訊：陽信銀行中興分行 (108)　02142-00230-91　凱文南坡萬實業社黃彥愷</p>
-    <p style="margin-top:4px">匯款完成後，敬請提供轉帳截圖或帳號後五碼，以便核對入帳，謝謝。</p>
-  </div>
-
   </div>`;
 
+  /* 固定三行條款（僅最後一頁） */
+  const terms = `
+  <div style="margin-top:20px;padding-top:14px;border-top:1px solid ${BORDER};font-size:11.5px;color:${GREY};line-height:1.7">
+    <p style="margin:0">以下客戶簡稱甲方，凱文南坡萬實業社簡稱乙方。雙方確認此報價單內容無誤並於雙方各執一份，以維雙方權利。</p>
+    <p style="margin:6px 0 0">匯款資訊：陽信銀行中興分行 (108)　02142-00230-91　凱文南坡萬實業社黃彥愷</p>
+    <p style="margin:4px 0 0">匯款完成後，敬請提供轉帳截圖或帳號後五碼，以便核對入帳，謝謝。</p>
+  </div>`;
+
+  /* 統一頁尾：每頁標示頁數 */
+  const footer = (p,t) => `
+  <div style="margin-top:auto;border-top:1px solid ${BORDER};padding:12px 0 14px;display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:${GREY2};letter-spacing:.4px">
+    <span>凱文南坡萬實業社　·　報價單 ${no}</span>
+    <span style="color:${GREY};font-weight:600">第 <span style="color:${GOLD}">${p}</span> 頁，共 <span style="color:${GOLD}">${t}</span> 頁</span>
+  </div>`;
+
+  return {header, client, contNote, thead, rows, totals, terms, footer, mkTable};
+}
+
+/* ---- 量測各區塊高度後分頁，組出一頁頁的 A4 頁面 HTML ---- */
+function buildCustomPagesHtml(extraPageStyle){
+  calcCustom();
+  const P = buildCustomDocParts();
+
+  /* 量測沙盒（寬度＝頁面內容寬，overflow:hidden 讓 margin 一併計入） */
+  const sb = document.createElement('div');
+  sb.style.cssText = `position:absolute;visibility:hidden;left:-9999px;top:0;width:${CPAGE_W-CPAD_X*2}px;overflow:hidden;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif`;
+  document.body.appendChild(sb);
+  const mh = h => { sb.innerHTML = h; return sb.getBoundingClientRect().height; };
+
+  const topFirstH = mh(P.header + P.client + P.mkTable(P.thead));     // 第一頁上段
+  const topContH  = mh(P.header + P.contNote + P.mkTable(P.thead));   // 續頁上段
+  const headOnlyH = mh(P.header);                                     // 僅頁首（總計獨立頁用）
+  const rowHs = P.rows.map(r => mh(P.mkTable('<tbody>'+r+'</tbody>')));
+  const botH  = mh(P.totals + P.terms);                               // 總計＋條款
+  const footH = mh(P.footer(1,1));
+  document.body.removeChild(sb);
+
+  const avail = CPAGE_H - CPAD_T - footH - 10;  // 每頁可用內容高度（留 10px 安全餘裕）
+
+  /* 貪婪分頁：塞得下就繼續放同一頁 */
+  const pages = []; let i = 0;
+  do{
+    let used = pages.length===0 ? topFirstH : topContH;
+    const pageRows = [];
+    while(i < P.rows.length && used + rowHs[i] <= avail){ used += rowHs[i]; pageRows.push(P.rows[i]); i++; }
+    if(!pageRows.length && i < P.rows.length){ used += rowHs[i]; pageRows.push(P.rows[i]); i++; } // 單列超高的保險
+    pages.push({rows: pageRows, used, hasTable: true});
+  }while(i < P.rows.length);
+
+  /* 總計＋條款放最後一頁；放不下就另起一頁（只有頁首＋總計＋條款） */
+  if(pages[pages.length-1].used + botH > avail){
+    pages.push({rows: [], used: headOnlyH, hasTable: false});
+  }
+
+  /* 組頁面 */
+  const total = pages.length;
+  return pages.map((pg, idx)=>{
+    const first = idx===0, last = idx===total-1;
+    let body = P.header;
+    if(pg.hasTable){
+      body += first ? P.client : P.contNote;
+      body += P.mkTable(P.thead + '<tbody>' + pg.rows.join('') + '</tbody>');
+    }
+    if(last) body += P.totals + P.terms;
+    body += P.footer(idx+1, total);
+    return `<div class="cpage" style="${extraPageStyle||''}width:${CPAGE_W}px;height:${CPAGE_H}px;box-sizing:border-box;padding:${CPAD_T}px ${CPAD_X}px 0;display:flex;flex-direction:column;overflow:hidden;background:#fff;color:#22241F;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif">${body}</div>`;
+  }).join('');
+}
+
+/* ---- 自訂模式：預覽（多頁時逐頁顯示，每頁統一頁首＋頁尾頁碼）---- */
+function openCustomPreview(){
+  const pages = buildCustomPagesHtml('margin:0 auto 18px;box-shadow:0 4px 18px rgba(40,38,30,.22);');
+  document.getElementById('pcon').innerHTML = `<div style="background:#D6D4CC;padding:18px 0 1px">${pages}</div>`;
   previewKind = 'custom';
   const btn2 = document.getElementById('pv-btn-secondary');
   btn2.innerHTML = '<i class="ti ti-file-text"></i>匯出 Word';
@@ -2119,33 +2185,32 @@ function buildCustomExportFilename(){
   return sanitizeFilename(`${cli}_${no}_報價單_凱文南坡萬實業社`);
 }
 
-/* ---- 自訂模式：PDF 匯出（瀏覽器列印，同正規模式做法）---- */
+/* ---- 自訂模式：PDF 匯出（瀏覽器列印；每頁固定 A4，與預覽分頁完全一致）---- */
 function exportCustomPDF(){
-  openCustomPreview();
-  setTimeout(()=>{
-    let pcon = document.getElementById('pcon').innerHTML;
-    pcon = pcon.replace('padding:56px 60px', 'padding:0');
-    const w = window.open('', '_blank');
-    const fname = buildCustomExportFilename();
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${fname}</title>
-      <style>
-        @page{size:A4;margin:10mm}
-        body{margin:0;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif}
-        table{page-break-inside:auto}
-        tr{page-break-inside:avoid}
-        img{page-break-inside:avoid}
-      </style>
-      </head><body>${pcon}</body></html>`);
-    w.document.close();
-    setTimeout(()=>{ w.print(); }, 400);
-  }, 200);
+  const pages = buildCustomPagesHtml();
+  const fname = buildCustomExportFilename();
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${fname}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      @page{size:A4;margin:10mm}
+      html,body{margin:0;padding:0}
+      .cpage{page-break-after:always}
+      .cpage:last-child{page-break-after:auto}
+      img{page-break-inside:avoid}
+    </style>
+    </head><body>${pages}</body></html>`);
+  w.document.close();
+  setTimeout(()=>{ w.print(); }, 700);
 }
 
 /* ---- 自訂模式：Word 匯出（純前端，MS Office HTML 格式，不動 GAS）---- */
 function exportCustomWord(){
-  openCustomPreview();
+  calcCustom();
   setTimeout(()=>{
-    const pcon = document.getElementById('pcon').innerHTML;
+    /* Word 用連續排版（Word 會自行分頁），不用固定高度的頁面切割 */
+    const P = buildCustomDocParts();
+    const pcon = `<div style="font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;color:#22241F">${P.header}${P.client}${P.mkTable(P.thead+'<tbody>'+P.rows.join('')+'</tbody>')}${P.totals}${P.terms}</div>`;
     const fname = buildCustomExportFilename();
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
     <head><meta charset="UTF-8"><title>${fname}</title>
