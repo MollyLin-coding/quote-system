@@ -1277,8 +1277,9 @@ function buildStdDocParts(){
   if(qType==='bottle'){
     let headCols = `<th style="padding:10px 12px;text-align:left;color:#6B6B63;font-weight:600;font-size:10.5px;letter-spacing:.3px;border-bottom:1.5px solid #22241F">品名</th>`;
     if(colLot) headCols += `<th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">批次</th>`;
+    const taxTag = taxMode==='inc' ? '（含稅）' : '（未稅）';
     headCols += `<th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">容量</th>
-      <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">單價</th>`;
+      <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">單價${taxTag}</th>`;
     if(colDed) headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">前標費</th>`;
     if(colLogo) headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">LOGO</th>`;
     headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">瓶數</th>
@@ -1320,7 +1321,7 @@ function buildStdDocParts(){
       <th style="padding:10px 12px;text-align:left;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">項目</th>
       <th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">數量</th>
       <th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">單位</th>
-      <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">單價</th>
+      <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">單價${taxMode==='inc'?'（含稅）':'（未稅）'}</th>
       <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">小計</th>
     </tr></thead>`;
     colgroup = `<colgroup><col><col style="width:64px"><col style="width:64px"><col style="width:92px"><col style="width:118px"></colgroup>`;
@@ -2024,7 +2025,8 @@ function buildCustomDocParts(){
   const hName = document.getElementById('c-h-name').value.trim() || '項目';
   const hQty = document.getElementById('c-h-qty').value.trim() || '數量';
   const hUnit = document.getElementById('c-h-unit').value.trim() || '單位';
-  const hPrice = document.getElementById('c-h-price').value.trim() || '單價';
+  let hPrice = document.getElementById('c-h-price').value.trim() || '單價';
+  if(hPrice === '單價') hPrice += (document.getElementById('c-taxmode').value==='inc' ? '（含稅）' : '（未稅）');
   const hSub = document.getElementById('c-h-sub').value.trim() || '小計';
 
   const rows = [];
