@@ -232,6 +232,69 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
 
 /* 確保 Tabler 圖示字體不被 body 繼承覆蓋 */
 .ti{font-family:"tabler-icons" !important;font-style:normal;font-weight:400;font-variant:normal;text-transform:none;line-height:1;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+
+/* ===== V2：公司報價檔／訂單追蹤／行事曆 ===== */
+.qf-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.qf-chip{font-size:11.5px;border-radius:20px;padding:5px 13px;border:1px solid var(--bd);color:var(--sub);background:#FAF9F5;display:inline-flex;align-items:center;gap:5px}
+.qf-chip.ok{color:#3E7A4E;border-color:#BFD8C6;background:#F1F7F2}
+.qf-chip.info{color:var(--gold);border-color:#DCCBAA;background:#FBF7EF}
+.qf-chip.act{color:var(--gold);border-color:#DCCBAA;background:#fff;cursor:pointer}
+.qf-chip.toggle{cursor:pointer}
+.qf-chip input[type=number]{border:1px solid var(--bd);border-radius:6px;padding:2px 6px;font-size:11.5px;background:#fff}
+input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
+.fchip{font-size:12px;border:1px solid var(--bd);background:#FAF9F5;border-radius:20px;padding:6px 14px;color:#6B6B63;cursor:pointer}
+.fchip.on{background:#22241F;color:#fff;border-color:#22241F}
+.fchip b{color:var(--gold);font-weight:700}
+.fchip.on b{color:#E7C98A}
+.odots{display:inline-flex;gap:4px;align-items:center;margin-right:7px}
+.odot{width:9px;height:9px;border-radius:50%;background:#E3E0D6;display:inline-block}
+.odot.f{background:var(--gold)}
+.ost{font-size:11px;color:#6B6B63}
+.ost.grey{color:#A8A69C}
+.ob{display:inline-block;font-size:10px;border-radius:4px;padding:2px 7px;font-weight:600;margin-right:4px}
+.ob.red{background:#F9ECEA;color:#B03A2E;border:1px solid #E8C7C2}
+.ob.warn{background:#FBF1E9;color:#B5541F;border:1px solid #EBD2BC}
+.onote{font-size:10.5px;color:var(--gold)}
+.rec-badge.custom{background:#EEF0F4;color:#4A5A78}
+.v2ov{display:none;position:fixed;inset:0;background:rgba(20,18,10,.55);z-index:300;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 16px}
+.v2box{background:#fff;border-radius:12px;max-width:560px;width:100%;padding:20px 24px;box-shadow:0 24px 60px rgba(0,0,0,.3)}
+.v2h{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:700;margin-bottom:14px}
+.v2x{background:none;border:none;font-size:18px;color:#A8A69C;cursor:pointer}
+.cl-row{border:1px solid var(--bd);border-radius:8px;margin-bottom:8px;overflow:hidden}
+.cl-head{padding:9px 12px;font-size:12px;cursor:pointer;background:#FAF9F5}
+.cl-act{color:var(--gold);font-weight:600;font-size:11px;border:1px solid #DCCBAA;border-radius:4px;padding:1px 6px;margin:0 6px}
+.cl-row pre{margin:0;padding:10px 12px;font-size:10.5px;background:#fff;border-top:1px solid var(--bd);white-space:pre-wrap;word-break:break-all;max-height:240px;overflow-y:auto}
+.rpt-head{font-size:13px;font-weight:700;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rpt-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
+.rpt-stat{background:#FAF9F5;border:1px solid var(--bd);border-radius:10px;padding:12px 16px}
+.rpt-stat .k{font-size:11px;color:#A8A69C}
+.rpt-stat .v{font-size:19px;font-weight:700;margin-top:2px}
+.calhead{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cwd{font-size:10px;color:#A8A69C;text-align:center;padding:4px 0;font-weight:600}
+.cd{background:#FAF9F5;border:1px solid var(--bd);border-radius:8px;min-height:64px;padding:4px 5px;font-size:10px;cursor:pointer}
+.cd:hover{border-color:var(--gold)}
+.cd .n{font-size:10.5px;color:#6B6B63;font-weight:600;display:block}
+.cd.dim{opacity:.3;cursor:default}
+.cd.today{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+.cd.today .n{color:var(--gold)}
+.cev{display:block;font-size:9px;border-radius:4px;padding:1.5px 4px;margin-top:3px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.cev.ship{background:#EFF4EE;color:#3E7A4E;border:1px solid #C9DCCE}
+.cev.exp{background:#F9ECEA;color:#B03A2E;border:1px solid #E8C7C2}
+.cev.memo{background:#EEF0F4;color:#4A5A78;border:1px solid #CDD5E3}
+.cev.memo.done{opacity:.5;text-decoration:line-through}
+.cev.recur{background:#F3F1EA;color:#7A7566;border:1px solid #DDD9CB;font-style:italic}
+.cal-legend{font-size:10.5px;color:#A8A69C;margin-top:10px;line-height:1.7}
+.cal-day{border-bottom:1px solid var(--line,#E8E5DD);padding:8px 2px}
+.cal-day-h{font-size:12px;font-weight:700;margin-bottom:5px}
+.cal-day .cev{display:inline-block;font-size:11px;margin-right:6px;margin-top:2px}
+.focus-row{font-size:12.5px;padding:6px 2px;border-bottom:1px solid #F0EEE6;cursor:pointer}
+.focus-row:last-child{border-bottom:none}
+.todo-row{display:flex;align-items:center;gap:9px;font-size:12.5px;padding:7px 2px;border-bottom:1px solid #F0EEE6}
+.todo-row .tbox{width:17px;height:17px;border:1.5px solid #A8A69C;border-radius:4px;flex:none;cursor:pointer;text-align:center;line-height:15px;font-size:11px;color:#fff}
+.todo-row.done .tbox{background:var(--gold);border-color:var(--gold)}
+.todo-row.done .ttl{color:#A8A69C;text-decoration:line-through}
+.todo-row .ttl{cursor:pointer}
 </style>
 </head>
 <body>
@@ -278,6 +341,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
     <button class="nb" id="nav-records" onclick="gotoPage('records')"><i class="ti ti-files"></i>報價紀錄</button>
     <button class="nb" onclick="openPreview()"><i class="ti ti-eye"></i>預覽報價單</button>
     <button class="nb" id="nav-custom" onclick="gotoPage('custom')"><i class="ti ti-edit"></i>自訂報價單</button>
+    <button class="nb" id="nav-orders" onclick="gotoPage('orders')"><i class="ti ti-truck-delivery"></i>訂單追蹤</button>
+    <button class="nb" id="nav-cal" onclick="gotoPage('cal')"><i class="ti ti-calendar"></i>工作行事曆</button>
   </div>
   <div class="sb-foot">
     <div style="font-size:9.5px;color:rgba(239,233,216,.3);letter-spacing:2px;margin-bottom:8px;text-transform:uppercase">匯款資訊</div>
@@ -302,6 +367,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
       <button class="btn btn-dk" id="btn-gendoc" onclick="generateOfficialDocument()"><i class="ti ti-file-text"></i>正式文件</button>
     </div>
     <div class="tb-right" id="tbr-custom" style="display:none">
+      <button class="btn btn-dk" onclick="saveCustomToBackend()"><i class="ti ti-cloud-upload"></i>儲存到後台</button>
       <button class="btn btn-g" onclick="resetCustom()"><i class="ti ti-refresh"></i>清除</button>
       <button class="btn btn-g" onclick="loadKKBarSample()"><i class="ti ti-wand"></i>載入 KKBar 範例</button>
       <button class="btn btn-dk" onclick="openCustomPreview()"><i class="ti ti-eye"></i>預覽</button>
@@ -332,12 +398,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
     </div>
 
     <div class="card">
+      <div class="ch"><i class="ti ti-building-store"></i><span>公司報價檔</span><span class="ch-opt">選公司快速帶入客戶資料與價目，帶入後每一格仍可自由修改</span></div>
+      <div class="cb">
+        <div class="fg fg2">
+          <div class="fl"><label>選擇公司</label><select class="fi" id="qf-company" onchange="onSelectCompany()"><option value="">不指定（自由輸入）</option></select></div>
+          <div class="fl"><label>從價目帶入品項</label>
+            <div style="display:flex;gap:8px"><select class="fi" id="qf-product" style="flex:1"><option value="">請先選擇公司</option></select>
+            <button class="btn btn-gold" style="white-space:nowrap" onclick="quickAddProduct()">帶入</button></div></div>
+        </div>
+        <div id="qf-detail" style="display:none;margin-top:10px">
+          <div class="qf-chips" id="qf-rules"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
       <div class="ch"><i class="ti ti-user"></i><span>客戶資訊</span><span class="ch-opt">全部選填</span></div>
       <div class="cb">
         <div class="fg fg2">
           <div class="fl"><label>客戶名稱</label><input class="fi" id="f-cli" placeholder="請輸入客戶名稱" oninput="upNo()"></div>
           <div class="fl"><label>聯絡人</label><input class="fi" id="f-con" placeholder="請輸入聯絡人姓名"></div>
           <div class="fl"><label>客戶統編 <span class="opt">選填</span></label><input class="fi" id="f-tax" placeholder="請輸入統一編號"></div>
+          <div class="fl"><label>發票抬頭 <span class="opt">選填，開發票用的正式公司名</span></label><input class="fi" id="f-inv" placeholder="與客戶名稱不同時填寫"></div>
           <div class="fl"><label>聯絡電話 <span class="opt">選填</span></label><input class="fi" id="f-ph" placeholder="請輸入聯絡電話"></div>
           <div class="fl" style="grid-column:span 2"><label>聯絡地址 <span class="opt">選填</span></label><input class="fi" id="f-ad" placeholder="請輸入聯絡地址"></div>
         </div>
@@ -612,6 +694,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
 
   <div class="page" id="page-custom">
 
+    <div class="card">
+      <div class="ch"><i class="ti ti-building-store"></i><span>公司報價檔</span><span class="ch-opt">選公司帶入客戶資料，可從價目帶入品項；帶入後照樣自由編輯</span></div>
+      <div class="cb"><div class="fg fg2">
+        <div class="fl"><label>選擇公司</label><select class="fi" id="qfc-company" onchange="onSelectCompanyCustom()"><option value="">不指定（自由輸入）</option></select></div>
+        <div class="fl" id="qfc-row" style="display:none"><label>從價目帶入品項</label>
+          <div style="display:flex;gap:8px"><select class="fi" id="qfc-product" style="flex:1"></select>
+          <button class="btn btn-gold" style="white-space:nowrap" onclick="quickAddProductCustom()">帶入</button></div></div>
+      </div></div>
+    </div>
+
+    <div class="card">
+      <div class="ch"><i class="ti ti-cloud-download"></i><span>我的自訂單（後台備份）</span><span class="ch-opt">儲存到後台的自訂單可在這裡載入編輯或複製成新單</span>
+        <button class="rec-act-btn" onclick="loadMyCustomQuotes()">載入列表</button></div>
+      <div class="cb"><div id="cq-list"><div class="rec-empty" style="padding:8px;font-size:12px;color:#A8A69C">按「載入列表」查看已備份的自訂單</div></div></div>
+    </div>
+
     <div class="pills">
       <div class="pill"><i class="ti ti-hash" style="font-size:12px"></i>單號：<strong id="c-pl-no">—</strong></div>
       <div class="pill"><i class="ti ti-calendar" style="font-size:12px"></i>報價日：<strong id="c-pl-dt">—</strong></div>
@@ -689,6 +787,102 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
           <tr><td colspan="6" class="rec-empty">載入中…</td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+
+  <div class="page" id="page-orders">
+    <div class="rec-wrap">
+      <div id="ord-filters" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+      <table class="rec-table">
+        <thead><tr><th>單號 / 客戶</th><th>進度</th><th style="text-align:right">總計</th><th style="text-align:center">出貨日</th><th>提醒</th><th>操作</th></tr></thead>
+        <tbody id="ord-body"><tr><td colspan="6" class="rec-empty">載入中…</td></tr></tbody>
+      </table>
+      <div class="card" style="margin-top:18px"><div class="cb"><div id="rpt-box"></div></div></div>
+    </div>
+  </div>
+
+  <div class="page" id="page-cal">
+    <div class="rec-wrap">
+      <div class="card"><div class="cb"><div id="cal-focus"></div></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0;align-items:center">
+        <span id="cal-views" style="display:inline-flex;gap:6px">
+          <button class="fchip on" data-v="month" onclick="setCalView('month')">月</button>
+          <button class="fchip" data-v="week" onclick="setCalView('week')">週</button>
+          <button class="fchip" data-v="list" onclick="setCalView('list')">清單</button>
+        </span>
+        <span style="width:8px"></span>
+        <span id="cal-filters" style="display:inline-flex;gap:6px">
+          <button class="fchip on" data-f="all" onclick="setCalFilter('all')">全部</button>
+          <button class="fchip" data-f="order" onclick="setCalFilter('order')">訂單日程</button>
+          <button class="fchip" data-f="memo" onclick="setCalFilter('memo')">備忘</button>
+          <button class="fchip" data-f="recur" onclick="setCalFilter('recur')">重複行程</button>
+        </span>
+      </div>
+      <div class="card"><div class="cb"><div id="cal-root"><div class="rec-empty">載入中…</div></div></div></div>
+      <div class="card" style="margin-top:14px"><div class="cb"><div id="cal-todos"></div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- V2 彈窗 -->
+<div class="v2ov" id="oe-overlay">
+  <div class="v2box">
+    <div class="v2h"><span id="oe-title">編輯進度</span><button class="v2x" onclick="closeOrdEdit()">✕</button></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+      <div class="fl"><label>狀態</label><select class="fi" id="oe-status">
+        <option value="quoted">報價中</option><option value="deposit">已收訂金</option><option value="shipped">已出貨</option>
+        <option value="invoiced">已開發票</option><option value="paid">已收尾款</option><option value="closed">結案</option><option value="cancelled">取消</option></select></div>
+      <div></div>
+      <div class="fl"><label>訂金金額</label><input class="fi" type="number" id="oe-deposit_amt"></div>
+      <div class="fl"><label>訂金收款日</label><input class="fi" type="date" id="oe-deposit_date"></div>
+      <div class="fl"><label>預計出貨日</label><input class="fi" type="date" id="oe-ship_date_est"></div>
+      <div class="fl"><label>實際出貨日</label><input class="fi" type="date" id="oe-ship_date_actual"></div>
+      <div class="fl"><label>發票號碼</label><input class="fi" id="oe-invoice_no"></div>
+      <div class="fl"><label>發票開立日</label><input class="fi" type="date" id="oe-invoice_date"></div>
+      <div class="fl"><label>尾款金額</label><input class="fi" type="number" id="oe-final_amt"></div>
+      <div class="fl"><label>尾款收款日</label><input class="fi" type="date" id="oe-final_date"></div>
+    </div>
+    <div class="fl" style="margin-top:10px"><label>備註／注意事項（該批次要注意或需準備的事，可多行）</label><textarea class="fi" id="oe-track_note" rows="3" style="resize:vertical"></textarea></div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="btn btn-gold" onclick="saveOrdEdit()">儲存進度</button>
+      <button class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63" onclick="closeOrdEdit()">取消</button>
+    </div>
+  </div>
+</div>
+<div class="v2ov" id="cl-overlay">
+  <div class="v2box" style="max-width:660px">
+    <div class="v2h"><span id="cl-title">修改紀錄</span><button class="v2x" onclick="closeChangeLog()">✕</button></div>
+    <div id="cl-body" style="max-height:62vh;overflow-y:auto"></div>
+  </div>
+</div>
+<div class="v2ov" id="ce-overlay">
+  <div class="v2box" style="max-width:480px">
+    <div class="v2h"><span id="ce-title-h">新增事項</span><button class="v2x" onclick="closeCalEdit()">✕</button></div>
+    <div class="fl"><label>類型</label><select class="fi" id="ce-kind" onchange="onCalKindChange()">
+      <option value="memo">📌 指定日期備忘</option><option value="todo">☑ 待辦（不指定日期）</option><option value="recur">🔁 重複行程</option></select></div>
+    <div class="fl" id="ce-date-wrap" style="margin-top:8px"><label>日期</label><input class="fi" type="date" id="ce-date"></div>
+    <div id="ce-recur-wrap" style="margin-top:8px;display:none">
+      <label style="font-size:11px;color:#6B6B63;display:block;margin-bottom:4px">重複方式</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select class="fi" id="ce-freq" style="flex:1" onchange="onCalKindChange()">
+          <option value="weekly">每週</option><option value="monthly">每月</option><option value="yearly">每年</option></select>
+        <select class="fi" id="ce-weekday" style="flex:1">
+          <option value="0">週日</option><option value="1">週一</option><option value="2">週二</option><option value="3">週三</option>
+          <option value="4">週四</option><option value="5">週五</option><option value="6">週六</option></select>
+        <input class="fi" type="number" id="ce-mday" min="1" max="31" style="flex:1" placeholder="幾號">
+      </div>
+    </div>
+    <div class="fl" style="margin-top:8px"><label>標題</label><input class="fi" id="ce-title" placeholder="要做什麼？"></div>
+    <div class="fl" style="margin-top:8px"><label>詳細內容（選填）</label><textarea class="fi" id="ce-detail" rows="2" style="resize:vertical"></textarea></div>
+    <div style="display:flex;gap:14px;align-items:flex-end;margin-top:8px">
+      <div class="fl" style="flex:1"><label>分類</label><select class="fi" id="ce-category">
+        <option>工作</option><option>採購</option><option>私人</option><option>其他</option></select></div>
+      <label id="ce-pri-wrap" style="display:none;align-items:center;gap:6px;font-size:12.5px;padding-bottom:9px"><input type="checkbox" id="ce-priority">標記優先</label>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="btn btn-gold" onclick="saveCalItem()">儲存</button>
+      <button class="btn" id="ce-del" style="display:none;border:1px solid #E8C7C2;background:#fff;color:#B03A2E" onclick="deleteCalItem()">刪除</button>
+      <button class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63" onclick="closeCalEdit()">取消</button>
     </div>
   </div>
 </div>
@@ -1411,7 +1605,8 @@ function buildStdDocParts(){
   const payH=getPayTerms();
 
   let cliRows='';
-  const cliFields=[[cli,'客戶名稱'],[con,'聯絡人'],[tax,'統一編號'],[ph,'聯絡電話'],[ad,'地址']];
+  const inv=document.getElementById('f-inv')?document.getElementById('f-inv').value.trim():'';
+  const cliFields=[[cli,'客戶名稱'],[con,'聯絡人'],[ph,'聯絡電話'],[ad,'地址'],[inv,'發票抬頭'],[tax,'統一編號']];
   cliFields.forEach(([v,l])=>{
     if(v) cliRows+=`<div style="display:flex;gap:8px;font-size:12.5px;margin-bottom:7px;line-height:1.6"><span style="color:#A8A69C;min-width:62px">${l}</span><span style="color:#22241F">${v}</span></div>`;
   });
@@ -1531,6 +1726,7 @@ async function doLogin(){
       sessionStorage.setItem('quote_token', data.token);
       hideLogin();
       toast('登入成功','ok');
+      initV2();
     } else {
       errEl.textContent = data.error || 'PIN 碼錯誤';
     }
@@ -1564,13 +1760,20 @@ function gotoPage(p){
   document.getElementById('page-new').classList.toggle('on', p==='new');
   document.getElementById('page-records').classList.toggle('on', p==='records');
   document.getElementById('page-custom').classList.toggle('on', p==='custom');
-  document.getElementById('tbr-standard').style.display = p==='custom' ? 'none' : 'flex';
+  document.getElementById('page-orders').classList.toggle('on', p==='orders');
+  document.getElementById('page-cal').classList.toggle('on', p==='cal');
+  document.getElementById('tbr-standard').style.display = (p==='custom'||p==='orders'||p==='cal') ? 'none' : 'flex';
   document.getElementById('tbr-custom').style.display = p==='custom' ? 'flex' : 'none';
-  document.getElementById('tb-title').textContent = p==='custom' ? '自訂報價單' : '報價單製作';
-  document.getElementById('tb-sub').textContent = p==='custom' ? '自由建立非常規報價單，直接從前端匯出 PDF / Word，不進資料庫' : '填寫後可即時預覽，並匯出 PDF / Word';
+  const _titles={custom:['自訂報價單','自由建立非常規報價單，可儲存到後台備份，並直接匯出 PDF / Word'],
+    orders:['訂單追蹤','報價 → 訂金 → 出貨 → 發票 → 尾款，一眼掌握每張單走到哪'],
+    cal:['工作行事曆','訂單日程自動連動＋備忘與待辦，防止遺漏']};
+  document.getElementById('tb-title').textContent = _titles[p]?_titles[p][0]:'報價單製作';
+  document.getElementById('tb-sub').textContent = _titles[p]?_titles[p][1]:'填寫後可即時預覽，並匯出 PDF / Word';
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
   if(p==='new'){ document.getElementById('nav-new').classList.add('on'); }
   if(p==='records'){ document.getElementById('nav-records').classList.add('on'); loadRecords(); }
+  if(p==='orders'){ document.getElementById('nav-orders').classList.add('on'); loadOrders().then(renderReport).catch(()=>{}); }
+  if(p==='cal'){ document.getElementById('nav-cal').classList.add('on'); loadCalendar().catch(()=>{}); }
   if(p==='custom'){
     document.getElementById('nav-custom').classList.add('on');
     if(customItems.length===0){ addCustomRow(); }
@@ -1639,6 +1842,7 @@ function collectQuote(){
     quoteNo: editingQuoteNo || val('f-no'),
     quoteType: qType,
     clientName: val('f-cli'), contactName: val('f-con'), clientTaxId: val('f-tax'),
+    invoiceTitle: val('f-inv'),
     contactPhone: val('f-ph'), clientAddress: val('f-ad'),
     quoteDate: val('f-dt'), expiryDate: val('f-ex'), handler: val('f-hdl'),
     itemsSubtotal: numFromText('t-sub'), taxAmount: numFromText('t-tax'),
@@ -1776,6 +1980,7 @@ function loadQuoteIntoForm(q){
   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v||''};
   setType(q.quoteType||'bottle');
   set('f-cli',q.clientName); set('f-con',q.contactName); set('f-tax',q.clientTaxId);
+  set('f-inv',q.invoiceTitle);
   set('f-ph',q.contactPhone); set('f-ad',q.clientAddress);
   set('f-dt',q.quoteDate); set('f-hdl',q.handler);
   set('f-ven',q.venue); set('f-ent',q.entryTime); set('f-svc',q.serviceTime); set('f-ext',q.exitTime);
@@ -2278,10 +2483,797 @@ function loadKKBarSample(){
   toast('已載入 KKBar 範例資料','ok');
 }
 
+/* ============================================================
+   V2 前端：公司報價檔＋訂單追蹤＋工作行事曆＋自訂單備份＋修改紀錄
+   （對應規格文件與對話B v2/v2.1 後端）
+   ============================================================ */
+
+/* ---- 共用狀態 ---- */
+let COMPANY_DATA = null;          // {companies, products, rules}
+let SELECTED_COMPANY = null;      // 標準模式選中的 company 物件
+let SELECTED_COMPANY_C = null;    // 自訂模式選中的 company 物件
+let RULE_SUPPRESS = {};           // 使用者刪掉的自動規則列（rule key -> true）
+let ORDERS_CACHE = null;          // 合併後的訂單列表
+let CAL_ITEMS = [];               // calendar_items
+let CAL_VIEW = 'month';           // month | week | list
+let CAL_FILTER = 'all';           // all | order | memo | recur
+let CAL_Y = new Date().getFullYear(), CAL_M = new Date().getMonth(); // 0-based
+let ORD_FILTER = 'all';
+let _rulesBusy = false;
+
+function fmtD(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function money(n){ return '$'+Math.round(parseFloat(n)||0).toLocaleString(); }
+function parseJsonSafe(s, fb){ try{ const v=JSON.parse(s); return v==null?fb:v; }catch(e){ return fb; } }
+function daysBetween(dstr){ // 今天到 dstr 的天數（負=已過）
+  if(!dstr) return null;
+  const d=new Date(dstr+'T00:00:00'); if(isNaN(d)) return null;
+  const t=new Date(); t.setHours(0,0,0,0);
+  return Math.round((d-t)/86400000);
+}
+
+/* ============================================================
+   一、公司報價檔（三模式快速帶入）
+   ============================================================ */
+async function loadCompanyData(force){
+  if(COMPANY_DATA && !force) return COMPANY_DATA;
+  const d = await apiCall({ action:'getCompanyData', token:AUTH_TOKEN });
+  if(!d.ok) throw new Error(d.error||'載入公司報價檔失敗');
+  COMPANY_DATA = { companies:d.companies||[], products:d.products||[], rules:d.rules||[] };
+  populateCompanySelects();
+  return COMPANY_DATA;
+}
+function companyLabel(c){
+  const b=(c.brand||'').trim(), n=(c.name||'').trim();
+  return b ? (n && n!==b ? `${b}（${n}）` : b) : n;
+}
+function populateCompanySelects(){
+  if(!COMPANY_DATA) return;
+  const opts = '<option value="">不指定（自由輸入）</option>' +
+    COMPANY_DATA.companies.map(c=>`<option value="${escHtml(c.company_id)}">${escHtml(companyLabel(c))}</option>`).join('');
+  const s1=document.getElementById('qf-company'); if(s1){ const v=s1.value; s1.innerHTML=opts; s1.value=v; }
+  const s2=document.getElementById('qfc-company'); if(s2){ const v=s2.value; s2.innerHTML=opts; s2.value=v; }
+}
+function companyById(id){ return (COMPANY_DATA?.companies||[]).find(c=>String(c.company_id)===String(id))||null; }
+function productsOf(cid){ return (COMPANY_DATA?.products||[]).filter(p=>String(p.company_id)===String(cid)); }
+function rulesOf(cid){ return (COMPANY_DATA?.rules||[]).filter(r=>String(r.company_id)===String(cid)); }
+function productLabel(p){
+  const spec=(p.spec!=null&&p.spec!=='')?(String(p.spec).match(/^\d+$/)?p.spec+'ml':p.spec):'';
+  return `${p.name}${spec?'（'+spec+'）':''}｜${money(p.unit_price)}${p.tier_json?'·級距':''}`;
+}
+function fillProductSelect(selId, cid){
+  const s=document.getElementById(selId); if(!s) return;
+  const ps=productsOf(cid);
+  s.innerHTML = ps.length
+    ? '<option value="">選擇品項帶入…</option>'+ps.map(p=>`<option value="${escHtml(p.product_id)}">${escHtml(productLabel(p))}</option>`).join('')
+    : '<option value="">此公司尚無品項（可直接自由輸入）</option>';
+}
+
+/* ---- 標準模式：選公司 ---- */
+function onSelectCompany(){
+  const cid=document.getElementById('qf-company').value;
+  SELECTED_COMPANY = cid ? companyById(cid) : null;
+  RULE_SUPPRESS = {};
+  const box=document.getElementById('qf-detail');
+  if(!SELECTED_COMPANY){ box.style.display='none'; clearAutoRuleExtras(); renderExt(); calc(); return; }
+  const c=SELECTED_COMPANY;
+  // 客戶資料帶入（brand → 客戶名稱；正式公司名 → 發票抬頭）— 全部可再手改
+  const set=(id,v)=>{ const e=document.getElementById(id); if(e && v!=null && v!=='') e.value=v; };
+  set('f-cli', (c.brand||'').trim()||c.name); if(typeof upNo==='function') upNo();
+  set('f-inv', c.name);
+  set('f-tax', c.tax_id); set('f-ph', c.phone); set('f-ad', c.address); set('f-con', c.contact);
+  if(c.default_tax_mode==='inc'||c.default_tax_mode==='exc') setTaxMode(c.default_tax_mode);
+  if((c.default_pay_terms||'').trim()){ setPay(3); const t=document.getElementById('p3-txt'); if(t && !t.value.trim()) t.value=c.default_pay_terms; }
+  // preset_note
+  rulesOf(c.company_id).filter(r=>r.rule_type==='preset_note').forEach(r=>{
+    const note=parseJsonSafe(r.params_json,{}).note||'';
+    const f=document.getElementById('f-note');
+    if(note && f && !f.value.trim()) f.value=note;
+  });
+  box.style.display='block';
+  fillProductSelect('qf-product', c.company_id);
+  renderRuleChips();
+  applyAutoRules(); renderExt(); calc();
+  toast('已帶入 '+companyLabel(c)+' 的客戶資料與報價邏輯','ok');
+}
+function renderRuleChips(){
+  const wrap=document.getElementById('qf-rules'); if(!wrap) return;
+  if(!SELECTED_COMPANY){ wrap.innerHTML=''; return; }
+  const rs=rulesOf(SELECTED_COMPANY.company_id);
+  let h='';
+  rs.forEach(r=>{
+    const p=parseJsonSafe(r.params_json,{});
+    if(r.rule_type==='free_ship_threshold'){
+      h+=`<span class="qf-chip ok">✓ 滿 ${p.min_qty||0} 瓶免運（未達運費 ${money(p.ship_fee||0)}，金額可改）</span>`;
+    } else if(r.rule_type==='label_deduct'){
+      const amt = p.use_product_label_fee ? '' : (p.per_bottle||0);
+      h+=`<label class="qf-chip toggle"><input type="checkbox" id="qf-ownlabel" onchange="applyRulesAndRefresh()"> 客戶自備酒標：每瓶扣 $<input type="number" id="qf-labelamt" value="${amt}" style="width:56px" oninput="applyRulesAndRefresh()">（可調）</label>`;
+    } else if(r.rule_type==='qty_tier'){
+      h+=`<span class="qf-chip info">數量級距價自動套用（單價仍可手改）</span>`;
+    } else if(r.rule_type==='preset_note'){
+      h+=`<span class="qf-chip info">已帶入預設備註</span>`;
+    }
+  });
+  h+=`<span class="qf-chip act" onclick="RULE_SUPPRESS={};applyRulesAndRefresh()">↻ 重新套用規則</span>`;
+  wrap.innerHTML=h;
+}
+function applyRulesAndRefresh(){ applyAutoRules(); renderExt(); calc(); }
+
+/* ---- 標準模式：帶入品項 ---- */
+function quickAddProduct(){
+  const pid=document.getElementById('qf-product').value; if(!pid) return;
+  const p=(COMPANY_DATA?.products||[]).find(x=>String(x.product_id)===String(pid)); if(!p) return;
+  if(qType==='bottle'){
+    const vol=String(p.spec||'').match(/^\d+$/)?parseFloat(p.spec):'';
+    addBotRow({ name:p.name, vol:vol, price:p.unit_price, ded:(colDed&&p.label_fee!==''&&p.label_fee!=null)?p.label_fee:'', logo:(colLogo&&p.logo_fee!==''&&p.logo_fee!=null)?p.logo_fee:'', qty:'' });
+    const id=rowId, row=document.getElementById(`r-${id}`);
+    if(row){
+      row.dataset.pid=p.product_id;
+      const pi=row.querySelector('[data-f="price"]');
+      pi.dataset.src=p.unit_price;
+      pi.removeAttribute('oninput');   // 改由下行接手：先立「已手改」旗標再重算，級距價才不會蓋掉手改值
+      pi.addEventListener('input',()=>{ pi.dataset.manual='1'; markHand(pi); calc(); });
+    }
+  } else {
+    // 宴會模式 → 加到「加購項目」
+    addBanAddonRow({ name:p.name+(p.spec?('（'+p.spec+(String(p.spec).match(/^\d+$/)?'ml':'')+'）'):''), unit:p.unit||'式', price:p.unit_price, qty:1 });
+  }
+  calc();
+}
+function markHand(input){
+  const src=parseFloat(input.dataset.src);
+  if(!isNaN(src) && parseFloat(input.value)!==src){ input.classList.add('hand-edit'); input.title='已手改（價目預設 '+money(src)+'，只影響這張單）'; }
+  else { input.classList.remove('hand-edit'); input.title=''; }
+}
+
+/* ---- 規則引擎（瓶裝模式的 extras 自動列）---- */
+function totalBottleQty(){
+  let q=0;
+  botItems.forEach(id=>{ const r=document.getElementById(`r-${id}`); if(r) q+=gv(r,'qty'); });
+  return q;
+}
+function clearAutoRuleExtras(){ extras=extras.filter(e=>!e.auto); }
+function applyAutoRules(){
+  if(qType!=='bottle') return false;
+  let changed=false;
+  const want=[]; // 期望存在的自動列
+  if(SELECTED_COMPANY){
+    const rs=rulesOf(SELECTED_COMPANY.company_id);
+    const qty=totalBottleQty();
+    rs.forEach(r=>{
+      const p=parseJsonSafe(r.params_json,{});
+      if(r.rule_type==='free_ship_threshold' && !RULE_SUPPRESS['ship']){
+        if(qty>=(p.min_qty||0) && qty>0) want.push({auto:'ship', n:(r.display_text||'整批出貨免運'), a:0});
+        else if(qty>0) want.push({auto:'ship', n:'運費（未達 '+(p.min_qty||0)+' 瓶免運門檻）', a:p.ship_fee||0});
+      }
+      if(r.rule_type==='label_deduct' && !RULE_SUPPRESS['label']){
+        const on=document.getElementById('qf-ownlabel')?.checked;
+        if(on && qty>0){
+          let per=parseFloat(document.getElementById('qf-labelamt')?.value);
+          if(isNaN(per)) per=p.per_bottle||0;
+          want.push({auto:'label', n:`客戶自備酒標 — 每瓶扣酒標費 $${per} × ${qty}瓶`, a:-(per*qty)});
+        }
+      }
+    });
+  }
+  // 同步 extras 中的 auto 列（使用者手動改過金額的 locked 列不動）
+  ['ship','label'].forEach(k=>{
+    const cur=extras.find(e=>e.auto===k);
+    const w=want.find(e=>e.auto===k);
+    if(w && !cur){ extras.push({id:++rowId, n:w.n, a:w.a, auto:k}); changed=true; }
+    else if(!w && cur && !cur.locked){ extras=extras.filter(e=>e!==cur); changed=true; }
+    else if(w && cur && !cur.locked && (cur.n!==w.n || cur.a!==w.a)){ cur.n=w.n; cur.a=w.a; changed=true; }
+  });
+  // 級距價：帶入的品項依瓶數自動換級距（手改過的不動）
+  botItems.forEach(id=>{
+    const row=document.getElementById(`r-${id}`); if(!row||!row.dataset.pid) return;
+    const prod=(COMPANY_DATA?.products||[]).find(x=>String(x.product_id)===String(row.dataset.pid)); if(!prod||!prod.tier_json) return;
+    const pi=row.querySelector('[data-f="price"]'); if(!pi||pi.dataset.manual==='1') return;
+    const q=gv(row,'qty'); if(!q) return;
+    const tiers=parseJsonSafe(prod.tier_json,[]);
+    const t=tiers.find(t=> q>=(t.min||0) && (t.max==null || q<=t.max));
+    if(t && parseFloat(pi.value)!==t.price){ pi.value=t.price; pi.dataset.src=t.price; changed=true; }
+  });
+  return changed;
+}
+
+/* ---- 自訂模式：選公司＋帶入 ---- */
+function onSelectCompanyCustom(){
+  const cid=document.getElementById('qfc-company').value;
+  SELECTED_COMPANY_C = cid ? companyById(cid) : null;
+  const row=document.getElementById('qfc-row');
+  if(!SELECTED_COMPANY_C){ row.style.display='none'; return; }
+  const c=SELECTED_COMPANY_C;
+  const set=(id,v)=>{ const e=document.getElementById(id); if(e && v!=null && v!=='') e.value=v; };
+  set('c-cli',(c.brand||'').trim()||c.name); set('c-con',c.contact);
+  if(c.default_tax_mode==='inc'||c.default_tax_mode==='exc') document.getElementById('c-taxmode').value=c.default_tax_mode;
+  row.style.display='block';
+  fillProductSelect('qfc-product', c.company_id);
+  calcCustom();
+  toast('已帶入 '+companyLabel(c)+' 的客戶資料','ok');
+}
+function quickAddProductCustom(){
+  const pid=document.getElementById('qfc-product').value; if(!pid) return;
+  const p=(COMPANY_DATA?.products||[]).find(x=>String(x.product_id)===String(pid)); if(!p) return;
+  const spec=p.spec?('（'+p.spec+(String(p.spec).match(/^\d+$/)?'ml':'')+'）'):'';
+  addCustomRow({ name:p.name+spec, qty:1, unit:p.unit||'', price:p.unit_price, note:p.note||'' });
+}
+
+/* ============================================================
+   二、訂單追蹤
+   ============================================================ */
+const ORDER_STAGES=[['quoted','報價中'],['deposit','已收訂金'],['shipped','已出貨'],['invoiced','已開發票'],['paid','已收尾款'],['closed','結案'],['cancelled','已取消']];
+function stageLabel(s){ const f=ORDER_STAGES.find(x=>x[0]===s); return f?f[1]:'報價中'; }
+function stageIdx(s){ return {quoted:1,deposit:2,shipped:3,invoiced:4,paid:5,closed:5}[s]||1; }
+
+async function loadOrders(force){
+  const body=document.getElementById('ord-body');
+  if(body) body.innerHTML='<tr><td colspan="6" class="rec-empty">載入中…</td></tr>';
+  try{
+    const [qs, cq, os] = await Promise.all([
+      apiCall({action:'getQuotes', token:AUTH_TOKEN, filters:{}}),
+      apiCall({action:'listCustomQuotes', token:AUTH_TOKEN}),
+      apiCall({action:'getOrderStatusList', token:AUTH_TOKEN})
+    ]);
+    const stMap={}; (os.orders||[]).forEach(o=>{ stMap[o.quote_no]=o; });
+    const list=[];
+    (qs.quotes||[]).filter(q=>q.status!=='已刪除').forEach(q=>{
+      list.push({ no:q.quoteNo, client:q.clientName||'—', type:q.quoteType==='banquet'?'宴會':'瓶裝',
+        typeKey:q.quoteType, total:q.grandTotal||0, quoteDate:q.quoteDate||'', expiry:q.expiryDate||'',
+        st: stMap[q.quoteNo]||null, src:'std' });
+    });
+    (cq.quotes||[]).forEach(q=>{
+      const tot=parseJsonSafe(q.totals_json,{}).total||0;
+      list.push({ no:q.quote_no, client:(q.client||'—')+(q.tag?('｜'+q.tag):''), type:'自訂', typeKey:'custom',
+        total:tot, quoteDate:q.quote_date||'', expiry:q.expiry||'', st:stMap[q.quote_no]||null, src:'custom', raw:q });
+    });
+    list.sort((a,b)=> (b.quoteDate||'').localeCompare(a.quoteDate||'') || (b.no||'').localeCompare(a.no||''));
+    ORDERS_CACHE=list;
+    renderOrders();
+    return list;
+  }catch(e){
+    if(body) body.innerHTML=`<tr><td colspan="6" class="rec-empty">${e.message||'載入失敗'}</td></tr>`;
+    throw e;
+  }
+}
+function orderBadges(o){
+  const s=o.st?.status||'quoted';
+  let h='';
+  if(s==='quoted' && o.expiry){
+    const d=daysBetween(o.expiry);
+    if(d!=null && d<0) h+='<span class="ob red">已過有效期</span>';
+    else if(d!=null && d<=7) h+=`<span class="ob red">有效期剩 ${d} 天</span>`;
+  }
+  if(o.st?.ship_date_est && !o.st?.ship_date_actual && ['deposit','quoted'].includes(s)){
+    const d=daysBetween(o.st.ship_date_est);
+    if(d!=null && d<0) h+='<span class="ob red">出貨已逾期</span>';
+    else if(d!=null && d<=3) h+=`<span class="ob warn">出貨倒數 ${d} 天</span>`;
+  }
+  return h;
+}
+function orderDots(o){
+  const s=o.st?.status||'quoted';
+  if(s==='cancelled') return '<span class="ost grey">已取消</span>';
+  const n=stageIdx(s);
+  let dots=''; for(let i=1;i<=5;i++) dots+=`<span class="odot${i<=n?' f':''}"></span>`;
+  return `<span class="odots">${dots}</span><span class="ost">${stageLabel(s)}</span>`;
+}
+function passOrdFilter(o){
+  const s=o.st?.status||'quoted';
+  switch(ORD_FILTER){
+    case 'all': return s!=='cancelled';
+    case 'quoted': return s==='quoted';
+    case 'toship': return s==='deposit';
+    case 'toinv': return s==='shipped';
+    case 'tofinal': return s==='invoiced';
+    case 'done': return s==='paid'||s==='closed';
+    case 'cancelled': return s==='cancelled';
+  }
+  return true;
+}
+function setOrdFilter(f, el){
+  ORD_FILTER=f;
+  document.querySelectorAll('#ord-filters .fchip').forEach(b=>b.classList.remove('on'));
+  if(el) el.classList.add('on');
+  renderOrders();
+}
+function renderOrders(){
+  const body=document.getElementById('ord-body'); if(!body||!ORDERS_CACHE) return;
+  // 篩選計數
+  const cnt=k=>{ const old=ORD_FILTER; ORD_FILTER=k; const n=ORDERS_CACHE.filter(passOrdFilter).length; ORD_FILTER=old; return n; };
+  const fs=[['all','全部'],['quoted','報價中'],['toship','待出貨'],['toinv','待開發票'],['tofinal','待收尾款'],['done','已結案'],['cancelled','已取消']];
+  document.getElementById('ord-filters').innerHTML=fs.map(([k,l])=>
+    `<button class="fchip${ORD_FILTER===k?' on':''}" onclick="setOrdFilter('${k}',this)">${l} <b>${cnt(k)}</b></button>`).join('');
+  const rows=ORDERS_CACHE.filter(passOrdFilter);
+  if(!rows.length){ body.innerHTML='<tr><td colspan="6" class="rec-empty">沒有符合的訂單</td></tr>'; return; }
+  body.innerHTML=rows.map(o=>{
+    const note=(o.st?.track_note||'').split('\n')[0];
+    const shipD=o.st?.ship_date_actual?`${o.st.ship_date_actual.slice(5)} ✓`:(o.st?.ship_date_est?o.st.ship_date_est.slice(5):'—');
+    return `<tr>
+      <td><b>${escHtml(o.no)}</b> <span class="rec-badge ${o.typeKey==='banquet'?'banquet':o.typeKey==='custom'?'custom':'bottle'}">${o.type}</span><br>
+        <span style="color:#6B6B63;font-size:11.5px">${escHtml(o.client)}</span></td>
+      <td>${orderDots(o)}${note?`<br><span class="onote">📌 ${escHtml(note)}${(o.st.track_note.includes('\n'))?'…':''}</span>`:''}</td>
+      <td style="text-align:right;font-weight:600">${money(o.total)}</td>
+      <td style="text-align:center">${shipD}</td>
+      <td>${orderBadges(o)}</td>
+      <td class="rec-actions">
+        <button class="rec-act-btn" onclick="openOrdEdit('${escHtml(o.no)}')">編輯進度</button>
+        <button class="rec-act-btn" onclick="copyOrder('${escHtml(o.no)}','${o.src}')">複製</button>
+        <button class="rec-act-btn" onclick="openChangeLog('${escHtml(o.no)}')">修改紀錄</button>
+        ${o.src==='custom'?`<button class="rec-act-btn" onclick="loadCustomFromOrders('${escHtml(o.no)}')">載入編輯</button>`:''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+/* ---- 單筆進度編輯 ---- */
+let ORD_EDITING=null;
+function openOrdEdit(no){
+  const o=ORDERS_CACHE.find(x=>x.no===no); if(!o) return;
+  ORD_EDITING=no;
+  const st=o.st||{};
+  const g=(k)=>st[k]||'';
+  document.getElementById('oe-title').textContent=`編輯進度 — ${no}（${o.client}）`;
+  document.getElementById('oe-status').value=st.status||'quoted';
+  ['deposit_amt','deposit_date','ship_date_est','ship_date_actual','invoice_no','invoice_date','final_amt','final_date'].forEach(k=>{
+    document.getElementById('oe-'+k).value=g(k);
+  });
+  document.getElementById('oe-track_note').value=g('track_note');
+  document.getElementById('oe-overlay').style.display='flex';
+}
+function closeOrdEdit(){ document.getElementById('oe-overlay').style.display='none'; ORD_EDITING=null; }
+async function saveOrdEdit(){
+  if(!ORD_EDITING) return;
+  const fields={ status:document.getElementById('oe-status').value };
+  ['deposit_amt','deposit_date','ship_date_est','ship_date_actual','invoice_no','invoice_date','final_amt','final_date','track_note']
+    .forEach(k=>{ fields[k]=document.getElementById('oe-'+(k==='track_note'?'track_note':k)).value; });
+  fields.track_note=document.getElementById('oe-track_note').value;
+  try{
+    const d=await apiCall({ action:'updateOrderStatus', token:AUTH_TOKEN, quote_no:ORD_EDITING, fields });
+    if(!d.ok){ toast(d.error||'儲存失敗','err'); return; }
+    toast('進度已儲存','ok'); closeOrdEdit();
+    await loadOrders(true);
+  }catch(e){ toast(e.message||'儲存失敗','err'); }
+}
+
+/* ---- 複製舊單（新單號，避免沿用舊號重複建單）---- */
+async function copyOrder(no, src){
+  try{
+    if(src==='custom'){
+      await loadCustomQuoteByNo(no, true);
+      return;
+    }
+    const d=await apiCall({ action:'getQuoteById', token:AUTH_TOKEN, quoteNo:no });
+    if(!d.ok){ toast(d.error||'讀取失敗','err'); return; }
+    loadQuoteIntoForm(d.quote);
+    editingQuoteNo=null;                       // 關鍵：複製＝新單，不沿用舊單號
+    const today=fmtD(new Date());
+    document.getElementById('f-dt').value=today;
+    if(typeof onDate==='function') onDate();
+    if(typeof upNo==='function') upNo();       // 依今天日期重新產生單號
+    gotoPage('new');
+    toast('已複製 '+no+' 為新單（單號已重編）','ok');
+  }catch(e){ toast(e.message||'複製失敗','err'); }
+}
+
+/* ---- 修改紀錄 ---- */
+async function openChangeLog(no){
+  const box=document.getElementById('cl-body');
+  document.getElementById('cl-title').textContent=`修改紀錄 — ${no}`;
+  box.innerHTML='<div class="rec-empty">載入中…</div>';
+  document.getElementById('cl-overlay').style.display='flex';
+  try{
+    const d=await apiCall({ action:'getChangeLog', token:AUTH_TOKEN, ref_no:no });
+    if(!d.ok){ box.innerHTML=`<div class="rec-empty">${d.error||'載入失敗'}</div>`; return; }
+    const logs=d.logs||[];
+    if(!logs.length){ box.innerHTML='<div class="rec-empty">此單尚無異動紀錄（異動日誌自 2026-07-16 起記錄）</div>'; return; }
+    box.innerHTML=logs.map((l,i)=>{
+      const p=parseJsonSafe(l.payload_json,{});
+      const q=p.quote||p.fields||p;
+      const hints=[];
+      if(q.clientName||q.client) hints.push('客戶 '+(q.clientName||q.client));
+      if(q.grandTotal!=null) hints.push('總計 '+money(q.grandTotal));
+      if(q.status) hints.push('狀態 '+stageLabel(q.status));
+      if(q.track_note) hints.push('📌 '+String(q.track_note).split('\n')[0]);
+      return `<div class="cl-row">
+        <div class="cl-head" onclick="const x=document.getElementById('clp-${i}');x.style.display=x.style.display==='none'?'block':'none'">
+          <b>${new Date(l.ts).toLocaleString('zh-TW',{hour12:false})}</b>　<span class="cl-act">${escHtml(l.action)}</span>
+          <span style="color:#6B6B63;font-size:12px">${hints.map(escHtml).join('　·　')}</span>
+          <span style="float:right;color:#A6824A;font-size:11px">展開▾</span>
+        </div>
+        <pre id="clp-${i}" style="display:none">${escHtml(JSON.stringify(p,null,2))}</pre>
+      </div>`;
+    }).join('');
+  }catch(e){ box.innerHTML=`<div class="rec-empty">${e.message||'載入失敗'}</div>`; }
+}
+function closeChangeLog(){ document.getElementById('cl-overlay').style.display='none'; }
+
+/* ---- 月報表 ---- */
+let RPT_Y=new Date().getFullYear(), RPT_M=new Date().getMonth()+1;
+function rptShift(d){ RPT_M+=d; if(RPT_M<1){RPT_M=12;RPT_Y--;} if(RPT_M>12){RPT_M=1;RPT_Y++;} renderReport(); }
+function renderReport(){
+  const el=document.getElementById('rpt-box'); if(!el||!ORDERS_CACHE) return;
+  const mm=`${RPT_Y}-${String(RPT_M).padStart(2,'0')}`;
+  const inMonth=ORDERS_CACHE.filter(o=>(o.quoteDate||'').startsWith(mm));
+  const dealt=inMonth.filter(o=>{ const s=o.st?.status||'quoted'; return s!=='quoted'&&s!=='cancelled'; });
+  const sum=dealt.reduce((s,o)=>s+(parseFloat(o.total)||0),0);
+  const byC={}; dealt.forEach(o=>{ const k=o.client.split('｜')[0]; byC[k]=byC[k]||{n:0,a:0}; byC[k].n++; byC[k].a+=parseFloat(o.total)||0; });
+  const rows=Object.entries(byC).sort((a,b)=>b[1].a-a[1].a);
+  el.innerHTML=`
+    <div class="rpt-head">月報表　<span class="qf-chip act" onclick="rptShift(-1)">◀ 上月</span> <b>${RPT_Y} 年 ${RPT_M} 月</b> <span class="qf-chip act" onclick="rptShift(1)">下月 ▶</span>
+      <button class="rec-act-btn" style="float:right" onclick="exportReport()">匯出 CSV</button></div>
+    <div class="rpt-stats">
+      <div class="rpt-stat"><div class="k">成交筆數</div><div class="v">${dealt.length} 筆</div></div>
+      <div class="rpt-stat"><div class="k">成交金額</div><div class="v" style="color:#A6824A">${money(sum)}</div></div>
+      <div class="rpt-stat"><div class="k">本月報價</div><div class="v">${inMonth.length} 筆</div></div>
+    </div>
+    ${rows.length?`<table class="rec-table" style="margin-top:10px"><thead><tr><th>客戶</th><th style="text-align:center">筆數</th><th style="text-align:right">金額</th></tr></thead><tbody>
+      ${rows.map(([k,v])=>`<tr><td>${escHtml(k)}</td><td style="text-align:center">${v.n}</td><td style="text-align:right">${money(v.a)}</td></tr>`).join('')}
+    </tbody></table>`:'<div class="rec-empty">本月尚無成交（狀態需為已收訂金以上才列入）</div>'}
+    <div style="font-size:11px;color:#A8A69C;margin-top:8px">※ 以報價日期歸屬月份；狀態「已收訂金」（含）之後視為成交。</div>`;
+}
+function exportReport(){
+  if(!ORDERS_CACHE) return;
+  const mm=`${RPT_Y}-${String(RPT_M).padStart(2,'0')}`;
+  const rows=ORDERS_CACHE.filter(o=>(o.quoteDate||'').startsWith(mm));
+  const head=['單號','類型','客戶','報價日','總計','狀態','訂金','訂金日','預計出貨','實際出貨','發票號碼','尾款','備註'];
+  const csv=[head.join(',')].concat(rows.map(o=>{
+    const s=o.st||{};
+    const esc=v=>'"'+String(v==null?'':v).replace(/"/g,'""').replace(/\n/g,' ')+'"';
+    return [o.no,o.type,o.client,o.quoteDate,Math.round(o.total),stageLabel(s.status||'quoted'),s.deposit_amt||'',s.deposit_date||'',s.ship_date_est||'',s.ship_date_actual||'',s.invoice_no||'',s.final_amt||'',s.track_note||''].map(esc).join(',');
+  })).join('\r\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`訂單報表_${mm}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+}
+
+/* ============================================================
+   三、自訂單後台備份
+   ============================================================ */
+function collectCustomQuote(){
+  const v=id=>document.getElementById(id).value;
+  const items=[];
+  customItems.forEach(id=>{
+    const row=document.getElementById(`cr-${id}`); if(!row) return;
+    const name=gs(row,'name'); if(!name) return;
+    items.push({ name, note:gs(row,'note'), qty:gs(row,'qty'), unit:gs(row,'unit'), price:gs(row,'price'),
+      manual:row.querySelector('[data-f="manual"]').checked, free:row.querySelector('[data-f="free"]').checked,
+      subval:row.querySelector('[data-f="subval"]').value });
+  });
+  const pm=s=>parseFloat(String(s).replace(/[^0-9.\-]/g,''))||0;
+  return {
+    quote_no:v('c-no').trim(), tag:v('c-tag').trim(), client:v('c-cli').trim(), contact:v('c-con').trim(),
+    quote_date:v('c-dt'), expiry:v('c-ex'), tax_mode:v('c-taxmode'), tax_rate:v('c-taxrate'),
+    headers_json:JSON.stringify({ name:v('c-h-name'), qty:v('c-h-qty'), unit:v('c-h-unit'), price:v('c-h-price'), sub:v('c-h-sub') }),
+    items_json:JSON.stringify(items),
+    totals_json:JSON.stringify({ sub:pm(document.getElementById('c-t-sub').textContent), tax:pm(document.getElementById('c-t-tax').textContent), total:pm(document.getElementById('c-t-tot').textContent) })
+  };
+}
+async function saveCustomToBackend(){
+  calcCustom();
+  const q=collectCustomQuote();
+  if(!q.client && !(parseJsonSafe(q.items_json,[]).length)){ toast('請先填寫內容再儲存','err'); return; }
+  try{
+    const d=await apiCall({ action:'saveCustomQuote', token:AUTH_TOKEN, quote:q });
+    if(!d.ok){ toast(d.error||'儲存失敗','err'); return; }
+    const saved=d.quote||q;
+    if(saved.quote_no) document.getElementById('c-no').value=saved.quote_no;
+    toast('已儲存到後台：'+(saved.quote_no||''),'ok');
+    loadMyCustomQuotes();
+  }catch(e){ toast(e.message||'儲存失敗','err'); }
+}
+async function loadMyCustomQuotes(){
+  const box=document.getElementById('cq-list'); if(!box) return;
+  box.innerHTML='<div class="rec-empty">載入中…</div>';
+  try{
+    const d=await apiCall({ action:'listCustomQuotes', token:AUTH_TOKEN });
+    if(!d.ok){ box.innerHTML=`<div class="rec-empty">${d.error||'載入失敗'}</div>`; return; }
+    const qs=(d.quotes||[]).sort((a,b)=>(b.updated_at||'').localeCompare(a.updated_at||''));
+    window._CQ_CACHE=qs;
+    if(!qs.length){ box.innerHTML='<div class="rec-empty">尚無已備份的自訂單</div>'; return; }
+    box.innerHTML=`<table class="rec-table"><thead><tr><th>單號 / 案名</th><th>客戶</th><th style="text-align:right">總計</th><th>更新</th><th>操作</th></tr></thead><tbody>`+
+      qs.map(q=>{
+        const tot=parseJsonSafe(q.totals_json,{}).total||0;
+        return `<tr><td><b>${escHtml(q.quote_no||'—')}</b><br><span style="color:#6B6B63;font-size:11.5px">${escHtml(q.tag||'')}</span></td>
+        <td>${escHtml(q.client||'—')}</td><td style="text-align:right;font-weight:600">${money(tot)}</td>
+        <td>${(q.updated_at||'').slice(0,10)}</td>
+        <td class="rec-actions"><button class="rec-act-btn" onclick="loadCustomQuoteByNo('${escHtml(q.quote_no)}',false)">載入編輯</button>
+        <button class="rec-act-btn" onclick="loadCustomQuoteByNo('${escHtml(q.quote_no)}',true)">複製成新單</button></td></tr>`;
+      }).join('')+'</tbody></table>';
+  }catch(e){ box.innerHTML=`<div class="rec-empty">${e.message||'載入失敗'}</div>`; }
+}
+async function loadCustomQuoteByNo(no, asCopy){
+  let q=(window._CQ_CACHE||[]).find(x=>x.quote_no===no);
+  if(!q){
+    const d=await apiCall({ action:'listCustomQuotes', token:AUTH_TOKEN });
+    q=(d.quotes||[]).find(x=>x.quote_no===no);
+  }
+  if(!q){ toast('找不到 '+no,'err'); return; }
+  resetCustom(true);
+  const set=(id,v)=>{ document.getElementById(id).value=v==null?'':v; };
+  set('c-tag',q.tag); set('c-cli',q.client); set('c-con',q.contact);
+  set('c-taxmode',q.tax_mode||'inc'); set('c-taxrate',q.tax_rate||5);
+  const h=parseJsonSafe(q.headers_json,{});
+  set('c-h-name',h.name||''); set('c-h-qty',h.qty||''); set('c-h-unit',h.unit||''); set('c-h-price',h.price||''); set('c-h-sub',h.sub||'');
+  if(asCopy){ set('c-no',''); set('c-dt',fmtD(new Date())); set('c-ex',''); }
+  else { set('c-no',q.quote_no); set('c-dt',q.quote_date); set('c-ex',q.expiry); }
+  document.getElementById('c-rows').innerHTML=''; customItems=[];
+  parseJsonSafe(q.items_json,[]).forEach(it=> addCustomRow(it));
+  if(customItems.length===0) addCustomRow();
+  syncCustomPills(); calcCustom();
+  gotoPage('custom');
+  toast(asCopy?('已複製 '+no+' 為新自訂單'):('已載入 '+no),'ok');
+}
+function loadCustomFromOrders(no){ loadCustomQuoteByNo(no,false); }
+
+/* ============================================================
+   四、工作行事曆
+   ============================================================ */
+async function loadCalendar(force){
+  try{
+    if(!ORDERS_CACHE || force) await loadOrders(force);
+  }catch(e){ /* orders 失敗仍可顯示備忘 */ }
+  try{
+    const d=await apiCall({ action:'listCalendarItems', token:AUTH_TOKEN });
+    CAL_ITEMS = d.ok ? (d.items||[]) : [];
+  }catch(e){ CAL_ITEMS=[]; toast(e.message||'行事曆載入失敗','err'); }
+  renderCalendar();
+}
+/* 產生某日的全部事件 */
+function eventsOn(dstr){
+  const evs=[];
+  const d=new Date(dstr+'T00:00:00');
+  if(CAL_FILTER==='all'||CAL_FILTER==='order'){
+    (ORDERS_CACHE||[]).forEach(o=>{
+      const s=o.st?.status||'quoted';
+      if(s==='cancelled') return;
+      if(o.st?.ship_date_est===dstr && !o.st?.ship_date_actual) evs.push({t:'ship', txt:'🚚 '+o.client.split('｜')[0]+' 出貨', no:o.no});
+      if(o.st?.ship_date_actual===dstr) evs.push({t:'ship', txt:'🚚 '+o.client.split('｜')[0]+' 出貨 ✓', no:o.no});
+      if(s==='quoted' && o.expiry===dstr) evs.push({t:'exp', txt:'⏰ '+o.client.split('｜')[0]+' 報價到期', no:o.no});
+    });
+  }
+  CAL_ITEMS.forEach(it=>{
+    if(it.kind==='memo' && (CAL_FILTER==='all'||CAL_FILTER==='memo')){
+      if(it.date===dstr) evs.push({t:'memo', txt:'📌 '+it.title, item:it, done:it.done==='Y'});
+    }
+    if(it.kind==='recur' && (CAL_FILTER==='all'||CAL_FILTER==='recur')){
+      const r=parseJsonSafe(it.recur_json,{});
+      const hit=(r.freq==='weekly'&&d.getDay()===(r.weekday??-1))
+        || (r.freq==='monthly'&&d.getDate()===(r.day||0))
+        || (r.freq==='yearly'&&d.getMonth()+1===(r.month||0)&&d.getDate()===(r.day||0));
+      if(hit) evs.push({t:'recur', txt:'🔁 '+it.title, item:it});
+    }
+  });
+  return evs;
+}
+function renderCalendar(){
+  const el=document.getElementById('cal-root'); if(!el) return;
+  renderTodayFocus();
+  document.querySelectorAll('#cal-views .fchip').forEach(b=>b.classList.toggle('on', b.dataset.v===CAL_VIEW));
+  document.querySelectorAll('#cal-filters .fchip').forEach(b=>b.classList.toggle('on', b.dataset.f===CAL_FILTER));
+  if(CAL_VIEW==='month') renderCalMonth(el);
+  else if(CAL_VIEW==='week') renderCalList(el, 7, '本週起 7 天');
+  else renderCalList(el, 30, '未來 30 天');
+  renderTodoList();
+}
+function calEvHtml(e){
+  const cls={ship:'ship',exp:'exp',memo:'memo',recur:'recur'}[e.t];
+  const click=e.no?`onclick="gotoPage('orders')"`:(e.item?`onclick="openCalEdit('${escHtml(e.item.item_id)}')"`:'');
+  return `<span class="cev ${cls}${e.done?' done':''}" ${click}>${escHtml(e.txt)}</span>`;
+}
+function renderCalMonth(el){
+  const first=new Date(CAL_Y, CAL_M, 1);
+  const startDow=first.getDay();
+  const daysIn=new Date(CAL_Y, CAL_M+1, 0).getDate();
+  const today=fmtD(new Date());
+  let cells='';
+  ['日','一','二','三','四','五','六'].forEach(w=>cells+=`<div class="cwd">${w}</div>`);
+  for(let i=0;i<startDow;i++) cells+='<div class="cd dim"></div>';
+  for(let d=1;d<=daysIn;d++){
+    const ds=`${CAL_Y}-${String(CAL_M+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const evs=eventsOn(ds);
+    cells+=`<div class="cd${ds===today?' today':''}" onclick="openCalAdd('${ds}')">
+      <span class="n">${d}${ds===today?' 今天':''}</span>${evs.map(calEvHtml).join('')}</div>`;
+  }
+  el.innerHTML=`<div class="calhead">
+    <span class="qf-chip act" onclick="CAL_M--;if(CAL_M<0){CAL_M=11;CAL_Y--;}renderCalendar()">◀ 上月</span>
+    <b style="font-size:14px">${CAL_Y} 年 ${CAL_M+1} 月</b>
+    <span class="qf-chip act" onclick="CAL_M++;if(CAL_M>11){CAL_M=0;CAL_Y++;}renderCalendar()">下月 ▶</span>
+    <span style="flex:1"></span>
+    <button class="btn btn-gold" style="font-size:12px;padding:6px 14px" onclick="openCalAdd('')">＋ 新增事項</button>
+  </div><div class="cal">${cells}</div>
+  <div class="cal-legend">🚚 出貨（訂單自動）　⏰ 報價到期（自動）　📌 備忘　🔁 重複行程　※ 點日期格可直接新增事項；點訂單事件跳到訂單追蹤</div>`;
+}
+function renderCalList(el, days, title){
+  const t=new Date(); t.setHours(0,0,0,0);
+  let h=`<div class="calhead"><b style="font-size:14px">${title}</b><span style="flex:1"></span>
+    <button class="btn btn-gold" style="font-size:12px;padding:6px 14px" onclick="openCalAdd('')">＋ 新增事項</button></div>`;
+  let any=false;
+  for(let i=0;i<days;i++){
+    const d=new Date(t); d.setDate(t.getDate()+i);
+    const ds=fmtD(d);
+    const evs=eventsOn(ds);
+    if(!evs.length) continue;
+    any=true;
+    h+=`<div class="cal-day"><div class="cal-day-h">${ds.slice(5)}（${'日一二三四五六'[d.getDay()]}）${i===0?'・今天':''}</div>${evs.map(calEvHtml).join(' ')}</div>`;
+  }
+  if(!any) h+='<div class="rec-empty">這段期間沒有事項</div>';
+  el.innerHTML=h;
+}
+function renderTodayFocus(){
+  const el=document.getElementById('cal-focus'); if(!el) return;
+  const items=[];
+  // 逾期備忘（未完成）
+  CAL_ITEMS.filter(it=>it.kind==='memo'&&it.done!=='Y'&&it.date).forEach(it=>{
+    const d=daysBetween(it.date);
+    if(d!=null&&d<0) items.push({o:d,h:`<span class="ob red">逾期 ${-d} 天</span> 📌 ${escHtml(it.title)}`,click:`openCalEdit('${escHtml(it.item_id)}')`});
+    else if(d!=null&&d<=7) items.push({o:d,h:`<span class="ob warn">${d===0?'今天':d+' 天後'}</span> 📌 ${escHtml(it.title)}`,click:`openCalEdit('${escHtml(it.item_id)}')`});
+  });
+  (ORDERS_CACHE||[]).forEach(o=>{
+    const s=o.st?.status||'quoted';
+    if(s==='cancelled'||s==='closed'||s==='paid') return;
+    if(o.st?.ship_date_est&&!o.st?.ship_date_actual){
+      const d=daysBetween(o.st.ship_date_est);
+      if(d!=null&&d<0) items.push({o:d,h:`<span class="ob red">出貨逾期 ${-d} 天</span> 🚚 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）`,click:`gotoPage('orders')`});
+      else if(d!=null&&d<=7) items.push({o:d,h:`<span class="ob warn">${d===0?'今天':d+' 天後'}</span> 🚚 ${escHtml(o.client.split('｜')[0])} 出貨（${escHtml(o.no)}）`,click:`gotoPage('orders')`});
+    }
+    if(s==='quoted'&&o.expiry){
+      const d=daysBetween(o.expiry);
+      if(d!=null&&d>=0&&d<=7) items.push({o:d,h:`<span class="ob red">有效期剩 ${d} 天</span> ⏰ ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）`,click:`gotoPage('orders')`});
+    }
+    if(s==='shipped') items.push({o:99,h:`<span class="ob warn">待開發票</span> 💰 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）`,click:`gotoPage('orders')`});
+    if(s==='invoiced') items.push({o:99,h:`<span class="ob warn">待收尾款</span> 💰 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）${o.st?.final_amt?'尾款 '+money(o.st.final_amt):''}`,click:`gotoPage('orders')`});
+  });
+  items.sort((a,b)=>a.o-b.o);
+  el.innerHTML=`<div class="ph" style="font-weight:700;font-size:13px;margin-bottom:6px">今日焦點 — ${fmtD(new Date()).slice(5)}<span style="color:#A8A69C;font-weight:400;font-size:11px">　今天＋未來 7 天；逾期自動標紅</span></div>`+
+    (items.length?items.map(i=>`<div class="focus-row" onclick="${i.click}">${i.h}</div>`).join(''):'<div style="color:#A8A69C;font-size:12.5px">目前沒有需要注意的事項 ✓</div>');
+}
+function renderTodoList(){
+  const el=document.getElementById('cal-todos'); if(!el) return;
+  const todos=CAL_ITEMS.filter(it=>it.kind==='todo');
+  el.innerHTML=`<div class="ph" style="font-weight:700;font-size:13px;margin-bottom:4px">待辦清單（不指定日期）<span style="color:#A8A69C;font-weight:400;font-size:11px">　做完打勾</span></div>`+
+    (todos.length?todos.sort((a,b)=>(a.done||'N').localeCompare(b.done||'N')||(b.priority==='high')-(a.priority==='high')).map(it=>
+      `<div class="todo-row${it.done==='Y'?' done':''}">
+        <span class="tbox" onclick="toggleTodoDone('${escHtml(it.item_id)}')">${it.done==='Y'?'✓':''}</span>
+        <span class="ttl" onclick="openCalEdit('${escHtml(it.item_id)}')">${escHtml(it.title)}${it.priority==='high'?' <span class="ob warn">優先</span>':''}</span>
+      </div>`).join(''):'<div style="color:#A8A69C;font-size:12.5px">目前沒有待辦</div>')+
+    `<div style="margin-top:8px"><button class="rec-act-btn" onclick="openCalAdd('', 'todo')">＋ 新增待辦</button></div>`;
+}
+async function toggleTodoDone(id){
+  const it=CAL_ITEMS.find(x=>String(x.item_id)===String(id)); if(!it) return;
+  it.done = it.done==='Y'?'N':'Y';
+  it.done_date = it.done==='Y'?fmtD(new Date()):'';
+  renderCalendar();
+  try{ await apiCall({ action:'saveCalendarItem', token:AUTH_TOKEN, item:it }); }
+  catch(e){ toast('同步失敗：'+e.message,'err'); }
+}
+/* 新增／編輯事項 */
+let CAL_EDIT_ID=null;
+function openCalAdd(dstr, kind){
+  CAL_EDIT_ID=null;
+  document.getElementById('ce-title-h').textContent='新增事項';
+  document.getElementById('ce-del').style.display='none';
+  document.getElementById('ce-kind').value=kind||(dstr?'memo':'memo');
+  document.getElementById('ce-date').value=dstr||fmtD(new Date());
+  ['ce-title','ce-detail'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('ce-category').value='工作';
+  document.getElementById('ce-priority').checked=false;
+  document.getElementById('ce-freq').value='weekly';
+  document.getElementById('ce-weekday').value='1';
+  document.getElementById('ce-mday').value='5';
+  onCalKindChange();
+  document.getElementById('ce-overlay').style.display='flex';
+}
+function openCalEdit(id){
+  const it=CAL_ITEMS.find(x=>String(x.item_id)===String(id)); if(!it) return;
+  CAL_EDIT_ID=id;
+  document.getElementById('ce-title-h').textContent='編輯事項';
+  document.getElementById('ce-del').style.display='inline-block';
+  document.getElementById('ce-kind').value=it.kind;
+  document.getElementById('ce-date').value=it.date||fmtD(new Date());
+  document.getElementById('ce-title').value=it.title||'';
+  document.getElementById('ce-detail').value=it.detail||'';
+  document.getElementById('ce-category').value=it.category||'工作';
+  document.getElementById('ce-priority').checked=it.priority==='high';
+  const r=parseJsonSafe(it.recur_json,{});
+  document.getElementById('ce-freq').value=r.freq||'weekly';
+  document.getElementById('ce-weekday').value=String(r.weekday??1);
+  document.getElementById('ce-mday').value=String(r.day||5);
+  onCalKindChange();
+  document.getElementById('ce-overlay').style.display='flex';
+}
+function onCalKindChange(){
+  const k=document.getElementById('ce-kind').value;
+  document.getElementById('ce-date-wrap').style.display = k==='memo'?'block':'none';
+  document.getElementById('ce-recur-wrap').style.display = k==='recur'?'block':'none';
+  document.getElementById('ce-pri-wrap').style.display = k==='todo'?'inline-flex':'none';
+  const f=document.getElementById('ce-freq').value;
+  document.getElementById('ce-weekday').style.display = f==='weekly'?'inline-block':'none';
+  document.getElementById('ce-mday').style.display = f!=='weekly'?'inline-block':'none';
+}
+function closeCalEdit(){ document.getElementById('ce-overlay').style.display='none'; CAL_EDIT_ID=null; }
+async function saveCalItem(){
+  const k=document.getElementById('ce-kind').value;
+  const title=document.getElementById('ce-title').value.trim();
+  if(!title){ toast('請輸入標題','err'); return; }
+  let recur='';
+  if(k==='recur'){
+    const f=document.getElementById('ce-freq').value;
+    recur = f==='weekly' ? JSON.stringify({freq:'weekly',weekday:parseInt(document.getElementById('ce-weekday').value)})
+          : f==='monthly' ? JSON.stringify({freq:'monthly',day:parseInt(document.getElementById('ce-mday').value)||1})
+          : JSON.stringify({freq:'yearly',month:new Date(document.getElementById('ce-date').value||fmtD(new Date())).getMonth()+1,day:parseInt(document.getElementById('ce-mday').value)||1});
+  }
+  const existing = CAL_EDIT_ID ? CAL_ITEMS.find(x=>String(x.item_id)===String(CAL_EDIT_ID)) : null;
+  const item={
+    item_id: CAL_EDIT_ID || ('ci-'+Date.now()+'-'+Math.floor(Math.random()*1000)),
+    kind:k, date:k==='memo'?document.getElementById('ce-date').value:'',
+    recur_json:recur, title, detail:document.getElementById('ce-detail').value,
+    category:document.getElementById('ce-category').value,
+    priority:(k==='todo'&&document.getElementById('ce-priority').checked)?'high':'normal',
+    done: existing?existing.done:'N', done_date: existing?existing.done_date:''
+  };
+  try{
+    const d=await apiCall({ action:'saveCalendarItem', token:AUTH_TOKEN, item });
+    if(!d.ok){ toast(d.error||'儲存失敗','err'); return; }
+    closeCalEdit(); toast('已儲存','ok');
+    await loadCalendar();
+  }catch(e){ toast(e.message||'儲存失敗','err'); }
+}
+async function deleteCalItem(){
+  if(!CAL_EDIT_ID) return;
+  if(!confirm('確定刪除這個事項？')) return;
+  try{
+    const d=await apiCall({ action:'deleteCalendarItem', token:AUTH_TOKEN, item_id:CAL_EDIT_ID });
+    if(!d.ok){ toast(d.error||'刪除失敗','err'); return; }
+    closeCalEdit(); toast('已刪除','ok');
+    await loadCalendar();
+  }catch(e){ toast(e.message||'刪除失敗','err'); }
+}
+function setCalView(v){ CAL_VIEW=v; renderCalendar(); }
+function setCalFilter(f){ CAL_FILTER=f; renderCalendar(); }
+
+/* ============================================================
+   五、掛勾：calc 尾端套規則、登入後載資料
+   ============================================================ */
+(function(){
+  const _calcOrig = window.calc;
+  window.calc = function(){
+    _calcOrig();
+    if(_rulesBusy) return;
+    _rulesBusy = true;
+    try{ if(applyAutoRules()){ renderExt(); _calcOrig(); } }
+    finally{ _rulesBusy=false; }
+  };
+})();
+async function initV2(){
+  try{ await loadCompanyData(); }catch(e){ /* 靜默：未登入或後端未就緒不擋主流程 */ }
+}
+
+/* resetAll 後同步清掉公司選擇與發票抬頭 */
+(function(){
+  const _r = window.resetAll;
+  window.resetAll = function(s){
+    _r(s);
+    const e=document.getElementById('f-inv'); if(e) e.value='';
+    const c=document.getElementById('qf-company'); if(c) c.value='';
+    SELECTED_COMPANY=null; RULE_SUPPRESS={};
+    const d=document.getElementById('qf-detail'); if(d) d.style.display='none';
+  };
+})();
+/* 使用者手動移除自動規則列 → 記住不要再自動加回 */
+(function(){
+  const _rm = window.removeExt;
+  window.removeExt = function(id){
+    const e = extras.find(x=>x.id===id);
+    if(e && e.auto) RULE_SUPPRESS[e.auto]=true;
+    _rm(id);
+  };
+})();
+
 /* ---- 啟動：檢查 session token ---- */
 (function initAuth(){
   const saved=sessionStorage.getItem('quote_token');
-  if(saved){ AUTH_TOKEN=saved; hideLogin(); }
+  if(saved){ AUTH_TOKEN=saved; hideLogin(); initV2(); }
   else { showLogin(); }
 })();
 
