@@ -2554,7 +2554,7 @@ function showProdInfo(selId, infoId){
   if(!p){ el.innerHTML=''; return; }
   const bits=[];
   if((p.bottle_cap||'').toString().trim()) bits.push('瓶型瓶蓋：'+escHtml(String(p.bottle_cap)));
-  if(p.moq) bits.push('MOQ '+p.moq+' 瓶');
+  if(p.moq) bits.push('MOQ '+p.moq+(/ml/i.test(String(p.moq))?'':' 瓶'));
   if((p.lead_time||'').toString().trim()) bits.push('作業交期 '+escHtml(String(p.lead_time)));
   if((p.note||'').toString().trim()) bits.push(escHtml(String(p.note)));
   el.innerHTML=bits.length?('ℹ️ '+bits.join('　·　')+'<span style="color:#A8A69C">（僅供參考，不會印在報價單上）</span>'):'';
@@ -2569,7 +2569,15 @@ function updateMoqWarnings(){
     const p=(COMPANY_DATA?.products||[]).find(x=>String(x.product_id)===String(row.dataset.pid));
     if(!p||!p.moq) return;
     const q=gv(row,'qty');
-    if(q>0 && q<parseFloat(p.moq)) warns.push(`⚠ ${escHtml(p.name)}${(p.bottle_cap||'').toString().trim()?('（'+escHtml(String(p.bottle_cap))+'）'):''} 未達 MOQ ${p.moq} 瓶（目前 ${q} 瓶）— 提醒用，照樣可出單`);
+    const moqStr=String(p.moq);
+    if(/ml/i.test(moqStr)){
+      // ml 型 MOQ：以該品項 瓶數×容量 判定總容量
+      const th=parseFloat(moqStr), vol=gv(row,'vol');
+      const tot=q*vol;
+      if(q>0 && vol>0 && tot<th) warns.push(`⚠ ${escHtml(p.name)} 未達 MOQ ${moqStr}（目前 ${q} 瓶 × ${vol}ml = ${tot.toLocaleString()}ml）— 提醒用，照樣可出單`);
+    } else if(q>0 && q<parseFloat(moqStr)){
+      warns.push(`⚠ ${escHtml(p.name)}${(p.bottle_cap||'').toString().trim()?('（'+escHtml(String(p.bottle_cap))+'）'):''} 未達 MOQ ${moqStr} 瓶（目前 ${q} 瓶）— 提醒用，照樣可出單`);
+    }
   });
   el.innerHTML=warns.map(w=>`<div class="moq-warn">${w}</div>`).join('');
 }
