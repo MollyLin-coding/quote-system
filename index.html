@@ -295,6 +295,8 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
 .todo-row.done .tbox{background:var(--gold);border-color:var(--gold)}
 .todo-row.done .ttl{color:#A8A69C;text-decoration:line-through}
 .todo-row .ttl{cursor:pointer}
+.prodinfo{font-size:11px;color:#6B6B63;margin-top:5px;line-height:1.6}
+.moq-warn{font-size:11.5px;margin-top:8px;padding:6px 11px;border-radius:6px;background:#FBF1E9;color:#B5541F;border:1px solid #EBD2BC}
 </style>
 </head>
 <body>
@@ -403,11 +405,13 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
         <div class="fg fg2">
           <div class="fl"><label>選擇公司</label><select class="fi" id="qf-company" onchange="onSelectCompany()"><option value="">不指定（自由輸入）</option></select></div>
           <div class="fl"><label>從價目帶入品項</label>
-            <div style="display:flex;gap:8px"><select class="fi" id="qf-product" style="flex:1"><option value="">請先選擇公司</option></select>
-            <button class="btn btn-gold" style="white-space:nowrap" onclick="quickAddProduct()">帶入</button></div></div>
+            <div style="display:flex;gap:8px"><select class="fi" id="qf-product" style="flex:1" onchange="showProdInfo('qf-product','qf-prodinfo')"><option value="">請先選擇公司</option></select>
+            <button class="btn btn-gold" style="white-space:nowrap" onclick="quickAddProduct()">帶入</button></div>
+            <div id="qf-prodinfo" class="prodinfo"></div></div>
         </div>
         <div id="qf-detail" style="display:none;margin-top:10px">
           <div class="qf-chips" id="qf-rules"></div>
+          <div id="qf-moqwarn"></div>
         </div>
       </div>
     </div>
@@ -699,8 +703,9 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
       <div class="cb"><div class="fg fg2">
         <div class="fl"><label>選擇公司</label><select class="fi" id="qfc-company" onchange="onSelectCompanyCustom()"><option value="">不指定（自由輸入）</option></select></div>
         <div class="fl" id="qfc-row" style="display:none"><label>從價目帶入品項</label>
-          <div style="display:flex;gap:8px"><select class="fi" id="qfc-product" style="flex:1"></select>
-          <button class="btn btn-gold" style="white-space:nowrap" onclick="quickAddProductCustom()">帶入</button></div></div>
+          <div style="display:flex;gap:8px"><select class="fi" id="qfc-product" style="flex:1" onchange="showProdInfo('qfc-product','qfc-prodinfo')"></select>
+          <button class="btn btn-gold" style="white-space:nowrap" onclick="quickAddProductCustom()">帶入</button></div>
+          <div id="qfc-prodinfo" class="prodinfo"></div></div>
       </div></div>
     </div>
 
@@ -2538,7 +2543,35 @@ function productsOf(cid){ return (COMPANY_DATA?.products||[]).filter(p=>String(p
 function rulesOf(cid){ return (COMPANY_DATA?.rules||[]).filter(r=>String(r.company_id)===String(cid)); }
 function productLabel(p){
   const spec=(p.spec!=null&&p.spec!=='')?(String(p.spec).match(/^\d+$/)?p.spec+'ml':p.spec):'';
-  return `${p.name}${spec?'（'+spec+'）':''}｜${money(p.unit_price)}${p.tier_json?'·級距':''}`;
+  const parts=[spec,(p.bottle_cap||'').trim()].filter(Boolean).join('·');
+  return `${p.name}${parts?'（'+parts+'）':''}｜${money(p.unit_price)}${p.tier_json?'·級距':''}`;
+}
+/* 選品項時顯示 MOQ／交期／瓶型（僅自己看，不印在報價單）*/
+function showProdInfo(selId, infoId){
+  const s=document.getElementById(selId), el=document.getElementById(infoId);
+  if(!el) return;
+  const p=(COMPANY_DATA?.products||[]).find(x=>String(x.product_id)===String(s.value));
+  if(!p){ el.innerHTML=''; return; }
+  const bits=[];
+  if((p.bottle_cap||'').toString().trim()) bits.push('瓶型瓶蓋：'+escHtml(String(p.bottle_cap)));
+  if(p.moq) bits.push('MOQ '+p.moq+' 瓶');
+  if((p.lead_time||'').toString().trim()) bits.push('作業交期 '+escHtml(String(p.lead_time)));
+  if((p.note||'').toString().trim()) bits.push(escHtml(String(p.note)));
+  el.innerHTML=bits.length?('ℹ️ '+bits.join('　·　')+'<span style="color:#A8A69C">（僅供參考，不會印在報價單上）</span>'):'';
+}
+/* MOQ 未達提醒（不擋單）*/
+function updateMoqWarnings(){
+  const el=document.getElementById('qf-moqwarn'); if(!el) return;
+  if(qType!=='bottle'||!SELECTED_COMPANY){ el.innerHTML=''; return; }
+  const warns=[];
+  botItems.forEach(id=>{
+    const row=document.getElementById(`r-${id}`); if(!row||!row.dataset.pid) return;
+    const p=(COMPANY_DATA?.products||[]).find(x=>String(x.product_id)===String(row.dataset.pid));
+    if(!p||!p.moq) return;
+    const q=gv(row,'qty');
+    if(q>0 && q<parseFloat(p.moq)) warns.push(`⚠ ${escHtml(p.name)}${(p.bottle_cap||'').toString().trim()?('（'+escHtml(String(p.bottle_cap))+'）'):''} 未達 MOQ ${p.moq} 瓶（目前 ${q} 瓶）— 提醒用，照樣可出單`);
+  });
+  el.innerHTML=warns.map(w=>`<div class="moq-warn">${w}</div>`).join('');
 }
 function fillProductSelect(selId, cid){
   const s=document.getElementById(selId); if(!s) return;
@@ -3241,7 +3274,7 @@ function setCalFilter(f){ CAL_FILTER=f; renderCalendar(); }
     _calcOrig();
     if(_rulesBusy) return;
     _rulesBusy = true;
-    try{ if(applyAutoRules()){ renderExt(); _calcOrig(); } }
+    try{ if(applyAutoRules()){ renderExt(); _calcOrig(); } updateMoqWarnings(); }
     finally{ _rulesBusy=false; }
   };
 })();
