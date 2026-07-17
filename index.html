@@ -816,6 +816,7 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
           <button class="fchip" data-v="list" onclick="setCalView('list')">清單</button>
         </span>
         <span style="width:8px"></span>
+        <button class="fchip" id="gcal-sync-btn" onclick="syncGCal()" title="把訂單日程與備忘推送到 Google 日曆「南坡萬」">⟳ 同步 Google 日曆</button>
         <span id="cal-filters" style="display:inline-flex;gap:6px">
           <button class="fchip on" data-f="all" onclick="setCalFilter('all')">全部</button>
           <button class="fchip" data-f="order" onclick="setCalFilter('order')">訂單日程</button>
@@ -3269,6 +3270,16 @@ async function deleteCalItem(){
     closeCalEdit(); toast('已刪除','ok');
     await loadCalendar();
   }catch(e){ toast(e.message||'刪除失敗','err'); }
+}
+async function syncGCal(){
+  const b=document.getElementById('gcal-sync-btn');
+  const orig=b.textContent; b.textContent='同步中…'; b.disabled=true;
+  try{
+    const d=await apiCall({ action:'syncCalendarNow', token:AUTH_TOKEN });
+    if(d.ok) toast('已同步到 Google 日曆「南坡萬」'+(d.summary?('：'+d.summary):''),'ok');
+    else toast(d.error==='Unknown action'?'後台尚未部署日曆同步（待對話 B v2.3）':(d.error||'同步失敗'),'err');
+  }catch(e){ toast(e.message||'同步失敗','err'); }
+  finally{ b.textContent=orig; b.disabled=false; }
 }
 function setCalView(v){ CAL_VIEW=v; renderCalendar(); }
 function setCalFilter(f){ CAL_FILTER=f; renderCalendar(); }
