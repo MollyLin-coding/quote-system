@@ -425,7 +425,20 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
           <div class="fl"><label>客戶統編 <span class="opt">選填</span></label><input class="fi" id="f-tax" placeholder="請輸入統一編號"></div>
           <div class="fl"><label>發票抬頭 <span class="opt">選填，開發票用的正式公司名</span></label><input class="fi" id="f-inv" placeholder="與客戶名稱不同時填寫"></div>
           <div class="fl"><label>聯絡電話 <span class="opt">選填</span></label><input class="fi" id="f-ph" placeholder="請輸入聯絡電話"></div>
-          <div class="fl" style="grid-column:span 2"><label>聯絡地址 <span class="opt">選填</span></label><input class="fi" id="f-ad" placeholder="請輸入聯絡地址"></div>
+          <div class="fl" style="grid-column:span 2"><label>聯絡地址（發票／帳單地址） <span class="opt">選填</span></label><input class="fi" id="f-ad" placeholder="請輸入聯絡地址"></div>
+        </div>
+        <div style="margin-top:14px">
+          <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--sub);cursor:pointer">
+            <input type="checkbox" id="f-shipsame" checked onchange="toggleShipSame('f')" style="width:15px;height:15px">
+            出貨地址與上方聯絡地址相同
+          </label>
+          <div id="f-ship-group" style="display:none;margin-top:10px">
+            <div class="fg fg2">
+              <div class="fl"><label>出貨收件人 <span class="opt">選填</span></label><input class="fi" id="f-shipcon" placeholder="請輸入收件人姓名"></div>
+              <div class="fl"><label>收件人電話 <span class="opt">選填</span></label><input class="fi" id="f-shipph" placeholder="請輸入收件人電話"></div>
+              <div class="fl" style="grid-column:span 2"><label>出貨地址 <span class="opt">選填</span></label><input class="fi" id="f-shipad" placeholder="請輸入實際出貨地址"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -924,6 +937,18 @@ function todayStr(){
   document.getElementById('f-dt').value=todayStr();
   onDate(); upNo(); addBotRow(); rebuildBotHeader();
 })();
+
+/* 出貨資訊是否與聯絡/發票地址相同；prefix='f'（瓶裝/宴會）或 'c'（自訂） */
+function toggleShipSame(prefix){
+  const chk=document.getElementById(prefix+'-shipsame');
+  const grp=document.getElementById(prefix+'-ship-group');
+  if(!chk||!grp) return;
+  grp.style.display=chk.checked?'none':'block';
+  if(chk.checked){
+    const clr=id=>{ const e=document.getElementById(id); if(e) e.value=''; };
+    clr(prefix+'-shipcon'); clr(prefix+'-shipph'); clr(prefix+'-shipad');
+  }
+}
 
 function onDate(){
   const v=document.getElementById('f-dt').value; if(!v) return;
@@ -1616,6 +1641,22 @@ function buildStdDocParts(){
   cliFields.forEach(([v,l])=>{
     if(v) cliRows+=`<div style="display:flex;gap:8px;font-size:12.5px;margin-bottom:7px;line-height:1.6"><span style="color:#A8A69C;min-width:62px">${l}</span><span style="color:#22241F">${v}</span></div>`;
   });
+  /* 出貨資訊：只在「與聯絡地址不同」且有填任一欄時才另外印出，避免同一組地址重複兩次 */
+  const shipSame=document.getElementById('f-shipsame')?document.getElementById('f-shipsame').checked:true;
+  const shipCon=document.getElementById('f-shipcon')?document.getElementById('f-shipcon').value.trim():'';
+  const shipPh=document.getElementById('f-shipph')?document.getElementById('f-shipph').value.trim():'';
+  const shipAd=document.getElementById('f-shipad')?document.getElementById('f-shipad').value.trim():'';
+  let shipRows='';
+  if(!shipSame && (shipCon||shipPh||shipAd)){
+    const shipFields=[[shipCon,'出貨收件人'],[shipPh,'收件人電話'],[shipAd,'出貨地址']];
+    shipFields.forEach(([v,l])=>{
+      if(v) shipRows+=`<div style="display:flex;gap:8px;font-size:12.5px;margin-bottom:7px;line-height:1.6"><span style="color:#A8A69C;min-width:62px">${l}</span><span style="color:#22241F">${v}</span></div>`;
+    });
+  }
+  const shipBlock = shipRows ? `<div style="margin-top:6px;padding-top:10px;border-top:1px dashed #E5E2D8">
+    <div style="font-size:10px;color:#A6824A;font-weight:600;letter-spacing:1px;margin-bottom:6px">出貨資訊（與發票／聯絡地址不同）</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px">${shipRows}</div>
+  </div>` : '';
 
   /* 統一頁首（每頁相同） */
   const header=`
@@ -1634,7 +1675,7 @@ function buildStdDocParts(){
     </div>
   </div>`;
 
-  const topFirst = venH + `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;margin-bottom:4px">${cliRows}</div>`;
+  const topFirst = venH + `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;margin-bottom:4px">${cliRows}</div>${shipBlock}`;
   const contNote = `<div style="font-size:10.5px;color:#A8A69C;letter-spacing:.5px;margin:0">品項明細（承前頁）</div>`;
 
   /* 尾段區塊（總計／圖片／付款條件／備註條款） */
@@ -1850,6 +1891,7 @@ function collectQuote(){
     clientName: val('f-cli'), contactName: val('f-con'), clientTaxId: val('f-tax'),
     invoiceTitle: val('f-inv'),
     contactPhone: val('f-ph'), clientAddress: val('f-ad'),
+    shipContact: val('f-shipcon'), shipPhone: val('f-shipph'), shipAddress: val('f-shipad'),
     quoteDate: val('f-dt'), expiryDate: val('f-ex'), handler: val('f-hdl'),
     itemsSubtotal: numFromText('t-sub'), taxAmount: numFromText('t-tax'),
     extrasTotal: numFromText('t-ext'), grandTotal: numFromText('t-tot'),
@@ -1988,6 +2030,10 @@ function loadQuoteIntoForm(q){
   set('f-cli',q.clientName); set('f-con',q.contactName); set('f-tax',q.clientTaxId);
   set('f-inv',q.invoiceTitle);
   set('f-ph',q.contactPhone); set('f-ad',q.clientAddress);
+  set('f-shipcon',q.shipContact); set('f-shipph',q.shipPhone); set('f-shipad',q.shipAddress);
+  { const same=!(q.shipAddress||q.shipContact||q.shipPhone);
+    const chk=document.getElementById('f-shipsame'); if(chk) chk.checked=same;
+    toggleShipSame('f'); }
   set('f-dt',q.quoteDate); set('f-hdl',q.handler);
   set('f-ven',q.venue); set('f-ent',q.entryTime); set('f-svc',q.serviceTime); set('f-ext',q.exitTime);
   set('f-note',q.remark);
@@ -2603,6 +2649,12 @@ function onSelectCompany(){
   set('f-cli', (c.brand||'').trim()||c.name); if(typeof upNo==='function') upNo();
   set('f-inv', c.name);
   set('f-tax', c.tax_id); set('f-ph', c.phone); set('f-ad', c.address); set('f-con', c.contact);
+  // 出貨資訊：公司檔若有存預設出貨收件人/電話/地址，帶入並自動視為「不同」；否則維持與聯絡地址相同
+  if((c.ship_address||'').trim()||(c.ship_contact||'').trim()||(c.ship_phone||'').trim()){
+    set('f-shipcon', c.ship_contact); set('f-shipph', c.ship_phone); set('f-shipad', c.ship_address);
+    const sc=document.getElementById('f-shipsame'); if(sc) sc.checked=false;
+    toggleShipSame('f');
+  }
   if(c.default_tax_mode==='inc'||c.default_tax_mode==='exc') setTaxMode(c.default_tax_mode);
   if((c.default_pay_terms||'').trim()){ setPay(3); const t=document.getElementById('p3-txt'); if(t && !t.value.trim()) t.value=c.default_pay_terms; }
   // preset_note
@@ -3310,6 +3362,8 @@ async function initV2(){
     const c=document.getElementById('qf-company'); if(c) c.value='';
     SELECTED_COMPANY=null; RULE_SUPPRESS={};
     const d=document.getElementById('qf-detail'); if(d) d.style.display='none';
+    const sc=document.getElementById('f-shipsame'); if(sc) sc.checked=true;
+    toggleShipSame('f');
   };
 })();
 /* 使用者手動移除自動規則列 → 記住不要再自動加回 */
