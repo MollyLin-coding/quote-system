@@ -385,7 +385,7 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
     <div style="font-size:9.5px;color:rgba(239,233,216,.3);letter-spacing:2px;padding:4px 11px 8px;text-transform:uppercase">功能</div>
     <button class="nb on" id="nav-new" onclick="newQuote()"><i class="ti ti-file-plus"></i>新增報價單</button>
     <button class="nb" id="nav-records" onclick="gotoPage('records')"><i class="ti ti-files"></i>報價紀錄</button>
-    <button class="nb" onclick="openPreview()"><i class="ti ti-eye"></i>預覽報價單</button>
+    <button class="nb" onclick="previewCurrent()"><i class="ti ti-eye"></i>預覽報價單</button>
     <button class="nb" id="nav-custom" onclick="gotoPage('custom')"><i class="ti ti-edit"></i>自訂報價單</button>
     <button class="nb" id="nav-orders" onclick="gotoPage('orders')"><i class="ti ti-truck-delivery"></i>訂單追蹤</button>
     <button class="nb" id="nav-cal" onclick="gotoPage('cal')"><i class="ti ti-calendar"></i>工作行事曆</button>
@@ -482,6 +482,9 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
               <div class="fl"><label>出貨收件人 <span class="opt">選填</span></label><input class="fi" id="f-shipcon" placeholder="請輸入收件人姓名"></div>
               <div class="fl"><label>收件人電話 <span class="opt">選填</span></label><input class="fi" id="f-shipph" placeholder="請輸入收件人電話"></div>
               <div class="fl" style="grid-column:span 2"><label>出貨地址 <span class="opt">選填</span></label><input class="fi" id="f-shipad" placeholder="請輸入實際出貨地址"></div>
+            </div>
+            <div style="margin-top:8px;font-size:11px;color:#B5541F;background:#FBF1E9;border:1px solid #EBD2BC;border-radius:6px;padding:7px 10px;line-height:1.6">
+              ⚠ 出貨資訊目前可即時預覽與列印，但<strong>尚未能存進後台</strong>（等後台補上欄位後才會記住）。若這張單需要保留出貨資訊，請先匯出 PDF 存檔。
             </div>
           </div>
         </div>
@@ -801,7 +804,7 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
               <option value="exc">未稅價（外加稅額）</option>
             </select>
           </div>
-          <div class="fl"><label>稅率 (%)</label><input class="fi" type="number" id="c-taxrate" value="5" oninput="calcCustom()"></div>
+          <div class="fl"><label>稅率 (%)</label><input class="fi" type="number" id="c-taxrate" value="5" min="0" max="50" oninput="calcCustom()"></div>
         </div>
       </div>
     </div>
@@ -943,6 +946,10 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
         <select class="fi" id="ce-weekday" style="flex:1">
           <option value="0">週日</option><option value="1">週一</option><option value="2">週二</option><option value="3">週三</option>
           <option value="4">週四</option><option value="5">週五</option><option value="6">週六</option></select>
+        <select class="fi" id="ce-mon" style="flex:1;display:none">
+          <option value="1">1月</option><option value="2">2月</option><option value="3">3月</option><option value="4">4月</option>
+          <option value="5">5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option>
+          <option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option></select>
         <input class="fi" type="number" id="ce-mday" min="1" max="31" style="flex:1" placeholder="幾號">
       </div>
     </div>
@@ -1021,7 +1028,8 @@ function upNo(){
   const v=document.getElementById('f-dt').value; if(!v) return;
   const d=new Date(v);
   const base=`${d.getFullYear()}${s2(d.getMonth()+1)}${s2(d.getDate())}`;
-  const ser=String(document.getElementById('f-ser').value||1).padStart(2,'0');
+  let serN=parseInt(document.getElementById('f-ser').value,10); if(!serN||serN<1) serN=1; if(serN>99) serN=99;   // 流水號夾在 1~99，避免產生怪單號
+  const ser=String(serN).padStart(2,'0');
   const no=`${base}-${ser}`;
   document.getElementById('f-no').value=no;
   document.getElementById('pl-no').textContent=no;
@@ -1103,12 +1111,12 @@ function addBotRow(prefill){
     <textarea rows="1" placeholder="品名（Enter新增下一筆／Shift+Enter換行／可貼上多行自動拆成多筆）" oninput="calc()" onkeydown="handleNameKeydown(event,${id})" onpaste="handleNamePaste(event,${id})" data-f="name">${escHtml(prefill?.name||'')}</textarea>`;
   if(colLot) h += `<input placeholder="Lot31" oninput="calc()" data-f="lot" value="${lotVal}">`;
   h += `
-    <input type="number" placeholder="500" list="vol-options" oninput="calc()" data-f="vol" value="${prefill?.vol||''}">
-    <input type="number" placeholder="375" oninput="calc()" data-f="price" value="${prefill?.price||''}">`;
+    <input type="number" min="0" placeholder="500" list="vol-options" oninput="calc()" data-f="vol" value="${prefill?.vol||''}">
+    <input type="number" min="0" placeholder="375" oninput="calc()" data-f="price" value="${prefill?.price||''}">`;
   if(colDed) h += `<input type="number" placeholder="-2" oninput="calc()" data-f="ded" value="${prefill?.ded||''}">`;
-  if(colLogo) h += `<input type="number" placeholder="25" oninput="calc()" data-f="logo" value="${prefill?.logo||''}">`;
+  if(colLogo) h += `<input type="number" min="0" placeholder="25" oninput="calc()" data-f="logo" value="${prefill?.logo||''}">`;
   h += `
-    <input type="number" placeholder="40" oninput="calc()" data-f="qty" value="${prefill?.qty||''}">
+    <input type="number" min="0" placeholder="40" oninput="calc()" data-f="qty" value="${prefill?.qty||''}">
     <div class="sub" id="rs-${id}">—</div>
     <button class="del" onclick="delBotRow(${id})">✕</button>`;
   div.innerHTML = h;
@@ -1355,6 +1363,7 @@ function calc(){
     document.getElementById('t-tax').textContent='$'+taxAmt.toLocaleString();
   } else {
     document.getElementById('tr-tax').style.display='none';
+    document.getElementById('t-tax').textContent='$0';   // 稅率0時歸零，避免存檔時殘留舊稅額
   }
   document.getElementById('t-sub').textContent='$'+Math.round(netAll).toLocaleString();
   document.getElementById('tr-ext').style.display='none';   // 額外費用已併入合計計稅（品項表內仍有明細列）
@@ -1438,14 +1447,16 @@ function presQty(n,unit){
   const qty=parseInt(s)||1;
   pushExt(`${n}（${qty}款 × $${unit.toLocaleString()}）`, unit*qty);
 }
+let _extSeq=0;
 function pushExt(n,a){
-  const id=Date.now(); extras.push({id,n,a});
+  const id=`ext${++_extSeq}`; extras.push({id,n,a});
   renderExt(); calc();
 }
-function removeExt(id){extras=extras.filter(e=>e.id!==id);renderExt();calc();}
+function removeExt(id){extras=extras.filter(e=>String(e.id)!==String(id));renderExt();calc();}
+function fmtMoney(v){ v=Math.round(parseFloat(v)||0); return v<0 ? '-$'+Math.abs(v).toLocaleString() : '$'+v.toLocaleString(); }
 function renderExt(){
   document.getElementById('ext-list').innerHTML=extras.map(e=>
-    `<div class="etag">${e.n}：$${e.a.toLocaleString()}<button onclick="removeExt(${e.id})">✕</button></div>`
+    `<div class="etag">${e.n}：${fmtMoney(e.a)}<button onclick="removeExt('${e.id}')">✕</button></div>`
   ).join('');
 }
 
@@ -1464,8 +1475,8 @@ function renderImgs(){
 }
 
 function resetAll(skipConfirm){
-  if(!skipConfirm && !confirm('確定清除所有資料？')) return;
-  document.querySelectorAll('input:not([readonly]),textarea,select').forEach(el=>{
+  if(!skipConfirm && !confirm('確定清除這張報價單的內容？（只會清空目前這張新報價單，其他頁面不受影響）')) return;
+  document.querySelectorAll('#page-new input:not([readonly]),#page-new textarea,#page-new select').forEach(el=>{
     if(el.type==='number'&&el.id==='f-ser') el.value='1';
     else if(el.id==='f-hdl') el.value='Molly';
     else if(el.type==='number'&&el.id==='dep-pct') el.value='30';
@@ -1592,7 +1603,7 @@ function buildStdDocParts(){
       extras.forEach(e=>{
         rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
           <td colspan="${colspan}" style="padding:9px 12px;color:#A6824A;font-style:italic;font-size:12px">${e.n}</td>
-          <td style="padding:9px 8px;text-align:right;color:#6B6B63">$${e.a.toLocaleString()}</td>
+          <td style="padding:9px 8px;text-align:right;color:#6B6B63">${fmtMoney(e.a)}</td>
         </tr>`);
       });
     }
@@ -1773,6 +1784,12 @@ function buildStdPagesHtml(extraPageStyle){
 }
 
 /* ---- 標準模式：預覽（多頁時逐頁顯示，每頁統一頁首＋頁尾頁碼）---- */
+/* 側邊「預覽報價單」：依目前頁面決定預覽標準單或自訂單 */
+function previewCurrent(){
+  closeMobileNav();
+  if(currentPage==='custom'){ openCustomPreview(); }
+  else { gotoPage('new'); openPreview(); }
+}
 function openPreview(){
   const pages = buildStdPagesHtml('margin:0 auto 18px;box-shadow:0 4px 18px rgba(40,38,30,.22);');
   document.getElementById('pcon').innerHTML = `<div style="background:#D6D4CC;padding:18px 0 1px">${pages}</div>`;
@@ -1794,16 +1811,28 @@ let currentPage = 'new';      // new | records
 let editingQuoteNo = null;    // 若非 null 表示正在編輯既有報價單
 
 /* ---- API 呼叫核心（GAS Web App 用 text/plain 避開 CORS preflight）---- */
+const _busy={};   // 各儲存動作的「進行中」旗標，避免連點重複送出
 async function apiCall(payload){
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(payload)
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), 25000);   // 25 秒逾時，避免按鈕永久卡住
+  let res;
+  try {
+    res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      signal: ctrl.signal
+    });
+  } catch(err) {
+    clearTimeout(timer);
+    if(err && err.name==='AbortError') throw new Error('連線逾時，請檢查網路後再試一次');
+    throw new Error('無法連線到後台，請確認網路後再試一次');
+  }
+  clearTimeout(timer);
   const text = await res.text();
   let data;
   try { data = JSON.parse(text); }
-  catch(e){ throw new Error('伺服器回應格式錯誤：' + text.slice(0,120)); }
+  catch(e){ throw new Error('無法連線到後台（伺服器回應異常），請稍後再試'); }
   if(data.ok === false && data.error && data.error.indexOf('UNAUTHORIZED') === 0){
     // token 失效，回登入頁
     AUTH_TOKEN = null;
@@ -1894,6 +1923,8 @@ function closeMobileNav(){
   document.getElementById('sb').classList.remove('open');
   document.getElementById('sb-backdrop').classList.remove('open');
 }
+/* 視窗放大回桌機寬度時，關掉手機選單抽屜與遮罩，避免殘留 */
+window.addEventListener('resize', ()=>{ if(window.innerWidth>860) closeMobileNav(); });
 
 /* ---- 收集表單資料成 quote 物件 ---- */
 function collectQuote(){
@@ -1944,12 +1975,12 @@ function collectQuote(){
 
   const numFromText=id=>parseFloat((document.getElementById(id).textContent||'0').replace(/[$,]/g,''))||0;
   const svcMode=g('svc-mode')?g('svc-mode').value:'';
+  const svcAmt1=parseFloat(document.getElementById('svc-amt1')?.value)||0;
+  const svcAmt2=parseFloat(document.getElementById('svc-amt2')?.value)||0;
+  const svcQty=parseFloat(document.getElementById('svc-qty')?.value)||1;
   let svcAmount=0;
   if(svcMode){
-    const a1=parseFloat(document.getElementById('svc-amt1')?.value)||0;
-    const a2=parseFloat(document.getElementById('svc-amt2')?.value)||0;
-    const sq=parseFloat(document.getElementById('svc-qty')?.value)||1;
-    svcAmount=(a1+(svcMode==='travel'?a2:0))*sq;
+    svcAmount=(svcAmt1+(svcMode==='travel'?svcAmt2:0))*svcQty;
   }
 
   return {
@@ -1967,6 +1998,8 @@ function collectQuote(){
     remark: val('f-note'), imageLinks: '', status: '草稿',
     venue: val('f-ven'), entryTime: val('f-ent'), serviceTime: val('f-svc'), exitTime: val('f-ext'),
     svcMode: svcMode, svcAmount: svcAmount,
+    svcAmt1: svcAmt1, svcAmt2: svcAmt2, svcQty: svcQty,
+    tagLot: val('f-tag-lot'), tagCli: val('f-tag-cli'),
     items
   };
 }
@@ -2092,6 +2125,10 @@ async function deleteRecord(quoteNo, cliName){
 /* ---- 把 quote 物件灌回表單 ---- */
 function loadQuoteIntoForm(q){
   editingQuoteNo=q.quoteNo;
+  // 載入舊單前先清掉「已選公司」狀態，避免殘留規則污染這張單的金額
+  SELECTED_COMPANY=null; RULE_SUPPRESS={};
+  { const csel=document.getElementById('qf-company'); if(csel) csel.value=''; }
+  { const box=document.getElementById('qf-detail'); if(box) box.style.display='none'; }
   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v||''};
   setType(q.quoteType||'bottle');
   set('f-cli',q.clientName); set('f-con',q.contactName); set('f-tax',q.clientTaxId);
@@ -2101,13 +2138,17 @@ function loadQuoteIntoForm(q){
   { const same=!(q.shipAddress||q.shipContact||q.shipPhone);
     const chk=document.getElementById('f-shipsame'); if(chk) chk.checked=same;
     toggleShipSame('f'); }
+  set('f-tag-lot',q.tagLot); set('f-tag-cli',q.tagCli);
   set('f-dt',q.quoteDate); set('f-hdl',q.handler);
   set('f-ven',q.venue); set('f-ent',q.entryTime); set('f-svc',q.serviceTime); set('f-ext',q.exitTime);
   set('f-note',q.remark);
   set('taxrate',q.taxRate||5);
-  if(q.quoteNo){ document.getElementById('f-no').value=q.quoteNo; document.getElementById('pl-no').textContent=q.quoteNo; }
+  // 先把流水號從單號尾碼還原，onDate() 會用它重算單號，避免顯示/PDF 變成 -01
+  if(q.quoteNo){ const m=String(q.quoteNo).match(/-(\d+)\s*$/); if(m){ const s=document.getElementById('f-ser'); if(s) s.value=parseInt(m[1],10)||1; } }
   setTaxMode(q.priceMode||'inc');
   onDate();
+  // onDate()→upNo() 會依日期+流水號重組單號；強制還原成原本存的單號，確保與後台/客戶文件一致
+  if(q.quoteNo){ document.getElementById('f-no').value=q.quoteNo; document.getElementById('pl-no').textContent=q.quoteNo; }
   const items=q.items||[];
   if(q.quoteType==='bottle'){
     document.getElementById('itbody-bot').innerHTML=''; botItems=[];
@@ -2121,7 +2162,7 @@ function loadQuoteIntoForm(q){
     document.getElementById('ctg-logo').classList.toggle('on',colLogo);
     rebuildBotHeader();
     items.forEach(it=>{
-      if(it.itemType==='extra'){ extras.push({id:Date.now()+Math.random(),n:it.name,a:it.unitPrice||it.subtotal||0}); }
+      if(it.itemType==='extra'){ extras.push({id:`ext${++_extSeq}`,n:it.name,a:it.unitPrice||it.subtotal||0}); }
       else { addBotRow({name:it.name,lot:it.lot,vol:it.volume,price:it.unitPrice,ded:it.deduction,logo:it.logoFee,qty:it.qty}); }
     });
     if(botItems.length===0) addBotRow();
@@ -2143,7 +2184,16 @@ function loadQuoteIntoForm(q){
     });
     if(banFreeItems.length===0) addBanFreeRow();
     if(banAddonItems.length===0) addBanAddonRow();
-    if(q.svcMode){ set('svc-mode',q.svcMode); onSvcModeChange(); }
+    if(q.svcMode){
+      set('svc-mode',q.svcMode); onSvcModeChange();
+      // 還原調酒師服務費金額（優先用存下的原始輸入，舊資料沒存則用合計金額回填）
+      if(q.svcAmt1!=null || q.svcAmt2!=null || q.svcQty!=null){
+        set('svc-amt1', q.svcAmt1||''); set('svc-amt2', q.svcAmt2||''); set('svc-qty', (q.svcQty!=null&&q.svcQty!=='')?q.svcQty:1);
+      } else if(q.svcAmount){
+        set('svc-amt1', q.svcAmount); set('svc-qty', 1);
+      }
+      calcBan();
+    }
     renderFlavors('g1'); renderFlavors('g2');
   }
   // payment
@@ -2179,6 +2229,19 @@ function newQuote(){
   editingQuoteNo=null;
   resetAll(true);
   gotoPage('new');
+  autoNextSerial();   // 依今天已用單號自動帶下一個流水號，避免同一天重複
+}
+/* 依今天已存在的單號，把流水號帶到下一個未使用值（best-effort，失敗就維持預設 1） */
+async function autoNextSerial(){
+  if(!AUTH_TOKEN) return;
+  try{
+    const today=todayStr().replace(/-/g,'');
+    const lst=await apiCall({ action:'getQuotes', token:AUTH_TOKEN, filters:{} });
+    if(!lst.ok || !Array.isArray(lst.quotes)) return;
+    let mx=0;
+    lst.quotes.forEach(x=>{ const m=String(x.quoteNo||'').match(new RegExp('^'+today+'-(\\d+)$')); if(m){ const n=parseInt(m[1],10); if(n>mx) mx=n; } });
+    if(mx>0 && !editingQuoteNo){ const s=document.getElementById('f-ser'); if(s){ s.value=mx+1; upNo(); } }
+  }catch(_){}
 }
 
 /* ---- 組合另存新檔預設檔名 ---- */
@@ -2201,6 +2264,7 @@ function buildExportFilename(){
 function exportPDF(){
   const pages = buildStdPagesHtml();
   const w=window.open('','_blank');
+  if(!w){ toast('瀏覽器擋住了新視窗，請允許本站彈出視窗後再匯出','err'); return; }
   const fname=buildExportFilename();
   w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${fname}</title>
     <style>
@@ -2543,6 +2607,7 @@ function exportCustomPDF(){
   const pages = buildCustomPagesHtml();
   const fname = buildCustomExportFilename();
   const w = window.open('', '_blank');
+  if(!w){ toast('瀏覽器擋住了新視窗，請允許本站彈出視窗後再匯出','err'); return; }
   w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${fname}</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -2621,7 +2686,7 @@ let ORD_FILTER = 'all';
 let _rulesBusy = false;
 
 function fmtD(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-function money(n){ return '$'+Math.round(parseFloat(n)||0).toLocaleString(); }
+function money(n){ const v=Math.round(parseFloat(n)||0); return v<0 ? '-$'+Math.abs(v).toLocaleString() : '$'+v.toLocaleString(); }
 function parseJsonSafe(s, fb){ try{ const v=JSON.parse(s); return v==null?fb:v; }catch(e){ return fb; } }
 function daysBetween(dstr){ // 今天到 dstr 的天數（負=已過）
   if(!dstr) return null;
@@ -2984,16 +3049,17 @@ function openOrdEdit(no){
 function closeOrdEdit(){ document.getElementById('oe-overlay').style.display='none'; ORD_EDITING=null; }
 async function saveOrdEdit(){
   if(!ORD_EDITING) return;
+  if(_busy.ordEdit) return; _busy.ordEdit=true;
   const fields={ status:document.getElementById('oe-status').value };
   ['deposit_amt','deposit_date','ship_date_est','ship_date_actual','invoice_no','invoice_date','final_amt','final_date','track_note']
-    .forEach(k=>{ fields[k]=document.getElementById('oe-'+(k==='track_note'?'track_note':k)).value; });
-  fields.track_note=document.getElementById('oe-track_note').value;
+    .forEach(k=>{ fields[k]=document.getElementById('oe-'+k).value; });
   try{
     const d=await apiCall({ action:'updateOrderStatus', token:AUTH_TOKEN, quote_no:ORD_EDITING, fields });
     if(!d.ok){ toast(d.error||'儲存失敗','err'); return; }
     toast('進度已儲存','ok'); closeOrdEdit();
     await loadOrders(true);
   }catch(e){ toast(e.message||'儲存失敗','err'); }
+  finally{ _busy.ordEdit=false; }
 }
 
 /* ---- 複製舊單（新單號，避免沿用舊號重複建單）---- */
@@ -3009,10 +3075,20 @@ async function copyOrder(no, src){
     editingQuoteNo=null;                       // 關鍵：複製＝新單，不沿用舊單號
     const today=fmtD(new Date());
     document.getElementById('f-dt').value=today;
+    // 找出今天已用過的最大流水號 +1，避免複製出來的單號與現有單撞號
+    let nextSer=1;
+    try{
+      const base=today.replace(/-/g,'');
+      const lst=await apiCall({ action:'getQuotes', token:AUTH_TOKEN, filters:{} });
+      if(lst.ok && Array.isArray(lst.quotes)){
+        lst.quotes.forEach(x=>{ const m=String(x.quoteNo||'').match(new RegExp('^'+base+'-(\\d+)$')); if(m){ const n=parseInt(m[1],10); if(n>=nextSer) nextSer=n+1; } });
+      }
+    }catch(_){}
+    document.getElementById('f-ser').value=nextSer;
     if(typeof onDate==='function') onDate();
-    if(typeof upNo==='function') upNo();       // 依今天日期重新產生單號
+    if(typeof upNo==='function') upNo();       // 依今天日期＋新流水號產生單號
     gotoPage('new');
-    toast('已複製 '+no+' 為新單（單號已重編）','ok');
+    toast('已複製 '+no+' 為新單，單號：'+document.getElementById('f-no').value+'（存檔前可再調整流水號）','ok');
   }catch(e){ toast(e.message||'複製失敗','err'); }
 }
 
@@ -3111,9 +3187,10 @@ function collectCustomQuote(){
   };
 }
 async function saveCustomToBackend(){
+  if(_busy.customSave) return; _busy.customSave=true;
   calcCustom();
   const q=collectCustomQuote();
-  if(!q.client && !(parseJsonSafe(q.items_json,[]).length)){ toast('請先填寫內容再儲存','err'); return; }
+  if(!q.client && !(parseJsonSafe(q.items_json,[]).length)){ toast('請先填寫內容再儲存','err'); _busy.customSave=false; return; }
   try{
     const d=await apiCall({ action:'saveCustomQuote', token:AUTH_TOKEN, quote:q });
     if(!d.ok){ toast(d.error||'儲存失敗','err'); return; }
@@ -3122,6 +3199,7 @@ async function saveCustomToBackend(){
     toast('已儲存到後台：'+(saved.quote_no||''),'ok');
     loadMyCustomQuotes();
   }catch(e){ toast(e.message||'儲存失敗','err'); }
+  finally{ _busy.customSave=false; }
 }
 async function loadMyCustomQuotes(){
   const box=document.getElementById('cq-list'); if(!box) return;
@@ -3302,11 +3380,18 @@ function renderTodoList(){
 }
 async function toggleTodoDone(id){
   const it=CAL_ITEMS.find(x=>String(x.item_id)===String(id)); if(!it) return;
+  const prevDone=it.done, prevDate=it.done_date;   // 記住原狀態，失敗時可回復
   it.done = it.done==='Y'?'N':'Y';
   it.done_date = it.done==='Y'?fmtD(new Date()):'';
   renderCalendar();
-  try{ await apiCall({ action:'saveCalendarItem', token:AUTH_TOKEN, item:it }); }
-  catch(e){ toast('同步失敗：'+e.message,'err'); }
+  try{
+    const d=await apiCall({ action:'saveCalendarItem', token:AUTH_TOKEN, item:it });
+    if(!d.ok) throw new Error(d.error||'儲存失敗');
+  }
+  catch(e){
+    it.done=prevDone; it.done_date=prevDate; renderCalendar();   // 回復畫面，避免以為打勾了其實沒存到
+    toast('同步失敗，已還原：'+e.message,'err');
+  }
 }
 /* 新增／編輯事項 */
 let CAL_EDIT_ID=null;
@@ -3339,6 +3424,7 @@ function openCalEdit(id){
   const r=parseJsonSafe(it.recur_json,{});
   document.getElementById('ce-freq').value=r.freq||'weekly';
   document.getElementById('ce-weekday').value=String(r.weekday??1);
+  document.getElementById('ce-mon').value=String(r.month||1);
   document.getElementById('ce-mday').value=String(r.day||5);
   onCalKindChange();
   document.getElementById('ce-overlay').style.display='flex';
@@ -3350,19 +3436,22 @@ function onCalKindChange(){
   document.getElementById('ce-pri-wrap').style.display = k==='todo'?'inline-flex':'none';
   const f=document.getElementById('ce-freq').value;
   document.getElementById('ce-weekday').style.display = f==='weekly'?'inline-block':'none';
+  document.getElementById('ce-mon').style.display = f==='yearly'?'inline-block':'none';   // 每年才顯示月份
   document.getElementById('ce-mday').style.display = f!=='weekly'?'inline-block':'none';
 }
 function closeCalEdit(){ document.getElementById('ce-overlay').style.display='none'; CAL_EDIT_ID=null; }
 async function saveCalItem(){
+  if(_busy.calSave) return;
   const k=document.getElementById('ce-kind').value;
   const title=document.getElementById('ce-title').value.trim();
   if(!title){ toast('請輸入標題','err'); return; }
+  _busy.calSave=true;
   let recur='';
   if(k==='recur'){
     const f=document.getElementById('ce-freq').value;
     recur = f==='weekly' ? JSON.stringify({freq:'weekly',weekday:parseInt(document.getElementById('ce-weekday').value)})
           : f==='monthly' ? JSON.stringify({freq:'monthly',day:parseInt(document.getElementById('ce-mday').value)||1})
-          : JSON.stringify({freq:'yearly',month:new Date(document.getElementById('ce-date').value||fmtD(new Date())).getMonth()+1,day:parseInt(document.getElementById('ce-mday').value)||1});
+          : JSON.stringify({freq:'yearly',month:parseInt(document.getElementById('ce-mon').value)||1,day:parseInt(document.getElementById('ce-mday').value)||1});
   }
   const existing = CAL_EDIT_ID ? CAL_ITEMS.find(x=>String(x.item_id)===String(CAL_EDIT_ID)) : null;
   const item={
@@ -3379,6 +3468,7 @@ async function saveCalItem(){
     closeCalEdit(); toast('已儲存','ok');
     await loadCalendar();
   }catch(e){ toast(e.message||'儲存失敗','err'); }
+  finally{ _busy.calSave=false; }
 }
 async function deleteCalItem(){
   if(!CAL_EDIT_ID) return;
