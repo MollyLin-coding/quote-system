@@ -297,6 +297,49 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
 .todo-row .ttl{cursor:pointer}
 .prodinfo{font-size:11px;color:#6B6B63;margin-top:5px;line-height:1.6}
 .moq-warn{font-size:11.5px;margin-top:8px;padding:6px 11px;border-radius:6px;background:#FBF1E9;color:#B5541F;border:1px solid #EBD2BC}
+
+/* ===== 手機版面 RWD（2026-07-21）===== */
+.mob-menu-btn{display:none}
+.sb-backdrop{display:none}
+.tbl-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+@media (max-width:860px){
+  .mob-menu-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:8px;border:1px solid var(--bd);background:var(--wh);color:var(--ink);cursor:pointer;font-size:18px;flex-shrink:0}
+  .shell{display:block}
+  .sb{position:fixed;top:0;left:0;height:100vh;width:250px;max-width:82vw;transform:translateX(-100%);transition:transform .25s ease;z-index:410;overflow-y:auto}
+  .sb.open{transform:translateX(0);box-shadow:0 0 40px rgba(0,0,0,.35)}
+  .sb-backdrop.open{display:block;position:fixed;inset:0;background:rgba(20,18,10,.5);z-index:400}
+  .main{width:100%}
+  .tb{padding:12px 14px;flex-wrap:wrap;gap:10px;position:sticky;top:0}
+  .tb-left{display:flex;align-items:center;gap:10px;width:100%}
+  .tb-left h1{font-size:15px}
+  .tb-left p{display:none}
+  .tb-right{width:100%;flex-wrap:wrap;gap:6px}
+  .tb-right .btn{flex:1 1 auto;justify-content:center;padding:9px 8px;font-size:11.5px;white-space:nowrap}
+  .content,.rec-wrap{padding:14px;max-width:100%}
+  .fg2,.fg3,.fg4{grid-template-columns:1fr}
+  .tsw{grid-template-columns:1fr}
+  .rpt-stats{grid-template-columns:1fr 1fr}
+  .ig-head{flex-wrap:wrap;row-gap:8px}
+  .crow-top{min-width:520px}
+  .c-hdr-row{min-width:520px}
+  #ith-bot{min-width:480px}
+  #banquet-addon-card .ith{min-width:420px}
+  .v2box{max-width:calc(100vw - 20px)!important;width:calc(100vw - 20px);padding:16px 18px}
+  .v2ov{padding:14px 10px}
+  .pdoc{max-width:100%;overflow:visible}
+  .pov{padding:10px 4px}
+  #pcon{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:0 0 4px 4px}
+  .phead{padding:11px 14px;flex-wrap:wrap;row-gap:8px}
+  .phbtns{flex-wrap:wrap;gap:6px}
+  .cal{gap:3px}
+  .cd{min-height:44px;padding:3px 3px;font-size:9px}
+  .calhead{gap:8px}
+  .rpt-head button.rec-act-btn{float:none!important;margin-top:8px;display:inline-block}
+  .login-box{padding:30px 22px}
+}
+@media (max-width:420px){
+  .rpt-stats{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
@@ -327,7 +370,8 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
 
 <div class="shell">
 
-<div class="sb">
+<div class="sb-backdrop" id="sb-backdrop" onclick="closeMobileNav()"></div>
+<div class="sb" id="sb">
   <div class="sb-top">
     <div class="logo-mark">
       <div class="logo-vline"></div>
@@ -358,6 +402,7 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
 <div class="main">
   <div class="tb">
     <div class="tb-left">
+      <button class="mob-menu-btn" onclick="openMobileNav()" aria-label="選單"><i class="ti ti-menu-2"></i></button>
       <h1 id="tb-title">報價單製作</h1>
       <p id="tb-sub">填寫後可即時預覽，並匯出 PDF / Word</p>
     </div>
@@ -481,11 +526,13 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
         <div class="ctg" id="ctg-ded" onclick="toggleCol('ded')"><span class="dot"></span>前標費扣除</div>
         <div class="ctg" id="ctg-logo" onclick="toggleCol('logo')"><span class="dot"></span>LOGO印刷費</div>
       </div>
-      <div id="ith-bot" class="ith" style="grid-template-columns:2fr 68px 80px 60px 88px 26px">
-        <span>品名</span><span id="th-lot" style="display:none">出貨批次</span><span>容量ml</span><span>單價</span><span id="th-ded" style="display:none">前標費扣除</span><span id="th-logo" style="display:none">LOGO印刷</span><span>瓶數</span><span style="text-align:right">小計</span><span></span>
+      <div class="tbl-scroll">
+        <div id="ith-bot" class="ith" style="grid-template-columns:2fr 68px 80px 60px 88px 26px">
+          <span>品名</span><span id="th-lot" style="display:none">出貨批次</span><span>容量ml</span><span>單價</span><span id="th-ded" style="display:none">前標費扣除</span><span id="th-logo" style="display:none">LOGO印刷</span><span>瓶數</span><span style="text-align:right">小計</span><span></span>
+        </div>
+        <datalist id="vol-options"><option value="100"><option value="500"><option value="4000"></datalist>
+        <div id="itbody-bot"></div>
       </div>
-      <datalist id="vol-options"><option value="100"><option value="500"><option value="4000"></datalist>
-      <div id="itbody-bot"></div>
       <button class="add-row" onclick="addBotRow()"><i class="ti ti-plus"></i> 新增品項</button>
     </div>
 
@@ -567,10 +614,12 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
     <!-- ===== BANQUET OPTIONAL ADDONS ===== -->
     <div class="card" id="banquet-addon-card" style="display:none">
       <div class="ch"><i class="ti ti-plus" ></i><span>加購項目 <span style="font-weight:400;font-size:11px">(選填)</span></span></div>
-      <div class="ith" style="grid-template-columns:3fr 60px 56px 86px 86px 26px">
-        <span>項目</span><span>數量</span><span>單位</span><span>單價</span><span style="text-align:right">小計</span><span></span>
+      <div class="tbl-scroll">
+        <div class="ith" style="grid-template-columns:3fr 60px 56px 86px 86px 26px">
+          <span>項目</span><span>數量</span><span>單位</span><span>單價</span><span style="text-align:right">小計</span><span></span>
+        </div>
+        <div id="ban-addon-body"></div>
       </div>
-      <div id="ban-addon-body"></div>
       <button class="add-row" onclick="addBanAddonRow()"><i class="ti ti-plus"></i> 新增加購項目</button>
     </div>
 
@@ -760,15 +809,17 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
     <div class="card" style="margin-bottom:16px">
       <div class="ch"><i class="ti ti-table"></i><span>品項表格</span><span class="ch-opt">欄位標題可自行修改・支援手動小計 / 免費劃線 / 備註</span></div>
       <div class="cb">
-        <div class="fg" style="grid-template-columns:2fr 70px 70px 90px 90px 26px;margin-bottom:10px">
-          <input class="fi" id="c-h-name" value="項目" style="font-weight:600">
-          <input class="fi" id="c-h-qty" value="數量" style="font-weight:600;text-align:center">
-          <input class="fi" id="c-h-unit" value="單位" style="font-weight:600;text-align:center">
-          <input class="fi" id="c-h-price" value="單價" style="font-weight:600;text-align:right">
-          <input class="fi" id="c-h-sub" value="小計" style="font-weight:600;text-align:right">
-          <div></div>
+        <div class="tbl-scroll">
+          <div class="fg c-hdr-row" style="grid-template-columns:2fr 70px 70px 90px 90px 26px;margin-bottom:10px">
+            <input class="fi" id="c-h-name" value="項目" style="font-weight:600">
+            <input class="fi" id="c-h-qty" value="數量" style="font-weight:600;text-align:center">
+            <input class="fi" id="c-h-unit" value="單位" style="font-weight:600;text-align:center">
+            <input class="fi" id="c-h-price" value="單價" style="font-weight:600;text-align:right">
+            <input class="fi" id="c-h-sub" value="小計" style="font-weight:600;text-align:right">
+            <div></div>
+          </div>
+          <div id="c-rows"></div>
         </div>
-        <div id="c-rows"></div>
         <button class="btn btn-g" style="margin-top:10px" onclick="addCustomRow()"><i class="ti ti-plus"></i>新增項目</button>
       </div>
     </div>
@@ -797,6 +848,7 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
         </select>
         <button class="btn btn-dk" onclick="loadRecords()"><i class="ti ti-search"></i>查詢</button>
       </div>
+      <div class="tbl-scroll">
       <table class="rec-table">
         <thead><tr>
           <th>報價單號</th><th>客戶</th><th>類型</th><th>報價日期</th><th>總計</th><th>操作</th>
@@ -805,16 +857,19 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
           <tr><td colspan="6" class="rec-empty">載入中…</td></tr>
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 
   <div class="page" id="page-orders">
     <div class="rec-wrap">
       <div id="ord-filters" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+      <div class="tbl-scroll">
       <table class="rec-table">
         <thead><tr><th>單號 / 客戶</th><th>進度</th><th style="text-align:right">總計</th><th style="text-align:center">出貨日</th><th>提醒</th><th>操作</th></tr></thead>
         <tbody id="ord-body"><tr><td colspan="6" class="rec-empty">載入中…</td></tr></tbody>
       </table>
+      </div>
       <div class="card" style="margin-top:18px"><div class="cb"><div id="rpt-box"></div></div></div>
     </div>
   </div>
@@ -1724,6 +1779,7 @@ function openPreview(){
   previewKind = 'std';
   document.getElementById('pv-btn-secondary').innerHTML = '<i class="ti ti-file-text"></i>正式文件';
   document.getElementById('pov').style.display='block';
+  closeMobileNav();
 }
 
 function closePreview(){document.getElementById('pov').style.display='none';}
@@ -1826,6 +1882,17 @@ function gotoPage(p){
     if(customItems.length===0){ addCustomRow(); }
     calcCustom();
   }
+  closeMobileNav();
+}
+
+/* ---- 手機版側邊選單開關 ---- */
+function openMobileNav(){
+  document.getElementById('sb').classList.add('open');
+  document.getElementById('sb-backdrop').classList.add('open');
+}
+function closeMobileNav(){
+  document.getElementById('sb').classList.remove('open');
+  document.getElementById('sb-backdrop').classList.remove('open');
 }
 
 /* ---- 收集表單資料成 quote 物件 ---- */
@@ -3000,9 +3067,9 @@ function renderReport(){
       <div class="rpt-stat"><div class="k">成交金額</div><div class="v" style="color:#A6824A">${money(sum)}</div></div>
       <div class="rpt-stat"><div class="k">本月報價</div><div class="v">${inMonth.length} 筆</div></div>
     </div>
-    ${rows.length?`<table class="rec-table" style="margin-top:10px"><thead><tr><th>客戶</th><th style="text-align:center">筆數</th><th style="text-align:right">金額</th></tr></thead><tbody>
+    ${rows.length?`<div class="tbl-scroll"><table class="rec-table" style="margin-top:10px"><thead><tr><th>客戶</th><th style="text-align:center">筆數</th><th style="text-align:right">金額</th></tr></thead><tbody>
       ${rows.map(([k,v])=>`<tr><td>${escHtml(k)}</td><td style="text-align:center">${v.n}</td><td style="text-align:right">${money(v.a)}</td></tr>`).join('')}
-    </tbody></table>`:'<div class="rec-empty">本月尚無成交（狀態需為已收訂金以上才列入）</div>'}
+    </tbody></table></div>`:'<div class="rec-empty">本月尚無成交（狀態需為已收訂金以上才列入）</div>'}
     <div style="font-size:11px;color:#A8A69C;margin-top:8px">※ 以報價日期歸屬月份；狀態「已收訂金」（含）之後視為成交。</div>`;
 }
 function exportReport(){
@@ -3065,7 +3132,7 @@ async function loadMyCustomQuotes(){
     const qs=(d.quotes||[]).sort((a,b)=>(b.updated_at||'').localeCompare(a.updated_at||''));
     window._CQ_CACHE=qs;
     if(!qs.length){ box.innerHTML='<div class="rec-empty">尚無已備份的自訂單</div>'; return; }
-    box.innerHTML=`<table class="rec-table"><thead><tr><th>單號 / 案名</th><th>客戶</th><th style="text-align:right">總計</th><th>更新</th><th>操作</th></tr></thead><tbody>`+
+    box.innerHTML=`<div class="tbl-scroll"><table class="rec-table"><thead><tr><th>單號 / 案名</th><th>客戶</th><th style="text-align:right">總計</th><th>更新</th><th>操作</th></tr></thead><tbody>`+
       qs.map(q=>{
         const tot=parseJsonSafe(q.totals_json,{}).total||0;
         return `<tr><td><b>${escHtml(q.quote_no||'—')}</b><br><span style="color:#6B6B63;font-size:11.5px">${escHtml(q.tag||'')}</span></td>
@@ -3073,7 +3140,7 @@ async function loadMyCustomQuotes(){
         <td>${(q.updated_at||'').slice(0,10)}</td>
         <td class="rec-actions"><button class="rec-act-btn" onclick="loadCustomQuoteByNo('${escHtml(q.quote_no)}',false)">載入編輯</button>
         <button class="rec-act-btn" onclick="loadCustomQuoteByNo('${escHtml(q.quote_no)}',true)">複製成新單</button></td></tr>`;
-      }).join('')+'</tbody></table>';
+      }).join('')+'</tbody></table></div>';
   }catch(e){ box.innerHTML=`<div class="rec-empty">${e.message||'載入失敗'}</div>`; }
 }
 async function loadCustomQuoteByNo(no, asCopy){
