@@ -832,6 +832,25 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
           </div>
           <div class="fl"><label>稅率 (%)</label><input class="fi" type="number" id="c-taxrate" value="5" min="0" max="50" oninput="calcCustom()"></div>
         </div>
+        <div class="fg fg2" style="margin-top:14px">
+          <div class="fl"><label>客戶統編 <span class="opt">選填</span></label><input class="fi" id="c-tax" placeholder="請輸入統一編號"></div>
+          <div class="fl"><label>發票抬頭 <span class="opt">選填，開發票用的正式公司名</span></label><input class="fi" id="c-inv" placeholder="與客戶名稱不同時填寫"></div>
+          <div class="fl"><label>聯絡電話 <span class="opt">選填</span></label><input class="fi" id="c-ph" placeholder="請輸入聯絡電話"></div>
+          <div class="fl" style="grid-column:span 2"><label>聯絡地址（發票／帳單地址） <span class="opt">選填</span></label><input class="fi" id="c-ad" placeholder="請輸入聯絡地址"></div>
+        </div>
+        <div style="margin-top:14px">
+          <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--sub);cursor:pointer">
+            <input type="checkbox" id="c-shipsame" checked onchange="toggleShipSame('c')" style="width:15px;height:15px">
+            出貨地址與上方聯絡地址相同
+          </label>
+          <div id="c-ship-group" style="display:none;margin-top:10px">
+            <div class="fg fg2">
+              <div class="fl"><label>出貨收件人 <span class="opt">選填</span></label><input class="fi" id="c-shipcon" placeholder="請輸入收件人姓名"></div>
+              <div class="fl"><label>收件人電話 <span class="opt">選填</span></label><input class="fi" id="c-shipph" placeholder="請輸入收件人電話"></div>
+              <div class="fl" style="grid-column:span 2"><label>出貨地址 <span class="opt">選填</span></label><input class="fi" id="c-shipad" placeholder="請輸入實際出貨地址"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1026,6 +1045,13 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
     <div class="fl"><label>類型</label><select class="fi" id="ce-kind" onchange="onCalKindChange()">
       <option value="memo">📌 指定日期備忘</option><option value="todo">☑ 待辦（不指定日期）</option><option value="recur">🔁 重複行程</option></select></div>
     <div class="fl" id="ce-date-wrap" style="margin-top:8px"><label>日期</label><input class="fi" type="date" id="ce-date"></div>
+    <div id="ce-time-wrap" style="margin-top:8px">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:#6B6B63;cursor:pointer;margin-bottom:6px">
+        <input type="checkbox" id="ce-allday" onchange="onAllDayChange()" style="width:14px;height:14px">
+        全天（不指定時間）
+      </label>
+      <input class="fi" type="time" id="ce-time" style="max-width:160px">
+    </div>
     <div id="ce-recur-wrap" style="margin-top:8px;display:none">
       <label style="font-size:11px;color:#6B6B63;display:block;margin-bottom:4px">重複方式</label>
       <div style="display:flex;gap:8px;align-items:center">
@@ -1044,8 +1070,13 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
     <div class="fl" style="margin-top:8px"><label>標題</label><input class="fi" id="ce-title" placeholder="要做什麼？"></div>
     <div class="fl" style="margin-top:8px"><label>詳細內容（選填）</label><textarea class="fi" id="ce-detail" rows="2" style="resize:vertical"></textarea></div>
     <div style="display:flex;gap:14px;align-items:flex-end;margin-top:8px">
-      <div class="fl" style="flex:1"><label>分類</label><select class="fi" id="ce-category">
-        <option>工作</option><option>採購</option><option>私人</option><option>其他</option></select></div>
+      <div class="fl" style="flex:1"><label>分類（依分類自動上色）</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="fi" id="ce-category" onchange="onCalCategoryChange()" style="flex:1">
+            <option>工作</option><option>採購</option><option>私人</option><option>其他</option></select>
+          <span id="ce-cat-dot" style="display:inline-block;width:16px;height:16px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,.1)"></span>
+        </div>
+      </div>
       <label id="ce-pri-wrap" style="display:none;align-items:center;gap:6px;font-size:12.5px;padding-bottom:9px"><input type="checkbox" id="ce-priority">標記優先</label>
     </div>
     <div style="display:flex;gap:10px;margin-top:14px">
@@ -2492,9 +2523,10 @@ function resetCustom(skipConfirm){
   }
   document.getElementById('c-rows').innerHTML = '';
   customItems = [];
-  ['c-tag','c-cli','c-con','c-no','c-dt','c-ex'].forEach(id=>{
+  ['c-tag','c-cli','c-con','c-no','c-dt','c-ex','c-tax','c-inv','c-ph','c-ad','c-shipcon','c-shipph','c-shipad'].forEach(id=>{
     const el = document.getElementById(id); if(el) el.value = '';
   });
+  { const sc=document.getElementById('c-shipsame'); if(sc) sc.checked=true; toggleShipSame('c'); }
   document.getElementById('c-taxmode').value = 'inc';
   document.getElementById('c-taxrate').value = '5';
   const defaults = {'c-h-name':'項目','c-h-qty':'數量','c-h-unit':'單位','c-h-price':'單價','c-h-sub':'小計'};
@@ -2560,6 +2592,10 @@ function buildCustomDocParts(){
   const tag = document.getElementById('c-tag').value.trim();
   const cli = document.getElementById('c-cli').value.trim();
   const con = document.getElementById('c-con').value.trim();
+  const tax = document.getElementById('c-tax')?document.getElementById('c-tax').value.trim():'';
+  const inv = document.getElementById('c-inv')?document.getElementById('c-inv').value.trim():'';
+  const ph = document.getElementById('c-ph')?document.getElementById('c-ph').value.trim():'';
+  const ad = document.getElementById('c-ad')?document.getElementById('c-ad').value.trim():'';
   const no = document.getElementById('c-no').value.trim() || '—';
   const dt = document.getElementById('c-dt').value || '—';
   const ex = document.getElementById('c-ex').value || '—';
@@ -2606,8 +2642,26 @@ function buildCustomDocParts(){
   const lbSub = '合計（未稅）', lbTax = '營業稅';   // 發票格式，含稅／未稅模式顯示一致
 
   let cliRows = '';
-  if(cli) cliRows += `<div style="display:flex;gap:8px;font-size:12.5px;margin-bottom:7px;line-height:1.6"><span style="color:${GREY2};min-width:62px">客戶名稱</span><span style="color:${INK}">${escHtml(cli)}</span></div>`;
-  if(con) cliRows += `<div style="display:flex;gap:8px;font-size:12.5px;margin-bottom:7px;line-height:1.6"><span style="color:${GREY2};min-width:62px">聯絡人</span><span style="color:${INK}">${escHtml(con)}</span></div>`;
+  const cliFields=[[cli,'客戶名稱'],[con,'聯絡人'],[ph,'聯絡電話'],[ad,'地址'],[inv,'發票抬頭'],[tax,'統一編號']];
+  cliFields.forEach(([v,l])=>{
+    if(v) cliRows += `<div style="display:flex;gap:8px;font-size:12.5px;margin-bottom:7px;line-height:1.6"><span style="color:${GREY2};min-width:62px">${l}</span><span style="color:${INK}">${escHtml(v)}</span></div>`;
+  });
+  /* 出貨資訊：只在「與聯絡地址不同」且有填任一欄時才另外印出 */
+  const shipSame = document.getElementById('c-shipsame')?document.getElementById('c-shipsame').checked:true;
+  const shipCon = document.getElementById('c-shipcon')?document.getElementById('c-shipcon').value.trim():'';
+  const shipPh = document.getElementById('c-shipph')?document.getElementById('c-shipph').value.trim():'';
+  const shipAd = document.getElementById('c-shipad')?document.getElementById('c-shipad').value.trim():'';
+  let shipRows = '';
+  if(!shipSame && (shipCon||shipPh||shipAd)){
+    const shipFields=[[shipCon,'出貨收件人'],[shipPh,'收件人電話'],[shipAd,'出貨地址']];
+    shipFields.forEach(([v,l])=>{
+      if(v) shipRows += `<div style="display:flex;gap:8px;font-size:12.5px;margin-bottom:7px;line-height:1.6"><span style="color:${GREY2};min-width:62px">${l}</span><span style="color:${INK}">${escHtml(v)}</span></div>`;
+    });
+  }
+  const shipBlock = shipRows ? `<div style="margin-top:6px;padding-top:10px;border-top:1px dashed ${BORDER}">
+    <div style="font-size:10px;color:${GOLD};font-weight:600;letter-spacing:1px;margin-bottom:6px">出貨資訊（與發票／聯絡地址不同）</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px">${shipRows}</div>
+  </div>` : '';
 
   /* 統一頁首（每頁相同） */
   const header = `
@@ -2626,7 +2680,7 @@ function buildCustomDocParts(){
     </div>
   </div>`;
 
-  const client = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;margin-bottom:16px">${cliRows}</div>`;
+  const client = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;margin-bottom:4px">${cliRows}</div>${shipBlock}`;
   const contNote = `<div style="font-size:10.5px;color:${GREY2};letter-spacing:.5px;margin:0 0 4px">品項明細（承前頁）</div>`;
 
   const colgroup = `<colgroup><col><col style="width:64px"><col style="width:64px"><col style="width:92px"><col style="width:118px"></colgroup>`;
@@ -2837,6 +2891,13 @@ let CAL_VIEW = 'month';           // month | week | list
 let CAL_FILTER = 'all';           // all | order | memo | recur
 let CAL_Y = new Date().getFullYear(), CAL_M = new Date().getMonth(); // 0-based
 let ORD_FILTER = 'all';
+/* 行事曆分類配色（依「分類」自動上色，不用另外挑顏色） */
+const CAL_CATEGORY_COLORS = {
+  '工作': {bg:'#EAF0FF', fg:'#3457C7', bd:'#C7D6F5'},
+  '採購': {bg:'#F7EFDD', fg:'#8A6A2E', bd:'#E9D9B5'},
+  '私人': {bg:'#F1EAF9', fg:'#6B3FA0', bd:'#DDCBEF'},
+  '其他': {bg:'#EDEDED', fg:'#5A5A5A', bd:'#D6D6D6'}
+};
 let _rulesBusy = false;
 
 function fmtD(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -3071,8 +3132,21 @@ function onSelectCompanyCustom(){
   const row=document.getElementById('qfc-row');
   if(!SELECTED_COMPANY_C){ row.style.display='none'; return; }
   const c=SELECTED_COMPANY_C;
+  // 換公司時先清空「快速帶入」的欄位，避免上一家公司留下的舊值跟這家公司的新值混在一起
+  ['c-tax','c-ph','c-ad','c-con','c-shipcon','c-shipph','c-shipad'].forEach(id=>{
+    const e=document.getElementById(id); if(e) e.value='';
+  });
   const set=(id,v)=>{ const e=document.getElementById(id); if(e && v!=null && v!=='') e.value=v; };
   set('c-cli',(c.brand||'').trim()||c.name); set('c-con',c.contact);
+  set('c-inv', c.name); set('c-tax', c.tax_id); set('c-ph', c.phone); set('c-ad', c.address);
+  {
+    const sc=document.getElementById('c-shipsame');
+    if((c.ship_address||'').trim()||(c.ship_contact||'').trim()||(c.ship_phone||'').trim()){
+      set('c-shipcon', c.ship_contact); set('c-shipph', c.ship_phone); set('c-shipad', c.ship_address);
+      if(sc) sc.checked=false;
+    } else if(sc){ sc.checked=true; }
+    toggleShipSame('c');
+  }
   if(c.default_tax_mode==='inc'||c.default_tax_mode==='exc') document.getElementById('c-taxmode').value=c.default_tax_mode;
   row.style.display='block';
   fillProductSelect('qfc-product', c.company_id);
@@ -3345,7 +3419,13 @@ function collectCustomQuote(){
     quote_date:v('c-dt'), expiry:v('c-ex'), tax_mode:v('c-taxmode'), tax_rate:v('c-taxrate'),
     headers_json:JSON.stringify({ name:v('c-h-name'), qty:v('c-h-qty'), unit:v('c-h-unit'), price:v('c-h-price'), sub:v('c-h-sub') }),
     items_json:JSON.stringify(items),
-    totals_json:JSON.stringify({ sub:pm(document.getElementById('c-t-sub').textContent), tax:pm(document.getElementById('c-t-tax').textContent), total:pm(document.getElementById('c-t-tot').textContent) })
+    totals_json:JSON.stringify({ sub:pm(document.getElementById('c-t-sub').textContent), tax:pm(document.getElementById('c-t-tax').textContent), total:pm(document.getElementById('c-t-tot').textContent) }),
+    // 客戶統編/發票抬頭/電話/地址/出貨資訊：包成一個 JSON 欄位存放，後端只要新增這一欄即可，不用逐一新增欄位
+    client_json:JSON.stringify({
+      tax_id:v('c-tax').trim(), invoice_title:v('c-inv').trim(), phone:v('c-ph').trim(), address:v('c-ad').trim(),
+      ship_same:document.getElementById('c-shipsame')?document.getElementById('c-shipsame').checked:true,
+      ship_contact:v('c-shipcon').trim(), ship_phone:v('c-shipph').trim(), ship_address:v('c-shipad').trim()
+    })
   };
 }
 async function saveCustomToBackend(){
@@ -3396,6 +3476,11 @@ async function loadCustomQuoteByNo(no, asCopy){
   set('c-taxmode',q.tax_mode||'inc'); set('c-taxrate',q.tax_rate||5);
   const h=parseJsonSafe(q.headers_json,{});
   set('c-h-name',h.name||''); set('c-h-qty',h.qty||''); set('c-h-unit',h.unit||''); set('c-h-price',h.price||''); set('c-h-sub',h.sub||'');
+  // 客戶統編/發票抬頭/電話/地址/出貨資訊（舊單若無 client_json，欄位維持空白，不影響載入）
+  const ci=parseJsonSafe(q.client_json,{});
+  set('c-tax',ci.tax_id||''); set('c-inv',ci.invoice_title||''); set('c-ph',ci.phone||''); set('c-ad',ci.address||'');
+  set('c-shipcon',ci.ship_contact||''); set('c-shipph',ci.ship_phone||''); set('c-shipad',ci.ship_address||'');
+  { const sc=document.getElementById('c-shipsame'); if(sc) sc.checked=(ci.ship_same!==false); toggleShipSame('c'); }
   if(asCopy){ set('c-no',''); set('c-dt',fmtD(new Date())); set('c-ex',''); }
   else { set('c-no',q.quote_no); set('c-dt',q.quote_date); set('c-ex',q.expiry); }
   document.getElementById('c-rows').innerHTML=''; customItems=[];
@@ -3434,17 +3519,20 @@ function eventsOn(dstr){
     });
   }
   CAL_ITEMS.forEach(it=>{
+    const timeTxt = (it.all_day!=='Y' && it.time) ? it.time+' ' : '';
     if(it.kind==='memo' && (CAL_FILTER==='all'||CAL_FILTER==='memo')){
-      if(it.date===dstr) evs.push({t:'memo', txt:'📌 '+it.title, item:it, done:it.done==='Y'});
+      if(it.date===dstr) evs.push({t:'memo', txt:'📌 '+timeTxt+it.title, item:it, done:it.done==='Y', time:timeTxt?it.time:''});
     }
     if(it.kind==='recur' && (CAL_FILTER==='all'||CAL_FILTER==='recur')){
       const r=parseJsonSafe(it.recur_json,{});
       const hit=(r.freq==='weekly'&&d.getDay()===(r.weekday??-1))
         || (r.freq==='monthly'&&d.getDate()===(r.day||0))
         || (r.freq==='yearly'&&d.getMonth()+1===(r.month||0)&&d.getDate()===(r.day||0));
-      if(hit) evs.push({t:'recur', txt:'🔁 '+it.title, item:it});
+      if(hit) evs.push({t:'recur', txt:'🔁 '+timeTxt+it.title, item:it, time:timeTxt?it.time:''});
     }
   });
+  /* 全天／無時間的事項排前面，有指定時間的依時間排序 */
+  evs.sort((a,b)=>(a.time||'').localeCompare(b.time||''));
   return evs;
 }
 function renderCalendar(){
@@ -3460,7 +3548,13 @@ function renderCalendar(){
 function calEvHtml(e){
   const cls={ship:'ship',exp:'exp',memo:'memo',recur:'recur'}[e.t];
   const click=e.no?`onclick="gotoPage('orders')"`:(e.item?`onclick="openCalEdit('${escHtml(e.item.item_id)}')"`:'');
-  return `<span class="cev ${cls}${e.done?' done':''}" ${click}>${escHtml(e.txt)}</span>`;
+  /* memo／recur 依「分類」上色；ship／exp（訂單自動事件）維持原本固定配色 */
+  let style='';
+  if((e.t==='memo'||e.t==='recur') && e.item){
+    const c=CAL_CATEGORY_COLORS[e.item.category];
+    if(c) style=` style="background:${c.bg};color:${c.fg};border-color:${c.bd}"`;
+  }
+  return `<span class="cev ${cls}${e.done?' done':''}"${style} ${click}>${escHtml(e.txt)}</span>`;
 }
 function renderCalMonth(el){
   const first=new Date(CAL_Y, CAL_M, 1);
@@ -3483,7 +3577,7 @@ function renderCalMonth(el){
     <span style="flex:1"></span>
     <button class="btn btn-gold" style="font-size:12px;padding:6px 14px" onclick="openCalAdd('')">＋ 新增事項</button>
   </div><div class="cal">${cells}</div>
-  <div class="cal-legend">🚚 出貨（訂單自動）　⏰ 報價到期（自動）　📌 備忘　🔁 重複行程　※ 點日期格可直接新增事項；點訂單事件跳到訂單追蹤</div>`;
+  <div class="cal-legend">🚚 出貨（訂單自動）　⏰ 報價到期（自動）　📌 備忘　🔁 重複行程　※ 點日期格可直接新增事項；點訂單事件跳到訂單追蹤　｜　顏色依「分類」自動區分：${Object.entries(CAL_CATEGORY_COLORS).map(([name,c])=>`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c.fg};margin:0 3px 0 8px;vertical-align:middle"></span>${name}`).join('')}</div>`;
 }
 function renderCalList(el, days, title){
   const t=new Date(); t.setHours(0,0,0,0);
@@ -3566,10 +3660,14 @@ function openCalAdd(dstr, kind){
   ['ce-title','ce-detail'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('ce-category').value='工作';
   document.getElementById('ce-priority').checked=false;
+  document.getElementById('ce-allday').checked=true;
+  document.getElementById('ce-time').value='';
   document.getElementById('ce-freq').value='weekly';
   document.getElementById('ce-weekday').value='1';
   document.getElementById('ce-mday').value='5';
   onCalKindChange();
+  onAllDayChange();
+  onCalCategoryChange();
   document.getElementById('ce-overlay').style.display='flex';
 }
 function openCalEdit(id){
@@ -3583,12 +3681,17 @@ function openCalEdit(id){
   document.getElementById('ce-detail').value=it.detail||'';
   document.getElementById('ce-category').value=it.category||'工作';
   document.getElementById('ce-priority').checked=it.priority==='high';
+  // 全天／時間：舊資料沒有 all_day 欄位時，視為全天（維持原本沒有時間的行為）
+  document.getElementById('ce-allday').checked=(it.all_day!=='N');
+  document.getElementById('ce-time').value=it.time||'';
   const r=parseJsonSafe(it.recur_json,{});
   document.getElementById('ce-freq').value=r.freq||'weekly';
   document.getElementById('ce-weekday').value=String(r.weekday??1);
   document.getElementById('ce-mon').value=String(r.month||1);
   document.getElementById('ce-mday').value=String(r.day||5);
   onCalKindChange();
+  onAllDayChange();
+  onCalCategoryChange();
   document.getElementById('ce-overlay').style.display='flex';
 }
 function onCalKindChange(){
@@ -3596,10 +3699,24 @@ function onCalKindChange(){
   document.getElementById('ce-date-wrap').style.display = k==='memo'?'block':'none';
   document.getElementById('ce-recur-wrap').style.display = k==='recur'?'block':'none';
   document.getElementById('ce-pri-wrap').style.display = k==='todo'?'inline-flex':'none';
+  // 全天／時間：指定日期備忘、重複行程才需要（待辦不指定日期，時間沒有意義）
+  document.getElementById('ce-time-wrap').style.display = (k==='memo'||k==='recur')?'block':'none';
   const f=document.getElementById('ce-freq').value;
   document.getElementById('ce-weekday').style.display = f==='weekly'?'inline-block':'none';
   document.getElementById('ce-mon').style.display = f==='yearly'?'inline-block':'none';   // 每年才顯示月份
   document.getElementById('ce-mday').style.display = f!=='weekly'?'inline-block':'none';
+}
+function onAllDayChange(){
+  const ad=document.getElementById('ce-allday').checked;
+  const t=document.getElementById('ce-time');
+  t.style.display = ad ? 'none' : 'block';
+  if(ad) t.value='';
+}
+function onCalCategoryChange(){
+  const cat=document.getElementById('ce-category').value;
+  const c=CAL_CATEGORY_COLORS[cat];
+  const dot=document.getElementById('ce-cat-dot');
+  if(dot) dot.style.background = c ? c.fg : '#CCC';
 }
 function closeCalEdit(){ document.getElementById('ce-overlay').style.display='none'; CAL_EDIT_ID=null; }
 async function saveCalItem(){
@@ -3616,12 +3733,16 @@ async function saveCalItem(){
           : JSON.stringify({freq:'yearly',month:parseInt(document.getElementById('ce-mon').value)||1,day:parseInt(document.getElementById('ce-mday').value)||1});
   }
   const existing = CAL_EDIT_ID ? CAL_ITEMS.find(x=>String(x.item_id)===String(CAL_EDIT_ID)) : null;
+  const hasTime = (k==='memo'||k==='recur');
+  const allDay = hasTime ? document.getElementById('ce-allday').checked : true;
   const item={
     item_id: CAL_EDIT_ID || ('ci-'+Date.now()+'-'+Math.floor(Math.random()*1000)),
     kind:k, date:k==='memo'?document.getElementById('ce-date').value:'',
     recur_json:recur, title, detail:document.getElementById('ce-detail').value,
     category:document.getElementById('ce-category').value,
     priority:(k==='todo'&&document.getElementById('ce-priority').checked)?'high':'normal',
+    all_day: hasTime ? (allDay?'Y':'N') : 'Y',
+    time: (hasTime && !allDay) ? document.getElementById('ce-time').value : '',
     done: existing?existing.done:'N', done_date: existing?existing.done_date:''
   };
   try{
