@@ -257,6 +257,7 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
 .onote{font-size:10.5px;color:var(--gold)}
 .rec-badge.custom{background:#EEF0F4;color:#4A5A78}
 .rec-badge.ownbrand{background:#F3ECDD;color:#7A5A1E}
+.rec-badge.consign{background:#E4EEF2;color:#1F5266}
 .v2ov{display:none;position:fixed;inset:0;background:rgba(20,18,10,.55);z-index:300;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 16px}
 .v2box{background:#fff;border-radius:12px;max-width:560px;width:100%;padding:20px 24px;box-shadow:0 24px 60px rgba(0,0,0,.3)}
 .v2h{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:700;margin-bottom:14px}
@@ -874,6 +875,7 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
           <option value="bottle">瓶裝酒代工</option>
           <option value="banquet">宴會酒水服務</option>
           <option value="ownbrand">公版酒買斷</option>
+          <option value="consign">寄售月結</option>
         </select>
         <button class="btn btn-dk" onclick="loadRecords()"><i class="ti ti-search"></i>查詢</button>
       </div>
@@ -967,6 +969,7 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
               <div class="fl"><label>結算月份</label><input class="fi" type="month" id="cs-month" style="width:180px"></div>
               <button class="btn btn-dk" onclick="loadConsignMonthly()"><i class="ti ti-report"></i>產生月結</button>
               <button class="btn btn-gold" onclick="exportConsignMonthly()"><i class="ti ti-download"></i>匯出月結單 PDF</button>
+              <button class="btn btn-gold" onclick="consignMonthlyToQuote()"><i class="ti ti-file-invoice"></i>轉為報價單</button>
             </div>
             <div id="cs-monthly" style="margin-top:12px"></div>
           </div>
@@ -1174,9 +1177,10 @@ function upNo(){
 
 function setType(t){
   qType=t;
-  const isBot=(t==='bottle'), isBan=(t==='banquet'), isOwn=(t==='ownbrand');
-  const botLike=isBot||isOwn;   // 公版買斷沿用瓶裝的品項表與額外費用
-  document.getElementById('tc-bot').classList.toggle('on',isBot);
+  const isConsign=(t==='consign');   // 寄售月結轉的報價單，沿用瓶裝品項表，不走選公司/選公版
+  const isBot=(t==='bottle'||isConsign), isBan=(t==='banquet'), isOwn=(t==='ownbrand');
+  const botLike=isBot||isOwn;   // 公版買斷／寄售月結 皆沿用瓶裝的品項表與額外費用
+  document.getElementById('tc-bot').classList.toggle('on',t==='bottle');
   document.getElementById('tc-ban').classList.toggle('on',isBan);
   { const e=document.getElementById('tc-own'); if(e) e.classList.toggle('on',isOwn); }
   document.getElementById('ban-meta').style.display=isBan?'block':'none';
@@ -1185,7 +1189,7 @@ function setType(t){
   document.getElementById('banquet-svc-card').style.display=isBan?'block':'none';
   document.getElementById('banquet-addon-card').style.display=isBan?'block':'none';
   document.getElementById('ext-card').style.display=botLike?'block':'none';
-  { const e=document.getElementById('company-card'); if(e) e.style.display=isOwn?'none':'block'; }
+  { const e=document.getElementById('company-card'); if(e) e.style.display=(isOwn||isConsign)?'none':'block'; }
   { const e=document.getElementById('ownbrand-card'); if(e) e.style.display=isOwn?'block':'none'; }
   if(isOwn) loadOwnbrandProducts().catch(()=>{});
   if(isBan && banFreeItems.length===0) addBanFreeRow();
@@ -1446,7 +1450,7 @@ function calc(){
   const rate=(parseFloat(document.getElementById('taxrate').value)||0)/100;
   let rawSub=0;
 
-  if(qType==='bottle'||qType==='ownbrand'){
+  if(qType==='bottle'||qType==='ownbrand'||qType==='consign'){
     botItems.forEach(id=>{
       const row=document.getElementById(`r-${id}`); if(!row) return;
       const p=gv(row,'price'),d=colDed?gv(row,'ded'):0,l=colLogo?gv(row,'logo'):0,q=gv(row,'qty');
@@ -1490,7 +1494,7 @@ function calc(){
   }
 
   /* 額外費用一併計稅；顯示統一為發票格式：合計（未稅）／營業稅／總計（含稅、未稅模式皆同） */
-  const extTotal = (qType==='bottle'||qType==='ownbrand') ? extras.reduce((s,e)=>s+e.a,0) : 0;
+  const extTotal = (qType==='bottle'||qType==='ownbrand'||qType==='consign') ? extras.reduce((s,e)=>s+e.a,0) : 0;
   const base = rawSub + extTotal;   // inc＝含稅總額、exc＝未稅總額
   let taxAmt=0, netAll=base, grandTotal=base;
   if(rate>0){
@@ -1708,7 +1712,7 @@ function buildStdDocParts(){
 
   let colgroup='', theadStr='';
   const rows=[];
-  if(qType==='bottle'||qType==='ownbrand'){
+  if(qType==='bottle'||qType==='ownbrand'||qType==='consign'){
     let headCols = `<th style="padding:10px 12px;text-align:left;color:#6B6B63;font-weight:600;font-size:10.5px;letter-spacing:.3px;border-bottom:1.5px solid #22241F">品名</th>`;
     if(colLot) headCols += `<th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">批次</th>`;
     const taxTag = taxMode==='inc' ? '（含稅）' : '（未稅）';
@@ -2079,7 +2083,7 @@ function collectQuote(){
   const num=id=>{const e=g(id);return e?(parseFloat(e.value)||0):0};
 
   const items=[];
-  if(qType==='bottle'||qType==='ownbrand'){
+  if(qType==='bottle'||qType==='ownbrand'||qType==='consign'){
     botItems.forEach(rid=>{
       const row=document.getElementById(`r-${rid}`); if(!row) return;
       const name=gs(row,'name'); const sub=(gv(row,'price')+(colDed?gv(row,'ded'):0)+(colLogo?gv(row,'logo'):0))*gv(row,'qty');
@@ -2112,7 +2116,7 @@ function collectQuote(){
     });
   }
   // bottle / 公版買斷 extras 也放進 items
-  if(qType==='bottle'||qType==='ownbrand'){
+  if(qType==='bottle'||qType==='ownbrand'||qType==='consign'){
     extras.forEach(e=>{
       items.push({ itemType:'extra', name:e.n, lot:'', volume:'', unitPrice:e.a,
         deduction:0, logoFee:0, qty:1, unit:'', subtotal:e.a, flavorList:'' });
@@ -2230,6 +2234,8 @@ async function loadRecords(){
         ? '<span class="rec-badge bottle">瓶裝酒代工</span>'
         : q.quoteType==='ownbrand'
         ? '<span class="rec-badge ownbrand">公版酒買斷</span>'
+        : q.quoteType==='consign'
+        ? '<span class="rec-badge consign">寄售月結</span>'
         : '<span class="rec-badge banquet">宴會酒水</span>';
       const total='$'+Math.round(q.grandTotal||0).toLocaleString();
       return `<tr class="clickable" onclick="openRecord('${q.quoteNo}')">
@@ -2298,7 +2304,7 @@ function loadQuoteIntoForm(q){
   // onDate()→upNo() 會依日期+流水號重組單號；強制還原成原本存的單號，確保與後台/客戶文件一致
   if(q.quoteNo){ document.getElementById('f-no').value=q.quoteNo; document.getElementById('pl-no').textContent=q.quoteNo; }
   const items=q.items||[];
-  if(q.quoteType==='bottle'||q.quoteType==='ownbrand'){
+  if(q.quoteType==='bottle'||q.quoteType==='ownbrand'||q.quoteType==='consign'){
     document.getElementById('itbody-bot').innerHTML=''; botItems=[];
     extras=[];
     const realItems = items.filter(it=>it.itemType!=='extra');
@@ -2924,15 +2930,23 @@ function onSelectCompany(){
   const box=document.getElementById('qf-detail');
   if(!SELECTED_COMPANY){ box.style.display='none'; clearAutoRuleExtras(); renderExt(); calc(); return; }
   const c=SELECTED_COMPANY;
+  // 換公司時先清空「快速帶入」的欄位，避免上一家公司留下的舊值跟這家公司的新值混在一起
+  // （例如上一家有填聯絡人、這家沒填，若不清空畫面會誤顯示上一家的聯絡人）
+  ['f-tax','f-ph','f-ad','f-con','f-shipcon','f-shipph','f-shipad'].forEach(id=>{
+    const e=document.getElementById(id); if(e) e.value='';
+  });
   // 客戶資料帶入（brand → 客戶名稱；正式公司名 → 發票抬頭）— 全部可再手改
   const set=(id,v)=>{ const e=document.getElementById(id); if(e && v!=null && v!=='') e.value=v; };
   set('f-cli', (c.brand||'').trim()||c.name); if(typeof upNo==='function') upNo();
   set('f-inv', c.name);
   set('f-tax', c.tax_id); set('f-ph', c.phone); set('f-ad', c.address); set('f-con', c.contact);
-  // 出貨資訊：公司檔若有存預設出貨收件人/電話/地址，帶入並自動視為「不同」；否則維持與聯絡地址相同
-  if((c.ship_address||'').trim()||(c.ship_contact||'').trim()||(c.ship_phone||'').trim()){
-    set('f-shipcon', c.ship_contact); set('f-shipph', c.ship_phone); set('f-shipad', c.ship_address);
-    const sc=document.getElementById('f-shipsame'); if(sc) sc.checked=false;
+  // 出貨資訊：公司檔若有存預設出貨收件人/電話/地址，帶入並自動視為「不同」；否則清空後維持與聯絡地址相同
+  {
+    const sc=document.getElementById('f-shipsame');
+    if((c.ship_address||'').trim()||(c.ship_contact||'').trim()||(c.ship_phone||'').trim()){
+      set('f-shipcon', c.ship_contact); set('f-shipph', c.ship_phone); set('f-shipad', c.ship_address);
+      if(sc) sc.checked=false;
+    } else if(sc){ sc.checked=true; }
     toggleShipSame('f');
   }
   if(c.default_tax_mode==='inc'||c.default_tax_mode==='exc') setTaxMode(c.default_tax_mode);
@@ -4011,6 +4025,39 @@ function exportConsignMonthly(){
   const w=window.open('','_blank');
   if(!w){ toast('瀏覽器阻擋了新視窗，請允許彈出視窗','err'); return; }
   w.document.write(html); w.document.close();
+}
+
+/* ---- 把月結資料轉為正式報價單（寄售月結 quoteType='consign'）---- */
+function consignMonthlyToQuote(){
+  if(!CS_MONTHLY||!(CS_MONTHLY.lines&&CS_MONTHLY.lines.length)){ toast('請先「產生月結」再轉為報價單','err'); return; }
+  const c=CS_MONTHLY.customer||{};
+  const period=(CS_MONTHLY.period&&CS_MONTHLY.period.from)?`${CS_MONTHLY.period.from} ～ ${CS_MONTHLY.period.to}`:`${CS_MONTHLY.year}年${CS_MONTHLY.month}月`;
+  resetAll(true);
+  editingQuoteNo=null;
+  SELECTED_COMPANY=null; RULE_SUPPRESS={};
+  { const csel=document.getElementById('qf-company'); if(csel) csel.value=''; }
+  { const box=document.getElementById('qf-detail'); if(box) box.style.display='none'; }
+  setType('consign');
+  const set=(id,v)=>{ const e=document.getElementById(id); if(e && v!=null && v!=='') e.value=v; };
+  set('f-cli', c.name);
+  set('f-inv', c.name);
+  set('f-con', c.contact);
+  set('f-ph', c.phone);
+  set('f-ad', c.ship_address);
+  let note=`寄售月結：${period}`;
+  if(c.default_discount) note+=`（折數 ${(c.default_discount*10).toFixed(1).replace(/\.0$/,'')} 折）`;
+  set('f-note', note);
+  setTaxMode('inc');
+  document.getElementById('itbody-bot').innerHTML=''; botItems=[];
+  CS_MONTHLY.lines.forEach(l=>{
+    addBotRow({name:l.name||l.sku_id, vol:l.volume, price:l.unit_price, qty:l.qty});
+  });
+  if(botItems.length===0) addBotRow();
+  onDate(); upNo();
+  calc();
+  gotoPage('new');
+  autoNextSerial();
+  toast('已帶入「'+(c.name||'')+'」'+period+' 的月結資料，請確認內容後儲存報價單','ok');
 }
 
 async function initV2(){
