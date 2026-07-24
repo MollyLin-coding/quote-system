@@ -1262,7 +1262,7 @@ function setType(t){
       ? '每列有原價・折數・計價三欄：帶公版原價，某款達 300 瓶↑自動填 6 折（折數可手改），計價＝原價×折自動算；PDF 標〔客製標〕、原廠批號不對客戶顯示、MOQ 300／款提示。'
       : '每列有原價・折數・計價三欄：帶公版原價，依每款瓶數自動填折數（6/5.5/5＝200/500/1000），折數可手改，計價＝原價×折自動算；原廠批號不對客戶顯示。'; }
   // OEM 標記欄：只有標準（瓶裝）＝OEM 逐列勾選；公版客製標＝整張單皆客製標（不用逐列勾）；寄售/宴會/一次性採購不顯示
-  { const newMark=(t==='bottle'); const newOwn=(t==='ownbrand'||t==='ownlabel');
+  { const newMark=false; const newOwn=(t==='ownbrand'||t==='ownlabel');   // OEM 逐列勾選欄已移除（Molly 2026-07-24）
     const changed=(newMark!==colMark)||(newOwn!==colOwn); colMark=newMark; colOwn=newOwn;
     rebuildBotHeader(); if(changed && document.getElementById('itbody-bot').children.length) rebuildBotRows(); }
   if(isOwnCat) loadOwnbrandProducts().catch(()=>{});
@@ -1917,7 +1917,7 @@ function resetAll(skipConfirm){
   botDedCache={}; botLogoCache={}; botLotCache={};
   flavors={g1:[],g2:[]};
   colDed=false; colLogo=false; colLot=false; colGift=false;
-  colMark=(qType==='bottle');
+  colMark=false;
   colOwn=(qType==='ownbrand'||qType==='ownlabel');
   document.getElementById('ctg-ded').classList.remove('on');
   document.getElementById('ctg-logo').classList.remove('on');
@@ -1978,6 +1978,8 @@ function buildStdDocParts(){
   const ex=document.getElementById('f-ex').value||'—';
   const shipDate=document.getElementById('f-shipdate')?document.getElementById('f-shipdate').value:'';
   const showShip=document.getElementById('f-shipdate-show')?document.getElementById('f-shipdate-show').checked:true;
+  const fmtYmd=s=>{const m=String(s||'').match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);return m?`${m[1]}/${String(m[2]).padStart(2,'0')}/${String(m[3]).padStart(2,'0')}`:(s||'—');};
+  const dtF=fmtYmd(dt), exF=fmtYmd(ex), shipF=fmtYmd(shipDate);
   const cli=escHtml(document.getElementById('f-cli').value||'');
   const tagLot=escHtml(document.getElementById('f-tag-lot')?.value||'');
   const tagCli=escHtml(document.getElementById('f-tag-cli')?.value||'');
@@ -2176,11 +2178,13 @@ function buildStdDocParts(){
     </div>
     <div style="text-align:right">
       <div style="font-size:22px;font-weight:700;color:#22241F;letter-spacing:6px;margin-bottom:10px">報 價 單</div>
-      ${(tagLot||tagCli)?`<div style="font-size:11px;color:#A6824A;font-weight:600;letter-spacing:.5px;margin-bottom:8px">${[tagLot,tagCli].filter(Boolean).join('　・　')}</div>`:''}
-      <div style="font-size:11.5px;color:#A8A69C;line-height:1.9">單號：<span style="color:#22241F;font-weight:600">${no}</span></div>
-      <div style="font-size:11.5px;color:#A8A69C;line-height:1.9">報價日：<span style="color:#22241F">${dt}</span></div>
-      <div style="font-size:11.5px;color:#A6824A;font-weight:700">有效至：${ex}</div>
-      ${(showShip&&shipDate)?`<div style="font-size:11.5px;color:#A8A69C;line-height:1.9">預計出貨日：<span style="color:#22241F">${escHtml(shipDate)}</span></div>`:''}
+      ${(tagLot||tagCli)?`<div style="font-size:11px;color:#A6824A;font-weight:600;letter-spacing:.5px;margin-bottom:10px">${[tagLot,tagCli].filter(Boolean).join('　・　')}</div>`:''}
+      <div style="display:inline-grid;grid-template-columns:auto auto;gap:4px 12px;font-size:11.5px">
+        <span style="color:#A8A69C;text-align:right">單號</span><span style="color:#22241F;font-weight:600;text-align:right">${no}</span>
+        <span style="color:#A8A69C;text-align:right">報價日</span><span style="color:#22241F;text-align:right">${dtF}</span>
+        <span style="color:#A8A69C;text-align:right">有效至</span><span style="color:#A6824A;font-weight:700;text-align:right">${exF}</span>
+        ${(showShip&&shipDate)?`<span style="color:#A8A69C;text-align:right">預計出貨日</span><span style="color:#22241F;text-align:right">${shipF}</span>`:''}
+      </div>
     </div>
   </div>`;
 
@@ -2647,7 +2651,7 @@ function loadQuoteIntoForm(q){
     colDed = realItems.some(it=>it.deduction);
     colLogo = realItems.some(it=>it.logoFee);
     colGift = realItems.some(isGiftItem);
-    colMark = (q.quoteType==='bottle');
+    colMark = false;
     colOwn = (q.quoteType==='ownbrand'||q.quoteType==='ownlabel');
     document.getElementById('ctg-lot').classList.toggle('on',colLot);
     document.getElementById('ctg-ded').classList.toggle('on',colDed);
