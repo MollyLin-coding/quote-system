@@ -111,6 +111,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
 .itr textarea:focus{outline:none;border-color:var(--gold);background:var(--wh)}
 .itr .sub{font-size:12.5px;font-weight:700;color:var(--ink);text-align:right}
 .del{background:none;border:none;color:var(--bd);cursor:pointer;font-size:16px;line-height:1;padding:2px}
+.rowact{display:flex;align-items:center;justify-content:center;gap:3px}
+.ordcol{display:flex;flex-direction:column;line-height:0}
+.ordb{background:none;border:none;color:var(--bd);cursor:pointer;font-size:9px;line-height:1;padding:0;height:11px}
+.ordb:hover{color:var(--gold)}
 .crow{border:1px solid var(--bd);border-radius:8px;padding:12px 14px;margin-bottom:10px;transition:.15s}
 .crow.free{background:var(--gold-pale)}
 .crow-top{display:grid;grid-template-columns:2fr 70px 70px 90px 90px 26px;gap:8px;align-items:center}
@@ -556,7 +560,7 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
         <div class="ctg" id="ctg-logo" onclick="toggleCol('logo')"><span class="dot"></span>LOGO印刷費</div>
       </div>
       <div class="tbl-scroll">
-        <div id="ith-bot" class="ith" style="grid-template-columns:2fr 68px 80px 60px 88px 26px">
+        <div id="ith-bot" class="ith" style="grid-template-columns:2fr 68px 80px 60px 88px 44px">
           <span>品名</span><span id="th-lot" style="display:none">出貨批次</span><span>容量ml</span><span>單價</span><span id="th-ded" style="display:none">前標費扣除</span><span id="th-logo" style="display:none">LOGO印刷</span><span>瓶數</span><span style="text-align:right">小計</span><span></span>
         </div>
         <datalist id="vol-options"><option value="100"><option value="500"><option value="4000"></datalist>
@@ -669,6 +673,7 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
             <option value="freeship">整批出貨免運（$0）</option>
             <option value="shipping">運費（自填金額）</option>
             <option value="customlabel">客製化前標（預設免費，可自填）</option>
+            <option value="chamber">商會特別優惠（折抵，自填金額）</option>
           </select>
         </div>
       </div>
@@ -888,7 +893,7 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
   <div class="page" id="page-records">
     <div class="rec-wrap">
       <div class="rec-toolbar">
-        <input class="rec-search" id="rec-search" placeholder="搜尋客戶名稱…" onkeydown="if(event.key==='Enter')loadRecords()">
+        <input class="rec-search" id="rec-search" placeholder="搜尋客戶名稱或單號…" onkeydown="if(event.key==='Enter')loadRecords()">
         <select class="rec-filter" id="rec-type-filter" onchange="loadRecords()">
           <option value="">全部類型</option>
           <option value="bottle">瓶裝酒代工</option>
@@ -1155,6 +1160,8 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
 
 <script>
 let qType='bottle', taxMode='inc', payTab=0;
+let LOADED_PAY_DETAIL=null; // 載入舊單時記住已存的付款條件文字，未重新編輯付款前直接沿用，避免重算改掉客戶看到的條件
+let FORM_DIRTY=false; // 標準報價單是否有「使用者實際輸入、尚未儲存」的內容（供離開頁面前提醒；程式帶入值不算）
 let botItems=[],banFreeItems=[],banAddonItems=[],extras=[],imgs=[],rowId=0;
 let customItems=[],previewKind='std';
 let colDed=false, colLogo=false, colLot=false;
@@ -1262,7 +1269,7 @@ function rebuildBotHeader(){
   cols.push('68px','80px');
   if(colDed) cols.push('68px');
   if(colLogo) cols.push('68px');
-  cols.push('60px','88px','26px');
+  cols.push('60px','88px','44px');
   document.getElementById('ith-bot').style.gridTemplateColumns = cols.join(' ');
   document.getElementById('th-lot').style.display = colLot?'':'none';
   document.getElementById('th-ded').style.display = colDed?'':'none';
@@ -1280,11 +1287,11 @@ function addBotRow(prefill){
   cols.push('68px','80px');
   if(colDed) cols.push('68px');
   if(colLogo) cols.push('68px');
-  cols.push('60px','88px','26px');
+  cols.push('60px','88px','44px');
   div.className='itr';
   div.style.gridTemplateColumns = cols.join(' ');
   let lotVal = (prefill && prefill.lot) ? prefill.lot : '';
-  if(colLot && !lotVal) lotVal = 'Lot X';
+  if(colLot && !lotVal && !prefill) lotVal = 'Lot X'; // 只對全新空列給提示字，載入/貼上既有列不塞假字，避免存進假 Lot
   let h = `
     <textarea rows="1" placeholder="品名（Enter新增下一筆／Shift+Enter換行／可貼上多行自動拆成多筆）" oninput="calc()" onkeydown="handleNameKeydown(event,${id})" onpaste="handleNamePaste(event,${id})" data-f="name">${escHtml(prefill?.name||'')}</textarea>`;
   if(colLot) h += `<input placeholder="Lot31" oninput="calc()" data-f="lot" value="${lotVal}">`;
@@ -1296,7 +1303,7 @@ function addBotRow(prefill){
   h += `
     <input type="number" min="0" placeholder="40" oninput="calc()" data-f="qty" value="${prefill?.qty||''}">
     <div class="sub" id="rs-${id}">—</div>
-    <button class="del" onclick="delBotRow(${id})">✕</button>`;
+    <div class="rowact"><span class="ordcol"><button type="button" class="ordb" title="上移" onclick="moveBotRow(${id},-1)">▲</button><button type="button" class="ordb" title="下移" onclick="moveBotRow(${id},1)">▼</button></span><button class="del" onclick="delBotRow(${id})">✕</button></div>`;
   div.innerHTML = h;
   document.getElementById('itbody-bot').appendChild(div);
   botItems.push(id);
@@ -1339,6 +1346,17 @@ function delBotRow(id){
   const el=document.getElementById(`r-${id}`); if(el) el.remove();
   delete botDedCache[id]; delete botLogoCache[id]; delete botLotCache[id];
   botItems=botItems.filter(i=>i!==id); calc();
+}
+/* ---- 品項明細調整順序（botItems 陣列是各處的資料順序來源，重排陣列＋DOM 即可）---- */
+function reorderBotDom(){
+  const body=document.getElementById('itbody-bot');
+  botItems.forEach(id=>{ const r=document.getElementById(`r-${id}`); if(r) body.appendChild(r); });
+}
+function moveBotRow(id,dir){
+  const i=botItems.indexOf(id); if(i<0) return;
+  const j=i+dir; if(j<0||j>=botItems.length) return;
+  const t=botItems[i]; botItems[i]=botItems[j]; botItems[j]=t;
+  reorderBotDom(); calc();
 }
 
 // ── BANQUET FREE ITEMS ──
@@ -1567,6 +1585,7 @@ function setTaxMode(m){
 }
 
 function setPay(n){
+  LOADED_PAY_DETAIL=null; // 切換付款方式視為重新設定，恢復即時計算
   payTab=n;
   document.querySelectorAll('.ptab').forEach((b,i)=>b.classList.toggle('on',i===n));
   document.querySelectorAll('.pay-panel').forEach((p,i)=>p.classList.toggle('on',i===n));
@@ -1586,13 +1605,49 @@ function estPayDay(){
   const dt=document.getElementById('f-dt').value; if(!dt) return;
   const mon=parseInt(document.getElementById('p2-mon')?.value)||1;
   const day=parseInt(document.getElementById('p2-day')?.value)||15;
-  const base=new Date(dt);
-  base.setMonth(base.getMonth()+mon);
-  base.setDate(day);
+  // 直接建構目標月份的日期，避免「先加月再設日」在月底(如1/31+1月)溢位到隔月；並把日夾制在該月最後一天
+  const d0=new Date(dt);
+  const y=d0.getFullYear(), m=d0.getMonth()+mon;
+  const lastDay=new Date(y, m+1, 0).getDate();
+  const base=new Date(y, m, Math.min(day, lastDay));
   const el=document.getElementById('p2-est');
   if(el) el.value=`${base.getFullYear()}/${s2(base.getMonth()+1)}/${s2(base.getDate())}`;
 }
 document.addEventListener('input',e=>{ if(e.target.id==='p2-mon'||e.target.id==='p2-day') estPayDay(); });
+// 使用者一旦編輯任一付款欄位，就取消「沿用已存文字」，改回即時計算並刷新預覽
+document.addEventListener('input',e=>{
+  if(LOADED_PAY_DETAIL==null) return;
+  const PAY_FIELDS=['dep-pct','dep-days','dep-ded','p1-vdays','p1-pct','p1-note','p2-mon','p2-day','p3-txt'];
+  if(PAY_FIELDS.includes(e.target.id)){ LOADED_PAY_DETAIL=null; if(typeof calc==='function') calc(); }
+});
+// 滾輪滑過「聚焦中的數字欄」時讓它失焦，避免不小心把金額/數量滾掉
+document.addEventListener('wheel',function(e){
+  const t=e.target;
+  if(t&&t.tagName==='INPUT'&&t.type==='number'&&document.activeElement===t) t.blur();
+},{passive:true});
+// 使用者在報價單頁實際輸入 → 標記為有未儲存內容（程式用 .value 帶入不會觸發 input，不會誤標）
+document.addEventListener('input',function(e){
+  const t=e.target;
+  if(t&&t.closest&&t.closest('#page-new')) FORM_DIRTY=true;
+});
+// 彈窗：點遮罩空白處關閉
+document.addEventListener('mousedown',function(e){
+  const t=e.target;
+  if(t&&t.classList&&(t.classList.contains('v2ov')||t.classList.contains('pov'))) t.style.display='none';
+});
+// 彈窗：按 Esc 關閉目前開啟的彈窗
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Escape') return;
+  document.querySelectorAll('.v2ov, .pov').forEach(function(o){
+    if(o.style.display && o.style.display!=='none') o.style.display='none';
+  });
+});
+// 有未儲存內容時，重新整理/關閉分頁前提醒（僅在報價單頁）
+window.addEventListener('beforeunload',function(e){
+  if(FORM_DIRTY && document.getElementById('page-new') && document.getElementById('page-new').classList.contains('on')){
+    e.preventDefault(); e.returnValue='';
+  }
+});
 
 function addExt(){
   const n=document.getElementById('en').value.trim();
@@ -1617,6 +1672,14 @@ function handleExtPreset(sel){
   else if(v==='freeship') pres('整批出貨免運',0);
   else if(v==='shipping') presAmt('運費');
   else if(v==='customlabel') presAmt('客製化前標',0);
+  else if(v==='chamber') presDiscount('商會特別優惠');
+}
+function presDiscount(n){
+  const s=prompt(`請輸入「${n}」折抵金額（正數即可，會以折抵方式扣減總額）`, '');
+  if(s===null) return;
+  const amt=Math.abs(parseFloat(s)||0);
+  if(!amt){ toast('折抵金額需大於 0','err'); return; }
+  pushExt(n, -amt); // 以負數列入額外費用 → 於合計前扣減（與其他額外費用一併計稅）
 }
 function presQty(n,unit){
   const def=botItems.length||1;
@@ -1686,6 +1749,7 @@ function resetAll(skipConfirm){
 }
 
 function getPayTerms(){
+  if(LOADED_PAY_DETAIL!=null) return LOADED_PAY_DETAIL; // 載入舊單且未重新編輯付款 → 沿用已存文字（tab0/1/2 細節欄目前不會存下，重算會失真）
   const tot=document.getElementById('t-tot').textContent;
   if(payTab===0){
     const pct=document.getElementById('dep-pct')?.value||30;
@@ -2061,7 +2125,7 @@ function toast(msg, type){
   const ic=t.querySelector('i');
   ic.className = type==='err' ? 'ti ti-alert-triangle' : 'ti ti-check';
   clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>{ t.className='toast'+(type==='ok'?' ok':type==='err'?' err':''); }, 2800);
+  toastTimer=setTimeout(()=>{ t.className='toast'+(type==='ok'?' ok':type==='err'?' err':''); }, type==='err'?6000:3200);
 }
 
 /* ---- 頁面切換 ---- */
@@ -2186,11 +2250,23 @@ function collectQuote(){
 }
 
 /* ---- 儲存（新增 or 更新）---- */
+/* 判斷標準報價單是否至少有一筆品項（含瓶裝列／宴會自訂列／宴會加購列／宴會兩組數量）*/
+function quoteHasItems(){
+  const check=(ids,pfx)=>ids.some(id=>{ const r=document.getElementById(pfx+'-'+id); return r&&Array.from(r.querySelectorAll('[data-f]')).some(i=>i.value&&i.value.trim()!==''); });
+  if(check(botItems,'r')) return true;
+  if(check(banFreeItems,'bf')) return true;
+  if(check(banAddonItems,'ba')) return true;
+  if((parseFloat(document.getElementById('ban-g1-qty')?.value)||0)||(parseFloat(document.getElementById('ban-g2-qty')?.value)||0)) return true;
+  return false;
+}
 async function saveQuote(){
   if(!AUTH_TOKEN){ showLogin(); return; }
+  // 擋空白單：客戶名稱空白且完全沒有品項時不儲存，避免存出一堆空單
+  const cliName=(document.getElementById('f-cli')?.value||'').trim();
+  if(!cliName && !quoteHasItems()){ toast('請至少填寫客戶名稱或一筆品項再儲存','err'); return; }
   const quote=collectQuote();
   const btn=document.getElementById('btn-save');
-  if(btn){ btn.disabled=true; }
+  if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader"></i>儲存中…'; }
   try {
     let data;
     if(editingQuoteNo){
@@ -2200,6 +2276,7 @@ async function saveQuote(){
     }
     if(data.ok){
       editingQuoteNo=data.quoteNo;
+      FORM_DIRTY=false;
       toast('已儲存：'+data.quoteNo,'ok');
     } else {
       toast(data.error||'儲存失敗','err');
@@ -2207,7 +2284,7 @@ async function saveQuote(){
   } catch(e){
     toast(e.message||'儲存失敗','err');
   } finally {
-    if(btn){ btn.disabled=false; }
+    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-device-floppy"></i>儲存'; }
   }
 }
 
@@ -2254,11 +2331,12 @@ async function loadRecords(){
     const filters={};
     const kw=document.getElementById('rec-search').value.trim();
     const tf=document.getElementById('rec-type-filter').value;
-    if(kw) filters.clientName=kw;
     if(tf) filters.quoteType=tf;
+    // 關鍵字改前端比對，讓「單號」也能搜到（後端只以報價單類型過濾）
     const data=await apiCall({ action:'getQuotes', token:AUTH_TOKEN, filters });
     if(!data.ok){ body.innerHTML=`<tr><td colspan="6" class="rec-empty">${data.error||'載入失敗'}</td></tr>`; return; }
-    const quotes=(data.quotes||[]).filter(q=>q.status!=='已刪除');
+    let quotes=(data.quotes||[]).filter(q=>q.status!=='已刪除');
+    if(kw){ const k=kw.toLowerCase(); quotes=quotes.filter(q=> String(q.clientName||'').toLowerCase().includes(k) || String(q.quoteNo||'').toLowerCase().includes(k)); }
     if(quotes.length===0){ body.innerHTML='<tr><td colspan="6" class="rec-empty">尚無報價單記錄</td></tr>'; return; }
     body.innerHTML=quotes.map(q=>{
       const typeBadge=q.quoteType==='bottle'
@@ -2288,6 +2366,7 @@ async function loadRecords(){
 
 /* ---- 開啟既有報價單（載入到編輯表單）---- */
 async function openRecord(quoteNo){
+  if(isFormDirty() && !confirm('目前表單尚有未儲存的資料，開啟這張單會覆蓋目前內容，確定放棄？')) return;
   try {
     const data=await apiCall({ action:'getQuoteById', token:AUTH_TOKEN, quoteNo });
     if(!data.ok){ toast(data.error||'讀取失敗','err'); return; }
@@ -2327,7 +2406,7 @@ function loadQuoteIntoForm(q){
   set('f-dt',q.quoteDate); set('f-hdl',q.handler);
   set('f-ven',q.venue); set('f-ent',q.entryTime); set('f-svc',q.serviceTime); set('f-ext',q.exitTime);
   set('f-note',q.remark);
-  set('taxrate',q.taxRate||5);
+  { const _tr=document.getElementById('taxrate'); if(_tr) _tr.value=(q.taxRate==null?5:q.taxRate); } // 稅率填 0（免稅）要保留 0，不能被 ||5 改回 5%
   // 先把流水號從單號尾碼還原，onDate() 會用它重算單號，避免顯示/PDF 變成 -01
   if(q.quoteNo){ const m=String(q.quoteNo).match(/-(\d+)\s*$/); if(m){ const s=document.getElementById('f-ser'); if(s) s.value=parseInt(m[1],10)||1; } }
   setTaxMode(q.priceMode||'inc');
@@ -2384,7 +2463,10 @@ function loadQuoteIntoForm(q){
   // payment
   const pt=parseInt(q.paymentType)||0; setPay(pt);
   if(pt===3 && q.paymentDetail){ const e=document.getElementById('p3-txt'); if(e)e.value=q.paymentDetail; }
+  // 沿用存檔當下算好的付款文字，避免重載重算改掉客戶看到的條件（setPay 已把 LOADED_PAY_DETAIL 清為 null，這裡在其後設定）
+  LOADED_PAY_DETAIL=(q.paymentDetail!=null&&q.paymentDetail!=='')?q.paymentDetail:null;
   calc();
+  FORM_DIRTY=false; // 剛載入的舊單視為已儲存狀態
 }
 
 /* ---- 開新（清空編輯狀態）---- */
@@ -2526,6 +2608,10 @@ function resetCustom(skipConfirm){
   ['c-tag','c-cli','c-con','c-no','c-dt','c-ex','c-tax','c-inv','c-ph','c-ad','c-shipcon','c-shipph','c-shipad'].forEach(id=>{
     const el = document.getElementById(id); if(el) el.value = '';
   });
+  // 清掉「已選公司」狀態與公司下拉，避免開新自訂單時殘留上一家公司（比照標準模式 resetAll）
+  SELECTED_COMPANY_C=null;
+  { const cs=document.getElementById('qfc-company'); if(cs) cs.value=''; }
+  { const row=document.getElementById('qfc-row'); if(row) row.style.display='none'; }
   { const sc=document.getElementById('c-shipsame'); if(sc) sc.checked=true; toggleShipSame('c'); }
   document.getElementById('c-taxmode').value = 'inc';
   document.getElementById('c-taxrate').value = '5';
@@ -3473,7 +3559,7 @@ async function loadCustomQuoteByNo(no, asCopy){
   resetCustom(true);
   const set=(id,v)=>{ document.getElementById(id).value=v==null?'':v; };
   set('c-tag',q.tag); set('c-cli',q.client); set('c-con',q.contact);
-  set('c-taxmode',q.tax_mode||'inc'); set('c-taxrate',q.tax_rate||5);
+  set('c-taxmode',q.tax_mode||'inc'); set('c-taxrate',q.tax_rate==null?5:q.tax_rate); // 稅率 0 要保留
   const h=parseJsonSafe(q.headers_json,{});
   set('c-h-name',h.name||''); set('c-h-qty',h.qty||''); set('c-h-unit',h.unit||''); set('c-h-price',h.price||''); set('c-h-sub',h.sub||'');
   // 客戶統編/發票抬頭/電話/地址/出貨資訊（舊單若無 client_json，欄位維持空白，不影響載入）
@@ -4196,6 +4282,7 @@ async function initV2(){
     const d=document.getElementById('qf-detail'); if(d) d.style.display='none';
     const sc=document.getElementById('f-shipsame'); if(sc) sc.checked=true;
     toggleShipSame('f');
+    FORM_DIRTY=false; // 清空/開新單後視為無未儲存內容
   };
 })();
 /* 使用者手動移除自動規則列 → 記住不要再自動加回 */
