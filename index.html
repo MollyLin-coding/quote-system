@@ -467,6 +467,10 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
             <div id="qf-prodinfo" class="prodinfo"></div></div>
         </div>
         <div id="qf-detail" style="display:none;margin-top:10px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+            <button class="btn btn-dk" id="qf-syncbtn" style="display:none" onclick="syncCustomerRecipe()"><i class="ti ti-refresh"></i> 同步最新酒譜</button>
+          </div>
+          <div id="qf-syncnote"></div>
           <div class="qf-chips" id="qf-rules"></div>
           <div id="qf-moqwarn"></div>
         </div>
@@ -491,6 +495,8 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
           </div>
         </div>
         <div id="ob-tierinfo" class="prodinfo"></div>
+        <div id="ob-moqwarn"></div>
+        <div class="ch-opt" style="margin-top:6px;padding:0">勾選品項列的「貼牌」＝該支公版基酒換客戶前標，依採購量套 6/5.5/5 折（折數可再手改）；OEM 請用標準（瓶裝）模式。</div>
       </div>
     </div>
 
@@ -565,7 +571,7 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
       </div>
       <div class="tbl-scroll">
         <div id="ith-bot" class="ith" style="grid-template-columns:2fr 68px 80px 60px 88px 44px">
-          <span>品名</span><span id="th-lot" style="display:none">出貨批次</span><span>容量ml</span><span>單價</span><span id="th-ded" style="display:none">前標費扣除</span><span id="th-logo" style="display:none">LOGO印刷</span><span>瓶數</span><span style="text-align:right">小計</span><span></span>
+          <span>品名</span><span id="th-lot" style="display:none">出貨批次</span><span>容量ml</span><span>單價</span><span id="th-ded" style="display:none">前標費扣除</span><span id="th-logo" style="display:none">LOGO印刷</span><span>瓶數</span><span style="text-align:right">小計</span><span id="th-mark" style="display:none;text-align:center">OEM</span><span></span>
         </div>
         <datalist id="vol-options"><option value="100"><option value="500"><option value="4000"></datalist>
         <div id="itbody-bot"></div>
@@ -1170,7 +1176,7 @@ let LOADED_PAY_DETAIL=null; // 載入舊單時記住已存的付款條件文字�
 let FORM_DIRTY=false; // 標準報價單是否有「使用者實際輸入、尚未儲存」的內容（供離開頁面前提醒；程式帶入值不算）
 let botItems=[],banFreeItems=[],banAddonItems=[],extras=[],imgs=[],rowId=0;
 let customItems=[],previewKind='std';
-let colDed=false, colLogo=false, colLot=false;
+let colDed=false, colLogo=false, colLot=false, colMark=false;
 let flavors={g1:[],g2:[]};
 
 function s2(n){return String(n).padStart(2,'0')}
@@ -1235,6 +1241,9 @@ function setType(t){
   document.getElementById('ext-card').style.display=botLike?'block':'none';
   { const e=document.getElementById('company-card'); if(e) e.style.display=(isOwn||isConsign)?'none':'block'; }
   { const e=document.getElementById('ownbrand-card'); if(e) e.style.display=isOwn?'block':'none'; }
+  // OEM／貼牌 標記欄：標準（瓶裝）＝OEM、公版買斷＝貼牌；寄售/宴會不顯示標記欄
+  { const newMark=(t==='bottle'||t==='ownbrand'); const markChanged=(newMark!==colMark); colMark=newMark;
+    rebuildBotHeader(); if(markChanged && document.getElementById('itbody-bot').children.length) rebuildBotRows(); }
   if(isOwn) loadOwnbrandProducts().catch(()=>{});
   if(isBan && banFreeItems.length===0) addBanFreeRow();
   if(isBan && banAddonItems.length===0) addBanAddonRow();
@@ -1275,11 +1284,38 @@ function rebuildBotHeader(){
   cols.push('68px','80px');
   if(colDed) cols.push('68px');
   if(colLogo) cols.push('68px');
-  cols.push('60px','88px','44px');
+  cols.push('60px','88px');
+  if(colMark) cols.push('52px');
+  cols.push('44px');
   document.getElementById('ith-bot').style.gridTemplateColumns = cols.join(' ');
   document.getElementById('th-lot').style.display = colLot?'':'none';
   document.getElementById('th-ded').style.display = colDed?'':'none';
   document.getElementById('th-logo').style.display = colLogo?'':'none';
+  const tm=document.getElementById('th-mark');
+  if(tm){ tm.style.display = colMark?'':'none'; tm.textContent = (qType==='ownbrand'?'貼牌':'OEM'); }
+}
+/* 保留現有品項列內容（含 OEM/貼牌 勾選、公版 sku/售價）重建整表——切換模式或增減欄位時用 */
+function snapshotBotRows(){
+  return botItems.map(id=>{
+    const row=document.getElementById(`r-${id}`); if(!row) return null;
+    const q=x=>row.querySelector(`[data-f="${x}"]`);
+    return { name:gs(row,'name'),
+      lot:(q('lot')?q('lot').value:(botLotCache[id]||''))||'',
+      vol:gs(row,'vol'), price:gs(row,'price'),
+      ded:(q('ded')?q('ded').value:(botDedCache[id]||''))||'',
+      logo:(q('logo')?q('logo').value:(botLogoCache[id]||''))||'',
+      qty:gs(row,'qty'),
+      mark:(q('mark')&&q('mark').checked)?1:0,
+      sku:row.dataset.sku||'', listprice:row.dataset.listprice||'',
+      manual:(q('price')&&q('price').dataset.manual==='1')?1:0 };
+  }).filter(Boolean);
+}
+function rebuildBotRows(){
+  rebuildBotHeader();
+  const data=snapshotBotRows();
+  document.getElementById('itbody-bot').innerHTML=''; botItems=[];
+  data.forEach(d=>addBotRow(d));
+  calc();
 }
 
 function addBotRow(prefill){
@@ -1293,7 +1329,9 @@ function addBotRow(prefill){
   cols.push('68px','80px');
   if(colDed) cols.push('68px');
   if(colLogo) cols.push('68px');
-  cols.push('60px','88px','44px');
+  cols.push('60px','88px');
+  if(colMark) cols.push('52px');
+  cols.push('44px');
   div.className='itr';
   div.style.gridTemplateColumns = cols.join(' ');
   let lotVal = (prefill && prefill.lot) ? prefill.lot : '';
@@ -1308,11 +1346,46 @@ function addBotRow(prefill){
   if(colLogo) h += `<input type="number" min="0" placeholder="25" oninput="calc()" data-f="logo" value="${prefill?.logo||''}">`;
   h += `
     <input type="number" min="0" placeholder="40" oninput="calc()" data-f="qty" value="${prefill?.qty||''}">
-    <div class="sub" id="rs-${id}">—</div>
+    <div class="sub" id="rs-${id}">—</div>`;
+  if(colMark) h += `<div style="display:flex;align-items:center;justify-content:center"><input type="checkbox" data-f="mark" title="標記為 OEM／貼牌" onchange="onMarkChange(${id})" style="width:16px;height:16px;cursor:pointer" ${prefill&&prefill.mark?'checked':''}></div>`;
+  h += `
     <div class="rowact"><span class="ordcol"><button type="button" class="ordb" title="上移" onclick="moveBotRow(${id},-1)">▲</button><button type="button" class="ordb" title="下移" onclick="moveBotRow(${id},1)">▼</button></span><button class="del" onclick="delBotRow(${id})">✕</button></div>`;
   div.innerHTML = h;
   document.getElementById('itbody-bot').appendChild(div);
   botItems.push(id);
+  // 公版酒列（貼牌用）：還原 sku／建議售價與級距套折監聽
+  if(prefill && (prefill.sku || prefill.listprice)){
+    if(prefill.sku) div.dataset.sku=prefill.sku;
+    if(prefill.listprice) div.dataset.listprice=prefill.listprice;
+    const pi=div.querySelector('[data-f="price"]');
+    if(pi){ if(prefill.manual) pi.dataset.manual='1'; pi.addEventListener('input',()=>{ pi.dataset.manual='1'; }); }
+    const qi=div.querySelector('[data-f="qty"]');
+    if(qi){ qi.addEventListener('input',()=>applyOwnbrandTierForRow(id)); }
+  }
+}
+/* OEM／貼牌 勾選變動：公版模式（貼牌）確保套級距折，並更新 MOQ 提示與總額 */
+function onMarkChange(id){
+  if(qType==='ownbrand'){
+    const row=document.getElementById(`r-${id}`);
+    if(row && row.dataset.listprice) applyOwnbrandTierForRow(id);
+  }
+  calc();
+}
+/* 貼牌 MOQ 300／款 未達提醒（僅提示、不擋單）——公版買斷模式、已勾貼牌的列 */
+function updateObMoqWarn(){
+  const el=document.getElementById('ob-moqwarn'); if(!el) return;
+  if(qType!=='ownbrand'){ el.innerHTML=''; return; }
+  const warns=[];
+  botItems.forEach(id=>{
+    const row=document.getElementById(`r-${id}`); if(!row) return;
+    const mk=row.querySelector('[data-f="mark"]'); if(!mk||!mk.checked) return;
+    const q=gv(row,'qty');
+    if(q>0 && q<300){
+      const nm=gs(row,'name')||'該品項';
+      warns.push(`⚠ ${escHtml(nm)} 貼牌未達 MOQ 300／款（目前 ${q} 瓶）— 提醒用，照樣可出單`);
+    }
+  });
+  el.innerHTML=warns.map(w=>`<div class="moq-warn">${w}</div>`).join('');
 }
 
 function escHtml(s){
@@ -1570,6 +1643,7 @@ function calc(){
   document.getElementById('t-sub').textContent='$'+Math.round(netAll).toLocaleString();
   document.getElementById('tr-ext').style.display='none';   // 額外費用已併入合計計稅（品項表內仍有明細列）
   document.getElementById('t-tot').textContent='$'+Math.round(grandTotal).toLocaleString();
+  try{ updateObMoqWarn(); }catch(e){}
   calcPay();
 }
 
@@ -1737,6 +1811,7 @@ function resetAll(skipConfirm){
   botDedCache={}; botLogoCache={}; botLotCache={};
   flavors={g1:[],g2:[]};
   colDed=false; colLogo=false; colLot=false;
+  colMark=(qType==='bottle'||qType==='ownbrand');
   document.getElementById('ctg-ded').classList.remove('on');
   document.getElementById('ctg-logo').classList.remove('on');
   document.getElementById('ctg-lot').classList.remove('on');
@@ -1838,7 +1913,10 @@ function buildStdDocParts(){
       const n=escHtml(gs(row,'name')),lot=escHtml(gs(row,'lot')),vol=gv(row,'vol'),p=gv(row,'price'),d=colDed?gv(row,'ded'):0,l=colLogo?gv(row,'logo'):0,q=gv(row,'qty');
       const sub=(p+d+l)*q;
       if(!n&&!sub) return;
-      let cells = `<td style="padding:11px 12px;font-weight:600;color:#22241F">${n||'—'}</td>`;
+      const _mk = colMark && row.querySelector('[data-f="mark"]') && row.querySelector('[data-f="mark"]').checked;
+      const _mkLabel = _mk ? (qType==='ownbrand'?'貼牌':'OEM') : '';
+      const _mkTag = _mkLabel ? ` <span style="display:inline-block;font-size:10px;font-weight:700;color:#7A5A1E;background:#F3ECDD;border-radius:4px;padding:1px 6px;margin-left:4px;vertical-align:1px">${_mkLabel}</span>` : '';
+      let cells = `<td style="padding:11px 12px;font-weight:600;color:#22241F">${n||'—'}${_mkTag}</td>`;
       if(colLot) cells += `<td style="padding:11px 8px;text-align:center;color:#6B6B63">${lot}</td>`;
       cells += `<td style="padding:11px 8px;text-align:center;color:#6B6B63">${vol?vol+'ml':'—'}</td>
         <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+p.toLocaleString():'—'}</td>`;
@@ -2192,9 +2270,11 @@ function collectQuote(){
       const row=document.getElementById(`r-${rid}`); if(!row) return;
       const name=gs(row,'name'); const sub=(gv(row,'price')+(colDed?gv(row,'ded'):0)+(colLogo?gv(row,'logo'):0))*gv(row,'qty');
       if(!name && !sub) return;
+      const _marked=(row.querySelector('[data-f="mark"]')&&row.querySelector('[data-f="mark"]').checked)?'Y':'N';
       items.push({ itemType:'bottle', name, lot:gs(row,'lot'), volume:gv(row,'vol'),
         unitPrice:gv(row,'price'), deduction:colDed?gv(row,'ded'):0, logoFee:colLogo?gv(row,'logo'):0,
-        qty:gv(row,'qty'), unit:'瓶', subtotal:sub, flavorList:'' });
+        qty:gv(row,'qty'), unit:'瓶', subtotal:sub, flavorList:'',
+        is_oem:(qType==='ownbrand'?'N':_marked), is_label:(qType==='ownbrand'?_marked:'N') });
     });
   } else {
     // banquet groups
@@ -2433,13 +2513,14 @@ function loadQuoteIntoForm(q){
     colLot = realItems.some(it=>it.lot);
     colDed = realItems.some(it=>it.deduction);
     colLogo = realItems.some(it=>it.logoFee);
+    colMark = (q.quoteType==='bottle'||q.quoteType==='ownbrand');
     document.getElementById('ctg-lot').classList.toggle('on',colLot);
     document.getElementById('ctg-ded').classList.toggle('on',colDed);
     document.getElementById('ctg-logo').classList.toggle('on',colLogo);
     rebuildBotHeader();
     items.forEach(it=>{
       if(it.itemType==='extra'){ extras.push({id:`ext${++_extSeq}`,n:it.name,a:it.unitPrice||it.subtotal||0}); }
-      else { addBotRow({name:it.name,lot:it.lot,vol:it.volume,price:it.unitPrice,ded:it.deduction,logo:it.logoFee,qty:it.qty}); }
+      else { addBotRow({name:it.name,lot:it.lot,vol:it.volume,price:it.unitPrice,ded:it.deduction,logo:it.logoFee,qty:it.qty,mark:((it.is_oem==='Y'||it.is_label==='Y')?1:0)}); }
     });
     if(botItems.length===0) addBotRow();
     renderExt();
@@ -2694,9 +2775,9 @@ function buildCustomDocParts(){
   const inv = document.getElementById('c-inv')?document.getElementById('c-inv').value.trim():'';
   const ph = document.getElementById('c-ph')?document.getElementById('c-ph').value.trim():'';
   const ad = document.getElementById('c-ad')?document.getElementById('c-ad').value.trim():'';
-  const no = document.getElementById('c-no').value.trim() || '—';
-  const dt = document.getElementById('c-dt').value || '—';
-  const ex = document.getElementById('c-ex').value || '—';
+  const no = escHtml(document.getElementById('c-no').value.trim() || '—');
+  const dt = escHtml(document.getElementById('c-dt').value || '—');
+  const ex = escHtml(document.getElementById('c-ex').value || '—');
   const mode = document.getElementById('c-taxmode').value;
   const hName = document.getElementById('c-h-name').value.trim() || '項目';
   const hQty = document.getElementById('c-h-qty').value.trim() || '數量';
@@ -3117,10 +3198,49 @@ function onSelectCompany(){
     if(note && f && !f.value.trim()) f.value=note;
   });
   box.style.display='block';
+  { const sb=document.getElementById('qf-syncbtn');
+    if(sb){
+      // 後端若已回傳 recipe_sheet_id：只有設定酒譜表的公司顯示同步鈕；欄位尚未回傳(undefined)時一律顯示，由後端回覆是否有酒譜
+      const rid=c.recipe_sheet_id;
+      const show=(rid===undefined)?true:!!(String(rid||'').trim());
+      sb.style.display=show?'':'none';
+    }
+    const nb=document.getElementById('qf-syncnote'); if(nb) nb.innerHTML='';
+  }
   fillProductSelect('qf-product', c.company_id);
   renderRuleChips();
   applyAutoRules(); renderExt(); calc();
   toast('已帶入 '+companyLabel(c)+' 的客戶資料與報價邏輯','ok');
+}
+/* 客戶酒譜同步：呼叫後端 syncCustomerProducts，更新該公司 products 的品名/容量/售價 */
+async function syncCustomerRecipe(){
+  if(!SELECTED_COMPANY){ toast('請先選擇公司','err'); return; }
+  const cid=SELECTED_COMPANY.company_id;
+  const btn=document.getElementById('qf-syncbtn');
+  const note=document.getElementById('qf-syncnote');
+  let _restore='';
+  if(btn){ _restore=btn.innerHTML; btn.disabled=true; btn.innerHTML='<i class="ti ti-loader"></i> 同步中…'; }
+  try{
+    const d=await apiCall({ action:'syncCustomerProducts', token:AUTH_TOKEN, company_id:cid });
+    if(d && d.ok===false) throw new Error(d.error||'同步失敗');
+    const s=(d&&d.summary)||d||{};
+    const added=s.added||0, updated=s.updated||0, un=Array.isArray(s.unmatched)?s.unmatched:[];
+    toast(`酒譜同步完成：更新 ${updated} 筆、新增 ${added} 筆`+(un.length?`、${un.length} 筆待確認`:''),'ok');
+    // 重新載入公司報價檔，讓最新售價可帶入
+    try{ await loadCompanyData(true); SELECTED_COMPANY=companyById(cid)||SELECTED_COMPANY; }catch(e){}
+    fillProductSelect('qf-product', cid);
+    if(note){
+      note.innerHTML = un.length
+        ? `<div class="moq-warn">⚠ 有 ${un.length} 筆酒譜品項與系統既有品項對不上、未自動更新，請確認品名／容量：<br>`+
+          un.map(u=>escHtml(typeof u==='string'?u:(u.name||u['品名']||u.reason||JSON.stringify(u)))).join('、')+`</div>`
+        : `<span class="qf-chip ok">✓ 全部品項比對成功，無待確認項目</span>`;
+    }
+  }catch(e){
+    toast(e.message||'酒譜同步失敗（此公司可能尚未設定酒譜表）','err');
+    if(note) note.innerHTML=`<div class="moq-warn">⚠ ${escHtml(e.message||'同步失敗，請確認此公司是否已設定酒譜試算表')}</div>`;
+  }finally{
+    if(btn){ btn.disabled=false; btn.innerHTML=_restore||'<i class="ti ti-refresh"></i> 同步最新酒譜'; }
+  }
 }
 function renderRuleChips(){
   const wrap=document.getElementById('qf-rules'); if(!wrap) return;
@@ -3964,17 +4084,9 @@ function quickAddOwnbrand(){
   const sku=document.getElementById('ob-product').value; if(!sku){ toast('請先選擇公版酒','err'); return; }
   const p=ownbrandBySku(sku); if(!p) return;
   const vol=String(p.volume||'').replace(/[^\d]/g,'');
-  addBotRow({ name:p.name, vol:vol, price:p.list_price, qty:'' });
-  const id=rowId, row=document.getElementById(`r-${id}`);
-  if(row){
-    row.dataset.sku=p.sku_id;
-    row.dataset.listprice=p.list_price;
-    const pi=row.querySelector('[data-f="price"]');
-    if(pi){ pi.addEventListener('input',()=>{ pi.dataset.manual='1'; }); }
-    const qi=row.querySelector('[data-f="qty"]');
-    if(qi){ qi.addEventListener('input',()=>applyOwnbrandTierForRow(id)); }
-  }
+  addBotRow({ name:p.name, vol:vol, price:p.list_price, qty:'', sku:p.sku_id, listprice:p.list_price });
   toast('已帶入 '+p.name+'（'+p.volume+'）','ok');
+  calc();
 }
 /* 單列依瓶數套折（autotier 開啟且該列單價未手改時才覆寫）*/
 function applyOwnbrandTierForRow(id, force){
