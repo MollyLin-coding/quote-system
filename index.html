@@ -531,6 +531,10 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
           <div class="fl"><label>有效至（自動+1月）</label><input class="fi ro" id="f-ex" readonly></div>
           <div class="fl"><label>處理人員</label><input class="fi" id="f-hdl" value="Molly"></div>
         </div>
+        <div class="fg fg2" style="margin-top:12px">
+          <div class="fl"><label>預計出貨日 <span style="font-style:italic;color:var(--bd);font-weight:400">選填</span></label><input class="fi" type="date" id="f-shipdate"></div>
+          <div class="fl" style="justify-content:flex-end"><label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400;font-size:13px"><input type="checkbox" id="f-shipdate-show" checked style="width:auto;margin:0"> 在報價單／PDF 顯示此出貨日</label></div>
+        </div>
         <div style="margin-top:16px">
           <div class="sub-label">批次標籤 <span class="ln"></span> <span style="font-style:italic;color:var(--bd);font-weight:400">選填，僅供識別用，不影響正式資料</span></div>
           <div class="fg fg2">
@@ -1070,7 +1074,9 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
           <option value="5">5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option>
           <option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option></select>
         <input class="fi" type="number" id="ce-mday" min="1" max="31" style="flex:1" placeholder="幾號">
+        <span id="ce-interval-wrap" style="display:none;align-items:center;gap:4px;flex:1;white-space:nowrap;font-size:12px;color:#6B6B63">每<input class="fi" type="number" id="ce-interval" min="1" max="60" value="1" style="width:52px">個月</span>
       </div>
+      <div id="ce-interval-hint" style="display:none;font-size:10.5px;color:#A8A69C;margin-top:4px">「每 N 個月」從本次儲存的月份起算，每 N 個月出現一次（例如每 2 個月＝雙月、每 3＝每季）。</div>
     </div>
     <div class="fl" style="margin-top:8px"><label>標題</label><input class="fi" id="ce-title" placeholder="要做什麼？"></div>
     <div class="fl" style="margin-top:8px"><label>詳細內容（選填）</label><textarea class="fi" id="ce-detail" rows="2" style="resize:vertical"></textarea></div>
@@ -1787,15 +1793,17 @@ function buildStdDocParts(){
   const no=document.getElementById('f-no').value||'—';
   const dt=document.getElementById('f-dt').value||'—';
   const ex=document.getElementById('f-ex').value||'—';
-  const cli=document.getElementById('f-cli').value||'';
-  const tagLot=document.getElementById('f-tag-lot')?.value||'';
-  const tagCli=document.getElementById('f-tag-cli')?.value||'';
-  const con=document.getElementById('f-con').value||'';
-  const tax=document.getElementById('f-tax').value;
-  const ph=document.getElementById('f-ph').value;
-  const ad=document.getElementById('f-ad').value;
-  const hdl=document.getElementById('f-hdl').value||'';
-  const note=document.getElementById('f-note').value;
+  const shipDate=document.getElementById('f-shipdate')?document.getElementById('f-shipdate').value:'';
+  const showShip=document.getElementById('f-shipdate-show')?document.getElementById('f-shipdate-show').checked:true;
+  const cli=escHtml(document.getElementById('f-cli').value||'');
+  const tagLot=escHtml(document.getElementById('f-tag-lot')?.value||'');
+  const tagCli=escHtml(document.getElementById('f-tag-cli')?.value||'');
+  const con=escHtml(document.getElementById('f-con').value||'');
+  const tax=escHtml(document.getElementById('f-tax').value||'');
+  const ph=escHtml(document.getElementById('f-ph').value||'');
+  const ad=escHtml(document.getElementById('f-ad').value||'');
+  const hdl=escHtml(document.getElementById('f-hdl').value||'');
+  const note=escHtml(document.getElementById('f-note').value||'');
   const tot=document.getElementById('t-tot').textContent;
   const tsub=document.getElementById('t-sub').textContent;
   const ttax=document.getElementById('t-tax').textContent;
@@ -1827,7 +1835,7 @@ function buildStdDocParts(){
     colgroup = `<colgroup>${cols}</colgroup>`;
     botItems.forEach(id=>{
       const row=document.getElementById(`r-${id}`); if(!row) return;
-      const n=gs(row,'name'),lot=gs(row,'lot'),vol=gv(row,'vol'),p=gv(row,'price'),d=colDed?gv(row,'ded'):0,l=colLogo?gv(row,'logo'):0,q=gv(row,'qty');
+      const n=escHtml(gs(row,'name')),lot=escHtml(gs(row,'lot')),vol=gv(row,'vol'),p=gv(row,'price'),d=colDed?gv(row,'ded'):0,l=colLogo?gv(row,'logo'):0,q=gv(row,'qty');
       const sub=(p+d+l)*q;
       if(!n&&!sub) return;
       let cells = `<td style="padding:11px 12px;font-weight:600;color:#22241F">${n||'—'}</td>`;
@@ -1844,7 +1852,7 @@ function buildStdDocParts(){
       const colspan = 4 + (colLot?1:0) + (colDed?1:0) + (colLogo?1:0);
       extras.forEach(e=>{
         rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
-          <td colspan="${colspan}" style="padding:9px 12px;color:#A6824A;font-style:italic;font-size:12px">${e.n}</td>
+          <td colspan="${colspan}" style="padding:9px 12px;color:#A6824A;font-style:italic;font-size:12px">${escHtml(e.n)}</td>
           <td style="padding:9px 8px;text-align:right;color:#6B6B63">${fmtMoney(e.a)}</td>
         </tr>`);
       });
@@ -1863,7 +1871,7 @@ function buildStdDocParts(){
     const g1p=parseFloat(document.getElementById('ban-g1-price').value)||0;
     const g1q=parseFloat(document.getElementById('ban-g1-qty').value)||0;
     if(g1p||g1q){
-      const flavorStr = flavors.g1.length ? `（${flavors.g1.join('、')}）` : '';
+      const flavorStr = flavors.g1.length ? `（${flavors.g1.map(escHtml).join('、')}）` : '';
       rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
         <td style="padding:11px 12px;font-weight:600;color:#22241F">客製化調酒<span style="font-weight:400;color:#6B6B63;font-size:11.5px">${flavorStr}</span></td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${g1q}</td>
@@ -1875,7 +1883,7 @@ function buildStdDocParts(){
     const g2p=parseFloat(document.getElementById('ban-g2-price').value)||0;
     const g2q=parseFloat(document.getElementById('ban-g2-qty').value)||0;
     if(g2p||g2q){
-      const flavorStr = flavors.g2.length ? `（${flavors.g2.join('、')}）` : '';
+      const flavorStr = flavors.g2.length ? `（${flavors.g2.map(escHtml).join('、')}）` : '';
       rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
         <td style="padding:11px 12px;font-weight:600;color:#22241F">客製化無酒精雞尾酒<span style="font-weight:400;color:#6B6B63;font-size:11.5px">${flavorStr}</span></td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${g2q}</td>
@@ -1886,7 +1894,7 @@ function buildStdDocParts(){
     }
     banFreeItems.forEach(id=>{
       const row=document.getElementById(`bf-${id}`); if(!row) return;
-      const n=gs(row,'name'),u=gs(row,'unit'),p=gv(row,'price'),q=gv(row,'qty');
+      const n=escHtml(gs(row,'name')),u=escHtml(gs(row,'unit')),p=gv(row,'price'),q=gv(row,'qty');
       const sub=p*q;
       if(!n&&!sub) return;
       rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
@@ -1916,7 +1924,7 @@ function buildStdDocParts(){
     // addons
     banAddonItems.forEach(id=>{
       const row=document.getElementById(`ba-${id}`); if(!row) return;
-      const n=gs(row,'name'),u=gs(row,'unit'),p=gv(row,'price'),q=gv(row,'qty');
+      const n=escHtml(gs(row,'name')),u=escHtml(gs(row,'unit')),p=gv(row,'price'),q=gv(row,'qty');
       const sub=p*q;
       if(!n&&!sub) return;
       rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
@@ -1932,8 +1940,8 @@ function buildStdDocParts(){
 
   const venH=qType==='banquet'&&document.getElementById('f-ven').value?`
     <div style="display:flex;gap:28px;font-size:12px;color:#6B6B63;margin-bottom:18px">
-      <span>佈置地點：<strong style="color:#22241F">${document.getElementById('f-ven').value}</strong></span>
-      ${document.getElementById('f-svc').value?`<span>供酒時間：${document.getElementById('f-svc').value}</span>`:''}
+      <span>佈置地點：<strong style="color:#22241F">${escHtml(document.getElementById('f-ven').value)}</strong></span>
+      ${document.getElementById('f-svc').value?`<span>供酒時間：${escHtml(document.getElementById('f-svc').value)}</span>`:''}
     </div>`:'';
 
   const imgH=imgs.length?`
@@ -1944,16 +1952,16 @@ function buildStdDocParts(){
   const payH=getPayTerms();
 
   let cliRows='';
-  const inv=document.getElementById('f-inv')?document.getElementById('f-inv').value.trim():'';
+  const inv=escHtml(document.getElementById('f-inv')?document.getElementById('f-inv').value.trim():'');
   const cliFields=[[cli,'客戶名稱'],[con,'聯絡人'],[ph,'聯絡電話'],[ad,'地址'],[inv,'發票抬頭'],[tax,'統一編號']];
   cliFields.forEach(([v,l])=>{
     if(v) cliRows+=`<div style="display:flex;gap:8px;font-size:12.5px;margin-bottom:7px;line-height:1.6"><span style="color:#A8A69C;min-width:62px">${l}</span><span style="color:#22241F">${v}</span></div>`;
   });
   /* 出貨資訊：只在「與聯絡地址不同」且有填任一欄時才另外印出，避免同一組地址重複兩次 */
   const shipSame=document.getElementById('f-shipsame')?document.getElementById('f-shipsame').checked:true;
-  const shipCon=document.getElementById('f-shipcon')?document.getElementById('f-shipcon').value.trim():'';
-  const shipPh=document.getElementById('f-shipph')?document.getElementById('f-shipph').value.trim():'';
-  const shipAd=document.getElementById('f-shipad')?document.getElementById('f-shipad').value.trim():'';
+  const shipCon=escHtml(document.getElementById('f-shipcon')?document.getElementById('f-shipcon').value.trim():'');
+  const shipPh=escHtml(document.getElementById('f-shipph')?document.getElementById('f-shipph').value.trim():'');
+  const shipAd=escHtml(document.getElementById('f-shipad')?document.getElementById('f-shipad').value.trim():'');
   let shipRows='';
   if(!shipSame && (shipCon||shipPh||shipAd)){
     const shipFields=[[shipCon,'出貨收件人'],[shipPh,'收件人電話'],[shipAd,'出貨地址']];
@@ -1980,6 +1988,7 @@ function buildStdDocParts(){
       <div style="font-size:11.5px;color:#A8A69C;line-height:1.9">單號：<span style="color:#22241F;font-weight:600">${no}</span></div>
       <div style="font-size:11.5px;color:#A8A69C;line-height:1.9">報價日：<span style="color:#22241F">${dt}</span></div>
       <div style="font-size:11.5px;color:#A6824A;font-weight:700">有效至：${ex}</div>
+      ${(showShip&&shipDate)?`<div style="font-size:11.5px;color:#A8A69C;line-height:1.9">預計出貨日：<span style="color:#22241F">${escHtml(shipDate)}</span></div>`:''}
     </div>
   </div>`;
 
@@ -2245,6 +2254,7 @@ function collectQuote(){
     svcMode: svcMode, svcAmount: svcAmount,
     svcAmt1: svcAmt1, svcAmt2: svcAmt2, svcQty: svcQty,
     tagLot: val('f-tag-lot'), tagCli: val('f-tag-cli'),
+    expectedShipDate: val('f-shipdate'), showShipDate: (document.getElementById('f-shipdate-show')?.checked ? 'Y' : 'N'),
     items
   };
 }
@@ -2406,6 +2416,8 @@ function loadQuoteIntoForm(q){
   set('f-dt',q.quoteDate); set('f-hdl',q.handler);
   set('f-ven',q.venue); set('f-ent',q.entryTime); set('f-svc',q.serviceTime); set('f-ext',q.exitTime);
   set('f-note',q.remark);
+  { const sd=document.getElementById('f-shipdate'); if(sd) sd.value=q.expectedShipDate||''; }
+  { const ss=document.getElementById('f-shipdate-show'); if(ss) ss.checked=(q.showShipDate!=='N'); } // 預設顯示；後端尚未存此欄前一律視為顯示
   { const _tr=document.getElementById('taxrate'); if(_tr) _tr.value=(q.taxRate==null?5:q.taxRate); } // 稅率填 0（免稅）要保留 0，不能被 ||5 改回 5%
   // 先把流水號從單號尾碼還原，onDate() 會用它重算單號，避免顯示/PDF 變成 -01
   if(q.quoteNo){ const m=String(q.quoteNo).match(/-(\d+)\s*$/); if(m){ const s=document.getElementById('f-ser'); if(s) s.value=parseInt(m[1],10)||1; } }
@@ -3612,7 +3624,7 @@ function eventsOn(dstr){
     if(it.kind==='recur' && (CAL_FILTER==='all'||CAL_FILTER==='recur')){
       const r=parseJsonSafe(it.recur_json,{});
       const hit=(r.freq==='weekly'&&d.getDay()===(r.weekday??-1))
-        || (r.freq==='monthly'&&d.getDate()===(r.day||0))
+        || (r.freq==='monthly'&&d.getDate()===(r.day||0)&&monthlyIntervalHit(r,d))
         || (r.freq==='yearly'&&d.getMonth()+1===(r.month||0)&&d.getDate()===(r.day||0));
       if(hit) evs.push({t:'recur', txt:'🔁 '+timeTxt+it.title, item:it, time:timeTxt?it.time:''});
     }
@@ -3751,6 +3763,7 @@ function openCalAdd(dstr, kind){
   document.getElementById('ce-freq').value='weekly';
   document.getElementById('ce-weekday').value='1';
   document.getElementById('ce-mday').value='5';
+  document.getElementById('ce-interval').value='1';
   onCalKindChange();
   onAllDayChange();
   onCalCategoryChange();
@@ -3775,6 +3788,7 @@ function openCalEdit(id){
   document.getElementById('ce-weekday').value=String(r.weekday??1);
   document.getElementById('ce-mon').value=String(r.month||1);
   document.getElementById('ce-mday').value=String(r.day||5);
+  document.getElementById('ce-interval').value=String(r.interval||1);
   onCalKindChange();
   onAllDayChange();
   onCalCategoryChange();
@@ -3791,6 +3805,8 @@ function onCalKindChange(){
   document.getElementById('ce-weekday').style.display = f==='weekly'?'inline-block':'none';
   document.getElementById('ce-mon').style.display = f==='yearly'?'inline-block':'none';   // 每年才顯示月份
   document.getElementById('ce-mday').style.display = f!=='weekly'?'inline-block':'none';
+  document.getElementById('ce-interval-wrap').style.display = (f==='monthly')?'inline-flex':'none'; // 「每 N 個月」間隔只在每月顯示
+  document.getElementById('ce-interval-hint').style.display = (k==='recur'&&f==='monthly')?'block':'none';
 }
 function onAllDayChange(){
   const ad=document.getElementById('ce-allday').checked;
@@ -3805,6 +3821,15 @@ function onCalCategoryChange(){
   if(dot) dot.style.background = c ? c.fg : '#CCC';
 }
 function closeCalEdit(){ document.getElementById('ce-overlay').style.display='none'; CAL_EDIT_ID=null; }
+/* 每月重複的「每 N 個月」間隔判斷：從錨點月份起算、每 interval 個月才命中；沒 interval 或沒錨點＝維持每月（相容舊資料）*/
+function monthlyIntervalHit(r,d){
+  const iv=r&&r.interval?r.interval:1;
+  if(iv<=1) return true;
+  if(r.anchorYm==null) return true;
+  const dYm=d.getFullYear()*12+d.getMonth();
+  const diff=dYm-r.anchorYm;
+  return diff>=0 && diff%iv===0;
+}
 async function saveCalItem(){
   if(_busy.calSave) return;
   const k=document.getElementById('ce-kind').value;
@@ -3814,9 +3839,21 @@ async function saveCalItem(){
   let recur='';
   if(k==='recur'){
     const f=document.getElementById('ce-freq').value;
-    recur = f==='weekly' ? JSON.stringify({freq:'weekly',weekday:parseInt(document.getElementById('ce-weekday').value)})
-          : f==='monthly' ? JSON.stringify({freq:'monthly',day:parseInt(document.getElementById('ce-mday').value)||1})
-          : JSON.stringify({freq:'yearly',month:parseInt(document.getElementById('ce-mon').value)||1,day:parseInt(document.getElementById('ce-mday').value)||1});
+    if(f==='monthly'){
+      const interval=Math.max(1, parseInt(document.getElementById('ce-interval').value)||1);
+      const day=parseInt(document.getElementById('ce-mday').value)||1;
+      const o={freq:'monthly', day, interval};
+      if(interval>1){
+        // 錨點月份：編輯時沿用舊錨點（不打亂既有排程），新建/舊資料升級時用本次儲存的月份
+        const prior = CAL_EDIT_ID ? parseJsonSafe((CAL_ITEMS.find(x=>String(x.item_id)===String(CAL_EDIT_ID))||{}).recur_json,{}) : {};
+        const now=new Date();
+        o.anchorYm = (prior && prior.anchorYm!=null) ? prior.anchorYm : (now.getFullYear()*12+now.getMonth());
+      }
+      recur = JSON.stringify(o);
+    } else {
+      recur = f==='weekly' ? JSON.stringify({freq:'weekly',weekday:parseInt(document.getElementById('ce-weekday').value)})
+            : JSON.stringify({freq:'yearly',month:parseInt(document.getElementById('ce-mon').value)||1,day:parseInt(document.getElementById('ce-mday').value)||1});
+    }
   }
   const existing = CAL_EDIT_ID ? CAL_ITEMS.find(x=>String(x.item_id)===String(CAL_EDIT_ID)) : null;
   const hasTime = (k==='memo'||k==='recur');
@@ -4282,6 +4319,7 @@ async function initV2(){
     const d=document.getElementById('qf-detail'); if(d) d.style.display='none';
     const sc=document.getElementById('f-shipsame'); if(sc) sc.checked=true;
     toggleShipSame('f');
+    { const ss=document.getElementById('f-shipdate-show'); if(ss) ss.checked=true; } // 出貨日「顯示」勾選回到預設
     FORM_DIRTY=false; // 清空/開新單後視為無未儲存內容
   };
 })();
