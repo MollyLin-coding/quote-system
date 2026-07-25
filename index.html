@@ -3932,7 +3932,10 @@ async function saveOrdEdit(){
 function renderInvPhotoLinks(v){
   const box=document.getElementById('oe-invphoto-links'); if(!box) return;
   const links=String(v||'').split(',').map(s=>s.trim()).filter(s=>/^https?:\/\//.test(s));
-  box.innerHTML=links.map((u,i)=>`<a class="rec-act-btn" href="${escHtml(u)}" target="_blank" rel="noopener" style="margin:0 6px 4px 0">📁 發票照片${links.length>1?' '+(i+1):''}</a>`).join('');
+  box.innerHTML=links.map((u,i)=>{
+    const lbl=/\/folders\//.test(u) ? '📁 照片資料夾' : ('📷 發票照片'+(links.length>1?' '+(i+1):''));
+    return `<a class="rec-act-btn" href="${escHtml(u)}" target="_blank" rel="noopener" style="margin:0 6px 4px 0">${lbl}</a>`;
+  }).join('');
 }
 async function invPhotosPicked(ev){
   const files=Array.from(ev.target.files||[]);
