@@ -279,6 +279,10 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
 .otl-node.done .otl-lbl{color:var(--forest)}
 .otl-date{font-size:9.5px;color:#A8A69C;margin-top:2px;min-height:12px;text-align:center;line-height:1.25}
 .oe-sec{grid-column:1/-1;font-size:10.5px;color:var(--gold-deep);font-weight:700;letter-spacing:.4px;margin:6px 0 -2px;padding-top:8px;border-top:1px dashed var(--bd)}
+.gd-opt{display:flex;gap:7px;align-items:flex-start;font-size:12.5px;color:var(--ink);margin:6px 0;line-height:1.5;cursor:pointer;font-weight:400}
+.gd-opt input{margin-top:2px;accent-color:var(--gold)}
+.ob.grey{background:#EFEEE9;color:#8A887E;border:1px solid #DFDCD2}
+a.rec-act-btn{text-decoration:none;display:inline-block}
 /* 出貨驗收管理 */
 .vpill{display:inline-block;font-size:10.5px;border-radius:20px;padding:2px 10px;font-weight:600;border:1px solid transparent;white-space:nowrap}
 .vpill.wait{background:#FBF1E9;color:#B5541F;border-color:#EBD2BC}
@@ -1099,13 +1103,36 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
       <div class="oe-sec">② 出貨</div>
       <div class="fl"><label>預計出貨日</label><input class="fi" type="date" id="oe-ship_date_est"></div>
       <div class="fl"><label>實際出貨日</label><input class="fi" type="date" id="oe-ship_date_actual"></div>
+      <div style="grid-column:1/-1">
+        <button type="button" class="rec-act-btn" id="shp-toggle" onclick="shpToggle()">▸ 分批出貨（例外時才用）</button>
+        <div id="shp-box" style="display:none;margin-top:8px">
+          <div class="tbl-scroll">
+            <table class="rec-table" style="font-size:12px">
+              <thead><tr><th style="text-align:center">批</th><th>預計出貨</th><th>實際出貨</th><th style="text-align:right">金額</th><th>發票末五碼</th><th>備註</th><th></th></tr></thead>
+              <tbody id="shp-body"><tr><td colspan="7" class="rec-empty">載入中…</td></tr></tbody>
+            </table>
+          </div>
+          <button type="button" class="rec-act-btn" onclick="shpAddRow()" style="margin-top:6px">＋ 新增一批</button>
+          <div style="font-size:11px;color:var(--sub);margin-top:4px">上面的主線出貨日照常填；這裡只給分批出貨的例外單用，記每批各自的日期、金額與發票。</div>
+        </div>
+      </div>
 
       <div class="oe-sec">③ 發票</div>
       <div class="fl"><label>發票號碼</label><input class="fi" id="oe-invoice_no"></div>
       <div class="fl"><label>發票開立日</label><input class="fi" type="date" id="oe-invoice_date"></div>
       <div class="fl"><label>發票後五碼</label><input class="fi" id="oe-invoice_last5" maxlength="5" inputmode="numeric" placeholder="例 12345"></div>
       <div class="fl"><label>發票明細（品名摘要）</label><input class="fi" id="oe-invoice_detail" placeholder="例 果醋禮盒 ×20"></div>
-      <div class="fl" style="grid-column:1/-1"><label>發票照片連結（先貼雲端連結；日後可直接上傳）</label><input class="fi" id="oe-invoice_photos" placeholder="貼上 Google 雲端硬碟／照片連結"></div>
+      <div class="fl" style="grid-column:1/-1"><label>發票照片</label>
+        <div id="oe-invphoto-links" style="line-height:1.7;margin:2px 0 4px"></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="file" id="oe-invphoto-file" accept="image/*" multiple style="display:none" onchange="invPhotosPicked(event)">
+          <button type="button" class="rec-act-btn" onclick="document.getElementById('oe-invphoto-file').click()"><i class="ti ti-camera"></i> 選照片上傳（可多張）</button>
+          <span id="oe-invphoto-hint" style="font-size:11.5px;color:var(--sub)"></span>
+        </div>
+        <div id="oe-invphoto-prev" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"></div>
+        <label style="margin-top:8px">照片連結（上傳後自動填入雲端資料夾連結；也可手動貼）</label>
+        <input class="fi" id="oe-invoice_photos" placeholder="上傳後自動填入，或手動貼雲端連結">
+      </div>
 
       <div class="oe-sec">④ 尾款</div>
       <div class="fl"><label>尾款金額</label><input class="fi" type="number" id="oe-final_amt"></div>
@@ -1124,6 +1151,22 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
   <div class="v2box" style="max-width:660px">
     <div class="v2h"><span id="cl-title">修改紀錄</span><button class="v2x" onclick="closeChangeLog()">✕</button></div>
     <div id="cl-body" style="max-height:62vh;overflow-y:auto"></div>
+  </div>
+</div>
+<div class="v2ov" id="gd-overlay">
+  <div class="v2box" style="max-width:580px">
+    <div class="v2h"><span id="gd-title">產生正式文件</span><button class="v2x" onclick="closeGendoc()">✕</button></div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:10px;line-height:1.6">會產生 PDF／Word 並自動下載，雲端也會留一份紀錄。</div>
+    <div class="fl"><label>之前產過的舊版檔案怎麼處理？</label>
+      <label class="gd-opt"><input type="radio" name="gd-ow" value="keep" checked><span><b>保留舊版</b>（預設）— 之前給客戶的檔案都還在，這次會多存一份新版</span></label>
+      <label class="gd-opt"><input type="radio" name="gd-ow" value="over"><span><b>覆蓋舊版</b> — 舊檔丟進垃圾桶，只留這次的新版</span></label>
+    </div>
+    <div style="display:flex;gap:10px;margin:12px 0 16px">
+      <button class="btn btn-gold" id="gd-run" onclick="gendocRun()"><i class="ti ti-file-text"></i>產生並下載</button>
+      <button class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63" onclick="closeGendoc()">取消</button>
+    </div>
+    <div class="oe-sec" style="margin:0 0 6px;padding-top:10px">歷史版本（點可開啟雲端檔案）</div>
+    <div id="gd-history" style="max-height:38vh;overflow-y:auto;font-size:12px"><div class="rec-empty">載入中…</div></div>
   </div>
 </div>
 <div class="v2ov" id="vmp-overlay">
@@ -2606,25 +2649,65 @@ async function saveQuote(){
   }
 }
 
-/* ---- 產生正式 PDF/Word 文件（GAS 動態建立 Google Doc）---- */
-async function generateOfficialDocument(){
+/* ---- 產生正式 PDF/Word 文件（GAS 動態建立 Google Doc）----
+   v31：改為先開視窗選「保留舊版（預設）／覆蓋舊版」，並可查歷史版本（listQuotePdfs） */
+function generateOfficialDocument(){
   if(!AUTH_TOKEN){ showLogin(); return; }
   if(!editingQuoteNo){
     toast('請先「儲存」報價單後再產生正式文件','err');
     return;
   }
-  const btn=document.getElementById('btn-gendoc');
+  document.getElementById('gd-title').textContent='產生正式文件 — '+editingQuoteNo;
+  const keep=document.querySelector('input[name="gd-ow"][value="keep"]'); if(keep) keep.checked=true;
+  document.getElementById('gd-overlay').style.display='flex';
+  loadGendocHistory();
+}
+function closeGendoc(){ document.getElementById('gd-overlay').style.display='none'; }
+function gdFmtDt(s){
+  if(!s) return '';
+  const str=String(s);
+  const d=new Date(str);
+  if(isNaN(d)) return str.slice(0,16);
+  const tpe=new Date(d.getTime()+8*60*60*1000);           // 以台北時間顯示（同 vmLocalYmd 作法）
+  return tpe.toISOString().slice(0,16).replace('T',' ');
+}
+async function loadGendocHistory(){
+  const box=document.getElementById('gd-history');
+  box.innerHTML='<div class="rec-empty">載入中…</div>';
+  try{
+    const d=await apiCall({ action:'listQuotePdfs', token:AUTH_TOKEN, quote_no:editingQuoteNo });
+    if(!d.ok){ box.innerHTML=`<div class="rec-empty">${d.error||'載入失敗'}</div>`; return; }
+    const list=(d.versions||d.pdfs||d.list||[]).slice();
+    if(!list.length){ box.innerHTML='<div class="rec-empty">這張單還沒產生過正式文件</div>'; return; }
+    list.sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+    box.innerHTML=list.map(v=>{
+      const inactive=(v.active===false||v.active===0||String(v.active).toUpperCase()==='FALSE');
+      return `<div style="display:flex;gap:8px;align-items:center;padding:7px 4px;border-bottom:1px solid #E8E5DD;${inactive?'opacity:.55':''}">
+        <span style="white-space:nowrap;color:var(--sub)">${escHtml(gdFmtDt(v.created_at))}</span>
+        <span style="flex:1;word-break:break-all">${escHtml(v.file_name||'')}${inactive?' <span class="ob grey">已作廢</span>':''}</span>
+        ${v.pdf_url?`<a class="rec-act-btn" href="${escHtml(v.pdf_url)}" target="_blank" rel="noopener">PDF</a>`:''}
+        ${v.doc_url?`<a class="rec-act-btn" href="${escHtml(v.doc_url)}" target="_blank" rel="noopener">Doc</a>`:''}
+      </div>`;
+    }).join('');
+  }catch(e){ box.innerHTML=`<div class="rec-empty">${e.message||'載入失敗'}</div>`; }
+}
+async function gendocRun(){
+  if(_busy.gendoc) return; _busy.gendoc=true;
+  const ow=((document.querySelector('input[name="gd-ow"]:checked')||{}).value==='over');
+  const btn=document.getElementById('gd-run');
   if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader"></i>產生中…'; }
   try {
-    const data=await apiCall({ action:'generateQuoteDocument', token:AUTH_TOKEN, quoteNo:editingQuoteNo });
+    const data=await apiCall({ action:'generateQuoteDocument', token:AUTH_TOKEN, quoteNo:editingQuoteNo, overwrite:ow });
     if(!data.ok){ toast(data.error||'產生失敗','err'); return; }
     downloadBase64_(data.pdfBase64, 'application/pdf', data.fileNameBase+'.pdf');
     downloadBase64_(data.docxBase64, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', data.fileNameBase+'.docx');
-    toast('已產生 PDF / Word 並開始下載','ok');
+    toast(ow?'已產生新版並開始下載（舊版已丟垃圾桶）':'已產生新版並開始下載（舊版保留）','ok');
+    loadGendocHistory();
   } catch(e){
     toast(e.message||'產生失敗','err');
   } finally {
-    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-file-text"></i>正式文件'; }
+    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-file-text"></i>產生並下載'; }
+    _busy.gendoc=false;
   }
 }
 
@@ -3681,6 +3764,7 @@ async function loadOrders(force){
     ORDERS_CACHE=list;
     renderOrders();
     loadOrderVerifyBadges();   // 非同步補上驗收單／客訴徽章，不擋列表
+    loadShipmentBadges();      // 非同步補上「分批×N」徽章（後端不支援全量查詢就略過）
     return list;
   }catch(e){
     if(body) body.innerHTML=`<tr><td colspan="6" class="rec-empty">${e.message||'載入失敗'}</td></tr>`;
@@ -3705,6 +3789,7 @@ function orderBadges(o){
     if(d!=null && d<0) h+='<span class="ob red">尾款已逾期</span>';
     else if(d!=null && d<=3) h+=`<span class="ob warn">尾款倒數 ${d} 天</span>`;
   }
+  if(SHP_SUM && SHP_SUM[o.no]) h+=`<span class="ob info">分批×${SHP_SUM[o.no]}</span>`;
   return h;
 }
 /* 訂單列的驗收單／客訴徽章（資料來自 ORDER_VSUM，非同步載入後重繪） */
@@ -3809,6 +3894,12 @@ function openOrdEdit(no){
   document.getElementById('oe-grand_total').value = st.grand_total || (o.total?Math.round(o.total):'') || '';
   document.getElementById('oe-closed_at').value = g('closed_at');
   document.getElementById('oe-track_note').value=g('track_note');
+  // v31 發票照片：顯示既有資料夾/照片連結
+  renderInvPhotoLinks(g('invoice_photos'));
+  document.getElementById('oe-invphoto-prev').innerHTML='';
+  document.getElementById('oe-invphoto-hint').textContent='';
+  // v31 分批出貨：每次開單重置為收合、未載入
+  shpReset();
   document.getElementById('oe-overlay').style.display='flex';
 }
 /* 依訂單總額帶入訂金/尾款各半（可再手改） */
@@ -3835,6 +3926,138 @@ async function saveOrdEdit(){
     await loadOrders(true);
   }catch(e){ toast(e.message||'儲存失敗','err'); }
   finally{ _busy.ordEdit=false; }
+}
+
+/* ---- v31 發票照片上傳（saveInvoicePhotos：存 Drive「發票照片/inv_單號」，資料夾連結回填 order_status.invoice_photos）---- */
+function renderInvPhotoLinks(v){
+  const box=document.getElementById('oe-invphoto-links'); if(!box) return;
+  const links=String(v||'').split(',').map(s=>s.trim()).filter(s=>/^https?:\/\//.test(s));
+  box.innerHTML=links.map((u,i)=>`<a class="rec-act-btn" href="${escHtml(u)}" target="_blank" rel="noopener" style="margin:0 6px 4px 0">📁 發票照片${links.length>1?' '+(i+1):''}</a>`).join('');
+}
+async function invPhotosPicked(ev){
+  const files=Array.from(ev.target.files||[]);
+  ev.target.value='';                       // 清空讓同一檔可再選
+  if(!files.length) return;
+  if(!ORD_EDITING){ toast('請先開啟訂單','err'); return; }
+  if(_busy.invUpload){ toast('照片上傳中，請稍候','err'); return; }
+  const arr=[];
+  for(const f of files){
+    if(!/^image\//.test(f.type||'')){ toast(`「${f.name}」不是圖片檔，略過`,'err'); continue; }
+    try{ arr.push(await imgFileToData_(f)); }   // 沿用 B4 縮圖轉 base64（1600px/JPEG 0.85）
+    catch(e){ toast(`「${f.name}」處理失敗，略過`,'err'); }
+  }
+  if(!arr.length) return;
+  _busy.invUpload=true;
+  const hint=document.getElementById('oe-invphoto-hint');
+  const prev=document.getElementById('oe-invphoto-prev');
+  prev.innerHTML=arr.map(i=>`<img src="${i.url}" style="width:52px;height:52px;object-fit:cover;border-radius:6px;border:1px solid var(--bd);opacity:.6">`).join('');
+  hint.textContent=`上傳中…（${arr.length} 張）`;
+  try{
+    const d=await apiCall({ action:'saveInvoicePhotos', token:AUTH_TOKEN, quote_no:ORD_EDITING,
+      images: arr.map(i=>({name:i.name, mime:i.mime, data:i.data})) });
+    if(!d.ok){ toast(d.error||'上傳失敗','err'); hint.textContent='上傳失敗，請再試一次'; return; }
+    toast(`已上傳 ${arr.length} 張發票照片`,'ok');
+    hint.textContent=''; prev.innerHTML='';
+    await refreshInvPhotoLinks();             // 重新讀 order_status，避免之後儲存進度用舊值蓋掉
+  }catch(e){ toast(e.message||'上傳失敗','err'); hint.textContent='上傳失敗，請再試一次'; }
+  finally{ _busy.invUpload=false; }
+}
+async function refreshInvPhotoLinks(){
+  try{
+    const os=await apiCall({ action:'getOrderStatusList', token:AUTH_TOKEN });
+    const row=(os.orders||[]).find(x=>x.quote_no===ORD_EDITING);
+    if(row){
+      document.getElementById('oe-invoice_photos').value=row.invoice_photos||'';
+      renderInvPhotoLinks(row.invoice_photos||'');
+      const o=(ORDERS_CACHE||[]).find(x=>x.no===ORD_EDITING); if(o) o.st=row;
+    }
+  }catch(_){}
+}
+
+/* ---- v31 分批出貨子紀錄（order_shipments：addShipment/listShipments/updateShipment）----
+   主線 order_status 出貨欄位不動；約一成例外單才用，預設收合。
+   日期讀回一律過 vmLocalYmd()：純日期字串原樣通過、時間戳轉台北日期，兩種後端行為都安全。 */
+let SHP_LOADED=false, SHP_LIST=[], SHP_SUM=null;
+function shpReset(){
+  SHP_LOADED=false; SHP_LIST=[];
+  const box=document.getElementById('shp-box'); if(box) box.style.display='none';
+  const btn=document.getElementById('shp-toggle'); if(btn) btn.textContent='▸ 分批出貨（例外時才用）';
+  const body=document.getElementById('shp-body'); if(body) body.innerHTML='<tr><td colspan="7" class="rec-empty">載入中…</td></tr>';
+}
+function shpToggle(){
+  const box=document.getElementById('shp-box');
+  const btn=document.getElementById('shp-toggle');
+  const open=box.style.display==='none';
+  box.style.display=open?'block':'none';
+  if(btn) btn.textContent=(open?'▾':'▸')+' 分批出貨（例外時才用）';
+  if(open && !SHP_LOADED) loadShipments();
+}
+async function loadShipments(){
+  const body=document.getElementById('shp-body');
+  body.innerHTML='<tr><td colspan="7" class="rec-empty">載入中…</td></tr>';
+  try{
+    const d=await apiCall({ action:'listShipments', token:AUTH_TOKEN, quote_no:ORD_EDITING });
+    if(!d.ok){ body.innerHTML=`<tr><td colspan="7" class="rec-empty">${d.error||'載入失敗'}</td></tr>`; return; }
+    SHP_LIST=d.shipments||d.list||[];
+    SHP_LOADED=true;
+    renderShipments();
+    SHP_SUM=SHP_SUM||{}; SHP_SUM[ORD_EDITING]=SHP_LIST.length;   // 順手更新徽章快取
+  }catch(e){ body.innerHTML=`<tr><td colspan="7" class="rec-empty">${e.message||'載入失敗'}</td></tr>`; }
+}
+function shpRowHtml(s, idx){
+  return `<tr data-shpid="${escHtml(s.id||'')}">
+    <td style="text-align:center;font-weight:600">${escHtml(String(s.seq||idx+1))}</td>
+    <td><input class="fi" type="date" data-f="ship_date_est" value="${escHtml(vmLocalYmd(s.ship_date_est))}" style="min-width:132px"></td>
+    <td><input class="fi" type="date" data-f="ship_date_actual" value="${escHtml(vmLocalYmd(s.ship_date_actual))}" style="min-width:132px"></td>
+    <td><input class="fi" type="number" data-f="amount" value="${(s.amount!=null&&s.amount!=='')?escHtml(String(s.amount)):''}" style="min-width:92px;text-align:right"></td>
+    <td><input class="fi" data-f="invoice_last5" maxlength="5" inputmode="numeric" value="${escHtml(s.invoice_last5||'')}" style="min-width:72px"></td>
+    <td><input class="fi" data-f="note" value="${escHtml(s.note||'')}" style="min-width:120px"></td>
+    <td><button type="button" class="rec-act-btn" onclick="shpSaveRow(this)">儲存</button></td>
+  </tr>`;
+}
+function renderShipments(){
+  const body=document.getElementById('shp-body');
+  if(!SHP_LIST.length){ body.innerHTML='<tr><td colspan="7" class="rec-empty">此單尚無分批紀錄，按「＋新增一批」開始</td></tr>'; return; }
+  body.innerHTML=SHP_LIST.map((s,i)=>shpRowHtml(s,i)).join('');
+}
+function shpAddRow(){
+  const box=document.getElementById('shp-box');
+  if(box.style.display==='none') shpToggle();
+  const body=document.getElementById('shp-body');
+  if(body.querySelector('tr[data-shpid=""]')){ toast('先儲存這一批，再新增下一批','err'); return; }
+  if(!SHP_LIST.length) body.innerHTML='';
+  body.insertAdjacentHTML('beforeend', shpRowHtml({id:'', seq:SHP_LIST.length+1}, SHP_LIST.length));
+}
+async function shpSaveRow(btn){
+  const tr=btn.closest('tr'); if(!tr) return;
+  if(_busy.shpSave) return; _busy.shpSave=true;
+  const id=tr.getAttribute('data-shpid');
+  const fields={};
+  tr.querySelectorAll('input[data-f]').forEach(inp=>{ fields[inp.getAttribute('data-f')]=inp.value; });
+  if(fields.invoice_last5 && !/^\d{5}$/.test(fields.invoice_last5)){ toast('發票末五碼需為 5 位數字','err'); _busy.shpSave=false; return; }
+  btn.disabled=true; btn.textContent='…';
+  try{
+    let d;
+    if(id){ d=await apiCall({ action:'updateShipment', token:AUTH_TOKEN, id, fields }); }
+    else  { d=await apiCall(Object.assign({ action:'addShipment', token:AUTH_TOKEN, quote_no:ORD_EDITING, fields }, fields)); }  // 扁平＋fields 都給，相容兩種後端寫法
+    if(!d.ok){ toast(d.error||'儲存失敗','err'); return; }
+    toast(id?'這一批已更新':'已新增一批','ok');
+    await loadShipments();
+  }catch(e){ toast(e.message||'儲存失敗','err'); }
+  finally{ btn.disabled=false; btn.textContent='儲存'; _busy.shpSave=false; }
+}
+/* 訂單列「分批×N」徽章：試打不帶 quote_no 的 listShipments，後端若回全部就能顯示；不支援就靜默略過 */
+async function loadShipmentBadges(){
+  try{
+    if(!AUTH_TOKEN) return;
+    const d=await apiCall({ action:'listShipments', token:AUTH_TOKEN }).catch(()=>null);
+    if(!d||!d.ok) return;
+    const arr=d.shipments||d.list||[];
+    if(!Array.isArray(arr)) return;
+    const m={}; arr.forEach(s=>{ if(s.quote_no) m[s.quote_no]=(m[s.quote_no]||0)+1; });
+    SHP_SUM=m;
+    renderOrders();
+  }catch(_){}
 }
 
 /* ---- 複製舊單（新單號，避免沿用舊號重複建單）---- */
