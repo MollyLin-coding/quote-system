@@ -4643,7 +4643,8 @@ function ensureVerifyOverlay(){
     <div id="vf-body"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
       <button class="btn btn-g" onclick="closeVerifyForm()">取消</button>
-      <button class="btn btn-gold" onclick="generateVerifyPdf()"><i class="ti ti-file-download"></i>產生驗收單 PDF</button>
+      <button class="btn btn-g" onclick="generateVerifyPdf('partial')">產生分批驗收單</button>
+      <button class="btn btn-gold" onclick="generateVerifyPdf('full')"><i class="ti ti-file-download"></i>產生整批驗收單</button>
     </div>
   </div>`;
   document.body.appendChild(ov);
@@ -4677,7 +4678,7 @@ function buildVerifyModal(hdrLot){
   const rowsH=d.rows.map((r,i)=>`<tr>
     <td style="font-weight:600;text-align:left;padding-left:6px">${escHtml(r.name)}</td>
     <td><input type="date" style="${inS};width:130px" data-i="${i}" data-k="mfg" class="vfi"></td>
-    <td><input style="${inS};width:70px" data-i="${i}" data-k="lot" class="vfi" value="${escHtml(r.lot)}"></td>
+    <td class="vf-lotcol" style="display:none"><input style="${inS};width:70px" data-i="${i}" data-k="lot" class="vfi" value="${escHtml(r.lot)}"></td>
     <td style="text-align:center;color:#6B6B63">${escHtml(r.vol)||'—'}</td>
     <td><input type="number" min="0" style="${inS};width:72px" data-i="${i}" data-k="thisShip" data-manual="0" class="vfi" value="${(r.thisShip!==''&&r.thisShip!=null)?r.thisShip:''}" oninput="onThisShipInput(this)"></td>
     <td style="text-align:center;font-weight:600">${r.ordered||0}</td>
@@ -4693,11 +4694,14 @@ function buildVerifyModal(hdrLot){
       <div class="fl"><label>專案經理 PM</label><input class="fi" id="vf-shipper" placeholder="PM 姓名"></div>
       <div class="fl"><label>此次配送總箱數</label><input class="fi" type="number" min="0" id="vf-boxes" placeholder="箱數"></div>
     </div>
+    <label style="display:inline-flex;align-items:center;gap:6px;margin-top:12px;font-size:12px;color:var(--fg);cursor:pointer">
+      <input type="checkbox" id="vf-showlot" onchange="toggleLotCol()"> 各品項不同批號時，顯示批號欄（預設隱藏，抬頭 Lot 仍會印）
+    </label>
     <div style="overflow-x:auto;margin-top:12px">
       <table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr style="background:var(--gold-pale);color:var(--gold-deep)">
           <th style="padding:7px 4px;text-align:left;padding-left:6px">品項</th>
-          <th style="padding:7px 4px">製造日期</th><th style="padding:7px 4px">批號</th>
+          <th style="padding:7px 4px">製造日期</th><th class="vf-lotcol" style="padding:7px 4px;display:none">批號</th>
           <th style="padding:7px 4px">容量</th><th style="padding:7px 4px">本次出貨數</th>
           <th style="padding:7px 4px">總受訂數</th><th style="padding:7px 4px">已出貨</th>
           <th style="padding:7px 4px">待出貨</th>
@@ -4707,9 +4711,14 @@ function buildVerifyModal(hdrLot){
     </div>
     <p style="font-size:11px;color:var(--hint);margin-top:10px;line-height:1.6">
       「待出貨」＝總受訂數 − 已出貨 − 本次出貨數，系統自動算。<br>
-      不良品（外觀／瓶內異物）、驗收日期、驗收者簽名欄會留白，印在驗收單上給客戶收貨時填寫。PDF 右下會有 QR，客戶掃碼即可快速回報驗收結果。</p>`;
+      一次全部出貨用「產生整批驗收單」；分幾次出貨用「產生分批驗收單」（會多印訂購總數／待出貨欄）。PDF 下方含「驗收與品質說明」，右下 QR 供客戶收貨後線上驗收回報。</p>`;
 }
 
+function toggleLotCol(){
+  const on=document.getElementById('vf-showlot');
+  const show=!!(on&&on.checked);
+  document.querySelectorAll('#vf-body .vf-lotcol').forEach(el=>{ el.style.display=show?'':'none'; });
+}
 function onThisShipInput(el){ if(el) el.dataset.manual='1'; recalcVerify(); }
 function onShippedInput(el){
   if(!VERIFY_DATA||!el) return;
@@ -4734,9 +4743,11 @@ function recalcVerify(){
   });
 }
 
-function generateVerifyPdf(){
+function generateVerifyPdf(mode){
   recalcVerify();
   const d=VERIFY_DATA; if(!d) return;
+  d.mode=(mode==='partial')?'partial':'full';
+  d.showLot=!!(document.getElementById('vf-showlot')&&document.getElementById('vf-showlot').checked);
   const gvl=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
   d.lot=gvl('vf-lot'); d.shipDate=gvl('vf-shipdate'); d.shipper=gvl('vf-shipper'); d.boxes=gvl('vf-boxes');
   const w=window.open('','_blank');
@@ -4746,135 +4757,147 @@ function generateVerifyPdf(){
 }
 
 function buildVerifyDocHtml(d){
+  const mode=(d.mode==='partial')?'partial':'full';
+  const isPartial=mode==='partial';
+  const showLot=!!d.showLot;
   const qrSvg=verifyQrSvg(verifyQrUrl(d.no,d.lot),4);
+  const volMl=v=>{ if(!v) return 0; const s=String(v).toLowerCase(); let m=s.match(/([\d.]+)\s*ml/); if(m) return parseFloat(m[1])||0; m=s.match(/([\d.]+)\s*l/); if(m) return (parseFloat(m[1])||0)*1000; m=s.match(/([\d.]+)/); return m?(parseFloat(m[1])||0):0; };
+  const unitOf=r=>volMl(r.vol)>=4000?'桶':'瓶';
+  const qty=(v,u)=>(v!==''&&v!=null&&!(typeof v==='number'&&isNaN(v)))?(v+' '+u):'';
+  let tThis=0,tShip=0,tOrd=0;
+  d.rows.forEach(r=>{ tThis+=parseFloat(r.thisShip)||0; tShip+=parseFloat(r.shipped)||0; tOrd+=parseFloat(r.ordered)||0; });
+  const tRemain=tOrd-tShip-tThis;
+  const units=Array.from(new Set(d.rows.map(unitOf)));
+  const tw=(units.length===1)?(' '+units[0]):'';
+  const lotTh=showLot?`<th>批號</th>`:'';
+  const lotTd=r=>showLot?`<td>${escHtml(r.lot)}</td>`:'';
+  const lotEmpty=showLot?'<td></td>':'';
   let body=d.rows.map(r=>{
+    const u=unitOf(r);
     const remain=(parseFloat(r.ordered)||0)-(parseFloat(r.shipped)||0)-(parseFloat(r.thisShip)||0);
-    const cell=v=>(v!==''&&v!=null&&!(typeof v==='number'&&isNaN(v)))?v:'';
+    if(isPartial){
+      return `<tr>
+      <td class="l">${escHtml(r.name)}</td>
+      <td class="mut">${vfDate(r.mfg)||'—'}</td>
+      ${lotTd(r)}
+      <td class="mut">${escHtml(r.vol)}</td>
+      <td>${qty(r.thisShip,u)}</td>
+      <td class="mut">${qty(r.shipped,u)}</td>
+      <td class="mut">${qty(r.ordered,u)}</td>
+      <td>${(!isNaN(remain)&&remain>0)?(remain+' '+u):'—'}</td>
+    </tr>`;
+    }
     return `<tr>
       <td class="l">${escHtml(r.name)}</td>
-      <td>${vfDate(r.mfg)}</td>
-      <td>${escHtml(r.lot)}</td>
-      <td>${escHtml(r.vol)}</td>
-      <td>${cell(r.thisShip)}</td>
-      <td>${cell(r.ordered)}</td>
-      <td>${cell(r.shipped)}</td>
-      <td class="hi">${isNaN(remain)?'':'<span class="rp">'+remain+'</span>'}</td>
-      <td class="def"></td>
-      <td class="def"></td>
+      <td class="mut">${vfDate(r.mfg)||'—'}</td>
+      ${lotTd(r)}
+      <td class="mut">${escHtml(r.vol)}</td>
+      <td>${qty(r.thisShip,u)}</td>
     </tr>`;
   }).join('');
+  const colCount=(isPartial?7:4)+(showLot?1:0);
   const pad=Math.max(0,VERIFY_MIN_ROWS-d.rows.length);
-  for(let k=0;k<pad;k++) body+=`<tr><td class="l">&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td class="hi"></td><td class="def"></td><td class="def"></td></tr>`;
+  const emptyCells='<td class="l">&nbsp;</td>'+'<td></td>'.repeat(colCount-1);
+  for(let k=0;k<pad;k++) body+=`<tr>${emptyCells}</tr>`;
+  const sumRow=isPartial
+    ? `<tr class="sum"><td class="l">合計</td><td></td>${lotEmpty}<td></td><td>${tThis}${tw}</td><td>${tShip}${tw}</td><td>${tOrd}${tw}</td><td>${tRemain>0?(tRemain+tw):0}</td></tr>`
+    : `<tr class="sum"><td class="l">合計</td><td></td>${lotEmpty}<td></td><td>${tThis}${tw}</td></tr>`;
+  const theadCols=isPartial
+    ? `<th class="l" style="width:24%">品項</th><th style="width:13%">製造日期</th>${lotTh}<th style="width:9%">容量</th><th>本次出貨</th><th>已出貨</th><th>訂購總數</th><th>待出貨</th>`
+    : `<th class="l" style="width:40%">品項</th><th style="width:18%">製造日期</th>${lotTh}<th style="width:14%">容量</th><th>出貨數量</th>`;
+  const tag=(isPartial)?`<span class="tag">分批出貨</span>`:'';
   return `<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8"><title>驗收單_${escHtml(d.no)}</title>
 <style>
-@page{size:A4 landscape;margin:9mm}
+@page{size:A4 landscape;margin:11mm}
 *{box-sizing:border-box}
 html,body{margin:0}
-body{font-family:-apple-system,'Microsoft JhengHei','PingFang TC','Heiti TC',sans-serif;color:#22241F;font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-/* 外層表格：thead=頁首、tfoot=頁尾，多頁自動每頁重複 */
+body{font-family:'Noto Sans TC','Microsoft JhengHei','PingFang TC','Heiti TC',sans-serif;color:#26261f;font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+/* 外層表格：thead=頁首每頁重複、tfoot=頁尾每頁重複 */
 table.page{width:100%;border-collapse:collapse}
 table.page>thead{display:table-header-group}
 table.page>tfoot{display:table-footer-group}
 table.page>thead>tr>td,table.page>tfoot>tr>td,table.page>tbody>tr>td{padding:0}
-.band{background:linear-gradient(102deg,#20392A,#2C4E38 62%,#335C41);color:#F3EEDF;padding:16px 22px;display:flex;justify-content:space-between;align-items:center;border-radius:12px}
-.bl{display:flex;align-items:center}
-.logo{height:34px;width:auto;display:block}
-.br{display:flex;flex-direction:column;align-items:flex-end;gap:12px;flex-shrink:0}
-.title{font-family:'DFKai-SB','標楷體','BiauKai','Kaiti TC','STKaiti','楷体','Noto Serif CJK TC','Noto Serif TC','Songti TC',serif;font-size:22px;font-weight:600;letter-spacing:8px;color:#F3EEDF}
-.plate{display:flex;gap:28px;align-items:flex-start}
-.pc{text-align:right}
-.pc .pl-l{font-size:8.5px;letter-spacing:2px;color:#D9B767;font-weight:700}
-.pc .pl-v{font-size:17px;font-weight:700;color:#fff;letter-spacing:1px;margin-top:5px;white-space:nowrap}
-.cwrap{padding:0 6px}
-.meta{display:flex;gap:9px;padding:14px 0 0}
-.mi{flex:1;background:#F7F1E3;border:1px solid #EADEC2;border-radius:9px;padding:8px 13px}
-.mi span{display:block;font-size:8.5px;letter-spacing:1.5px;color:#A88A57;font-weight:700;margin-bottom:2px}
-.mi b{font-size:13px;color:#20392A;font-weight:700}
-.twrap{padding:13px 0 0}
-table.vt{width:100%;border-collapse:separate;border-spacing:0;font-size:11.5px}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:11px;border-bottom:1.4px solid #b9954e}
+.hl{display:flex;align-items:center;gap:12px}
+.hl img{height:30px;width:auto;display:block}
+.hl .co{display:flex;align-items:center}
+.hl .co small{font-size:8.5px;color:#9a9689;font-weight:500;letter-spacing:2px}
+.hr{text-align:right}
+.ttl{font-family:'DFKai-SB','標楷體','BiauKai','Kaiti TC','Noto Serif TC',serif;font-size:23px;font-weight:700;letter-spacing:9px;color:#2b4a37}
+.tag{display:inline-block;font-family:'Noto Sans TC',sans-serif;font-size:9px;font-weight:700;color:#9a7b33;border:1px solid #d8c48f;border-radius:10px;padding:1px 9px;letter-spacing:1px;margin-left:8px;vertical-align:4px}
+.nos{margin-top:6px;font-size:11px;color:#55554c}
+.nos b{color:#26261f;font-weight:700;letter-spacing:.5px}
+.nos .sp{display:inline-block;width:1px;height:10px;background:#d8d2c4;margin:0 10px;vertical-align:-1px}
+.meta{display:flex;margin:13px 2px 0;font-size:11px;color:#55554c}
+.meta div{flex:1}
+.meta span{color:#9a9689;letter-spacing:1px;margin-right:6px;font-size:9.5px}
+.meta b{color:#26261f;font-weight:700}
+table.vt{width:100%;border-collapse:collapse;margin-top:14px;font-size:11.5px}
 table.vt thead{display:table-header-group}
-table.vt th{background:#fff;color:#20392A;border-bottom:2px solid #C9A24B;padding:9px 4px;font-weight:700;text-align:center;line-height:1.35;letter-spacing:.6px}
-table.vt th.dg{color:#9A7B33}
-table.vt th.hl{text-align:left;padding-left:11px}
-table.vt th .s{display:block;font-size:8.5px;color:#B7A986;font-weight:400;margin-top:2px;letter-spacing:0}
+table.vt th{color:#5f5e54;font-weight:600;font-size:10px;letter-spacing:.6px;padding:0 6px 7px;border-bottom:1.2px solid #c7ac6e;text-align:center;white-space:nowrap;vertical-align:bottom}
+table.vt th.l{text-align:left;padding-left:2px}
+table.vt th .u{display:block;font-size:8px;color:#a8a49a;font-weight:400;margin-top:2px;letter-spacing:0}
 table.vt tr{break-inside:avoid}
-table.vt td{border-bottom:1px solid #ECE6D8;padding:0 5px;text-align:center;height:41px;font-variant-numeric:tabular-nums;color:#3A3A33}
-table.vt td.l{text-align:left;font-weight:700;padding-left:11px;color:#20392A}
-table.vt td.hi{font-weight:700}
-table.vt td.def{background:#FCFBF7}
-table.vt tbody tr:last-child td{border-bottom:1.5px solid #DED5C0}
-.rp{display:inline-block;min-width:26px;padding:2px 10px;background:#F3EAD2;color:#8A6A2E;border-radius:20px;font-weight:800;letter-spacing:.5px}
-.ft{display:flex;justify-content:space-between;align-items:flex-end;gap:22px;padding:16px 0 4px}
-.sign{display:flex;gap:32px;flex:1;flex-wrap:wrap;align-items:flex-end}
-.sg .lb{font-size:8.5px;letter-spacing:1.8px;color:#A88A57;font-weight:700;margin-bottom:7px}
-.sg .u{min-width:150px;height:1px;border-bottom:1.4px solid #C3B896}
-.qr{flex-shrink:0;text-align:center;border:1.5px solid #D8CDB2;border-radius:11px;padding:8px 11px 7px;background:#fff}
-.qr svg{width:88px;height:88px;display:block;margin:0 auto}
-.qr .cap{font-size:8.5px;color:#7C5E32;margin-top:5px;font-weight:800;letter-spacing:.5px}
-.qr .cap2{font-size:7.5px;color:#A8A69C;margin-top:1px;letter-spacing:.3px}
-.note{margin:11px 6px 0;font-size:10.5px;color:#8A5424;background:#FBF4E9;border:1px solid #EFDFC7;border-left:3px solid #C9A24B;border-radius:7px;padding:9px 13px;font-weight:600;letter-spacing:.3px}
-.bfoot{margin:0 6px;padding:8px 0 4px;display:flex;justify-content:space-between;font-size:8.5px;color:#B4AC9A;letter-spacing:1px}
+table.vt td{padding:0 6px;height:36px;text-align:center;border-bottom:.8px solid #eae5da;font-variant-numeric:tabular-nums;color:#33332c}
+table.vt td.l{text-align:left;padding-left:2px;font-weight:600;color:#26261f}
+table.vt td.mut{color:#9a9689}
+table.vt tbody tr:last-child td{border-bottom:1.2px solid #d8d2c4}
+table.vt tbody tr.sum td{font-weight:700;color:#26261f;border-top:1.3px solid #c7ac6e;border-bottom:none;height:32px}
+table.vt tbody tr.sum td.l{color:#5f5e54;letter-spacing:2px;font-weight:700}
+.ft{display:flex;justify-content:space-between;align-items:stretch;margin-top:24px;gap:28px}
+.fl2{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:14px}
+.sign{display:flex;gap:34px;align-items:flex-end}
+.sg .lb{font-size:9px;color:#9a9689;letter-spacing:1.5px;margin-bottom:9px}
+.sg .u{border-bottom:1px solid #b3ab98;min-width:150px;height:1px}
+.notes{border-left:2px solid #c7ac6e;padding-left:13px}
+.notes .nh{font-size:10px;font-weight:700;color:#9a7b33;letter-spacing:2px;margin-bottom:6px}
+.notes .nb{font-size:10px;color:#4a4438;line-height:1.7;position:relative;padding-left:13px;margin-top:3px}
+.notes .nb:before{content:"•";position:absolute;left:1px;color:#b9954e;font-size:9px;top:.5px}
+.notes .nb b{color:#2b2b22;font-weight:700}
+.qr{text-align:center;flex-shrink:0;align-self:flex-end}
+.qr svg{width:92px;height:92px;display:block;margin:0 auto}
+.qr .cap{font-size:9px;color:#5a4a28;margin-top:5px;font-weight:700;letter-spacing:.5px}
+.qr .cap2{font-size:8px;color:#9a9689;margin-top:2px;letter-spacing:.3px}
+.pgft{margin-top:12px;padding-top:6px;border-top:.8px solid #efe7d8;display:flex;justify-content:space-between;font-size:8px;color:#b4ac9a;letter-spacing:1px}
 @media print{.noprint{display:none}}
 .noprint{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:9}
-.noprint button{background:#20392A;color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.noprint button{background:#2b4a37;color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25)}
 </style></head><body>
 <div class="noprint"><button onclick="window.print()">列印 / 另存 PDF</button></div>
 <table class="page">
 <thead><tr><td>
-  <div class="band">
-    <div class="bl">
-      <img class="logo" src="${VERIFY_LOGO}" alt="凱文南坡萬實業社">
+  <div class="hd">
+    <div class="hl"><img src="${VERIFY_LOGO}" alt="凱文南坡萬實業社"><div class="co"><small>KEVIN NANPOWAN CO.</small></div></div>
+    <div class="hr">
+      <div class="ttl">客戶驗收單${tag}</div>
+      <div class="nos">單號 <b>${escHtml(d.no)}</b><span class="sp"></span>LOT <b>${d.lot?escHtml(d.lot):'—'}</b></div>
     </div>
-    <div class="br">
-      <div class="title">客戶驗收單</div>
-      <div class="plate">
-        <div class="pc"><div class="pl-l">單號 NO.</div><div class="pl-v">${escHtml(d.no)}</div></div>
-        <div class="pc"><div class="pl-l">LOT</div><div class="pl-v">${d.lot?escHtml(d.lot):'—'}</div></div>
-      </div>
-    </div>
+  </div>
+  <div class="meta">
+    <div><span>配送日期</span><b>${vfDate(d.shipDate)||'—'}</b></div>
+    <div><span>專案經理</span><b>${escHtml(d.shipper||'')||'—'}</b></div>
+    <div><span>客戶</span><b>${escHtml(d.client||'')||'—'}</b></div>
+    <div><span>配送總箱數</span><b>${escHtml(d.boxes||'')?escHtml(d.boxes)+' 箱':'—'}</b></div>
   </div>
 </td></tr></thead>
 <tfoot><tr><td>
-  <div class="note"><b>※ 無論驗收有無問題，請務必於收貨後三日內掃描右方 QR Code 完成回報</b>（沒問題也請點「驗收無誤」一鍵送出）；逾期未回報即視為驗收合格。如有問題，我們會盡快為您處理。</div>
-  <div class="bfoot"><span>凱文南坡萬實業社　KEVIN NANPOWAN CO.</span><span>批次代工 · 客製標籤 · SGS 檢驗</span></div>
+  <div class="pgft"><span>凱文南坡萬實業社　KEVIN NANPOWAN CO.</span><span>批次代工 · 客製標籤 · SGS 檢驗</span></div>
 </td></tr></tfoot>
 <tbody><tr><td>
-  <div class="cwrap">
-    <div class="meta">
-      <div class="mi"><span>配送日期 SHIP DATE</span><b>${vfDate(d.shipDate)||'—'}</b></div>
-      <div class="mi"><span>專案經理 PM</span><b>${escHtml(d.shipper||'')||'—'}</b></div>
-      <div class="mi"><span>客戶 CUSTOMER</span><b>${escHtml(d.client||'')||'—'}</b></div>
-      <div class="mi"><span>此次配送總箱數 BOXES</span><b>${escHtml(d.boxes||'')?escHtml(d.boxes)+' 箱':'—'}</b></div>
-    </div>
-    <div class="twrap">
-    <table class="vt">
-      <thead>
-        <tr>
-          <th rowspan="2" class="hl" style="width:17%">品項</th>
-          <th rowspan="2">製造日期</th>
-          <th rowspan="2">批號</th>
-          <th rowspan="2">容量</th>
-          <th rowspan="2">本次出貨數</th>
-          <th rowspan="2">本訂單<br>總受訂數</th>
-          <th rowspan="2">已出貨</th>
-          <th rowspan="2">待出貨</th>
-          <th colspan="2" class="dg">不良品　DEFECT</th>
-        </tr>
-        <tr>
-          <th class="dg" style="width:15%">外觀<span class="s">瓶身 / 貼紙 / 瓶蓋</span></th>
-          <th class="dg" style="width:15%">瓶內異物<span class="s">天然水果纖維不計</span></th>
-        </tr>
-      </thead>
-      <tbody>${body}</tbody>
-    </table>
-    </div>
-    <div class="ft">
+  <table class="vt"><thead><tr>${theadCols}</tr></thead><tbody>${body}${sumRow}</tbody></table>
+  <div class="ft">
+    <div class="fl2">
       <div class="sign">
-        <div class="sg"><div class="lb">驗收日期　ACCEPTANCE DATE</div><div class="u"></div></div>
-        <div class="sg" style="flex:1"><div class="lb">驗收者簽名　SIGNATURE</div><div class="u" style="min-width:210px"></div></div>
+        <div class="sg"><div class="lb">驗收日期</div><div class="u"></div></div>
+        <div class="sg" style="flex:1"><div class="lb">驗收人簽名</div><div class="u" style="min-width:200px"></div></div>
       </div>
-      <div class="qr">${qrSvg||''}<div class="cap">收貨後請務必掃碼回報</div><div class="cap2">有無問題皆須回報</div></div>
+      <div class="notes">
+        <div class="nh">驗收與品質說明</div>
+        <div class="nb"><b>驗收回報</b>　為保障您的權益，請於收到商品後 <b>7 日內</b>掃描右側 QR Code 完成線上驗收。若逾期未填寫，將視同驗收合格。如商品有任何問題，請隨時回報，我們將第一時間為您處理。</div>
+        <div class="nb"><b>品質保證</b>　本產品採用<b>天然水果原料</b>製成，若瓶內出現果肉纖維或微量沉澱，均屬自然現象，請安心飲用。</div>
+      </div>
     </div>
+    <div class="qr">${qrSvg||''}<div class="cap">線上驗收回報</div><div class="cap2">收貨後 7 日內</div></div>
   </div>
 </td></tr></tbody>
 </table>
