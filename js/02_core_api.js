@@ -1,0 +1,589 @@
+/* ============================================================
+   API 層 + 系統功能（登入 / 儲存 / 列表 / 匯出）
+   ============================================================ */
+const API_URL = "https://script.google.com/macros/s/AKfycbytSqCF0St1Gu8F_u8KW9rcKJnkkGAfrdaHYyrQ6wDKa19Z3TxZd-GRRi_3Ii3Ijv4i/exec";
+let AUTH_TOKEN = null;
+let currentPage = 'new';      // new | records
+let editingQuoteNo = null;    // 若非 null 表示正在編輯既有報價單
+
+/* ---- API 呼叫核心（GAS Web App 用 text/plain 避開 CORS preflight）---- */
+const _busy={};   // 各儲存動作的「進行中」旗標，避免連點重複送出
+async function apiCall(payload){
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), 25000);   // 25 秒逾時，避免按鈕永久卡住
+  let res;
+  try {
+    res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      signal: ctrl.signal
+    });
+  } catch(err) {
+    clearTimeout(timer);
+    if(err && err.name==='AbortError') throw new Error('連線逾時，請檢查網路後再試一次');
+    throw new Error('無法連線到後台，請確認網路後再試一次');
+  }
+  clearTimeout(timer);
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); }
+  catch(e){ throw new Error('無法連線到後台（伺服器回應異常），請稍後再試'); }
+  if(data.ok === false && data.error && data.error.indexOf('UNAUTHORIZED') === 0){
+    // token 失效，回登入頁
+    AUTH_TOKEN = null;
+    sessionStorage.removeItem('quote_token');
+    showLogin();
+    throw new Error('登入已過期，請重新登入');
+  }
+  return data;
+}
+
+/* ---- 登入 ---- */
+async function doLogin(){
+  const pin = document.getElementById('login-pin').value.trim();
+  const errEl = document.getElementById('login-err');
+  const btn = document.getElementById('login-btn');
+  errEl.textContent = '';
+  if(!pin){ errEl.textContent = '請輸入 PIN 碼'; return; }
+  btn.disabled = true; btn.textContent = '登入中…';
+  try {
+    const data = await apiCall({ action:'login', pin });
+    if(data.ok && data.token){
+      AUTH_TOKEN = data.token;
+      sessionStorage.setItem('quote_token', data.token);
+      hideLogin();
+      toast('登入成功','ok');
+      initV2();
+    } else {
+      errEl.textContent = data.error || 'PIN 碼錯誤';
+    }
+  } catch(e){
+    errEl.textContent = e.message || '連線失敗，請稍後再試';
+  } finally {
+    btn.disabled = false; btn.textContent = '登入';
+  }
+}
+function showLogin(){ document.getElementById('login-overlay').style.display='flex'; }
+function hideLogin(){
+  document.getElementById('login-overlay').style.display='none';
+  document.getElementById('login-pin').value='';
+}
+
+/* ---- toast ---- */
+let toastTimer=null;
+function toast(msg, type){
+  const t=document.getElementById('toast');
+  document.getElementById('toast-msg').textContent=msg;
+  t.className='toast show'+(type==='ok'?' ok':type==='err'?' err':'');
+  const ic=t.querySelector('i');
+  ic.className = type==='err' ? 'ti ti-alert-triangle' : 'ti ti-check';
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>{ t.className='toast'+(type==='ok'?' ok':type==='err'?' err':''); }, type==='err'?6000:3200);
+}
+
+/* ---- 頁面切換 ---- */
+function gotoPage(p){
+  currentPage=p;
+  document.getElementById('page-new').classList.toggle('on', p==='new');
+  document.getElementById('page-records').classList.toggle('on', p==='records');
+  document.getElementById('page-custom').classList.toggle('on', p==='custom');
+  document.getElementById('page-orders').classList.toggle('on', p==='orders');
+  document.getElementById('page-cal').classList.toggle('on', p==='cal');
+  { const e=document.getElementById('page-report'); if(e) e.classList.toggle('on', p==='report'); }
+  { const e=document.getElementById('page-verify'); if(e) e.classList.toggle('on', p==='verify'); }
+  { const e=document.getElementById('page-consign'); if(e) e.classList.toggle('on', p==='consign'); }
+  document.getElementById('tbr-standard').style.display = (p==='custom'||p==='orders'||p==='report'||p==='cal'||p==='consign'||p==='verify') ? 'none' : 'flex';
+  document.getElementById('tbr-custom').style.display = p==='custom' ? 'flex' : 'none';
+  const _titles={custom:['自訂報價單','自由建立非常規報價單，可儲存到後台備份，並直接匯出 PDF / Word'],
+    orders:['訂單追蹤','報價 → 訂金 → 出貨 → 發票 → 尾款，一眼掌握每張單走到哪'],
+    report:['月報表','對帳一眼看懂：已收訂金／已收尾款／還沒收的尾款，一頁掌握'],
+    verify:['出貨驗收管理','驗收單留底、客戶掃碼回報處理、未回報催單，一頁掌握'],
+    cal:['工作行事曆','訂單日程自動連動＋備忘與待辦，防止遺漏'],
+    consign:['寄售管理','公版酒鋪貨・銷售・庫存・保證金・月結，一頁掌握']};
+  document.getElementById('tb-title').textContent = _titles[p]?_titles[p][0]:'報價單製作';
+  document.getElementById('tb-sub').textContent = _titles[p]?_titles[p][1]:'填寫後可即時預覽，並匯出 PDF / Word';
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
+  const QUOTE_SUBPAGES=['new','custom','records'];
+  document.getElementById('nav-quote').classList.toggle('parent-active', QUOTE_SUBPAGES.includes(p));
+  if(QUOTE_SUBPAGES.includes(p)) setQuoteMenuOpen(true);
+  if(p==='new'){ document.getElementById('nav-new').classList.add('on'); }
+  if(p==='records'){ document.getElementById('nav-records').classList.add('on'); loadRecords(); }
+  if(p==='orders'){ document.getElementById('nav-orders').classList.add('on'); loadOrders().catch(()=>{}); }
+  if(p==='report'){ document.getElementById('nav-report').classList.add('on'); loadOrders().then(renderReport).catch(()=>{}); }
+  if(p==='verify'){ document.getElementById('nav-verify').classList.add('on'); loadVerifyMgmt().catch(()=>{}); }
+  if(p==='cal'){ document.getElementById('nav-cal').classList.add('on'); loadCalendar().catch(()=>{}); }
+  if(p==='consign'){ document.getElementById('nav-consign').classList.add('on'); initConsignPage().catch(()=>{}); }
+  if(p==='custom'){
+    document.getElementById('nav-custom').classList.add('on');
+    if(customItems.length===0){ addCustomRow(); }
+    calcCustom();
+  }
+  closeMobileNav();
+}
+
+/* 側邊「報價單」原地展開子選單（新增／自訂／紀錄／預覽） */
+function setQuoteMenuOpen(open){
+  document.getElementById('qm-sub').classList.toggle('open', open);
+  document.getElementById('qm-chev').classList.toggle('rot', open);
+}
+function toggleQuoteMenu(){
+  setQuoteMenuOpen(!document.getElementById('qm-sub').classList.contains('open'));
+}
+
+/* ---- 手機版側邊選單開關 ---- */
+function openMobileNav(){
+  document.getElementById('sb').classList.add('open');
+  document.getElementById('sb-backdrop').classList.add('open');
+}
+function closeMobileNav(){
+  document.getElementById('sb').classList.remove('open');
+  document.getElementById('sb-backdrop').classList.remove('open');
+}
+/* 視窗放大回桌機寬度時，關掉手機選單抽屜與遮罩，避免殘留 */
+window.addEventListener('resize', ()=>{ if(window.innerWidth>860) closeMobileNav(); });
+
+/* ---- 收集表單資料成 quote 物件 ---- */
+function collectQuote(){
+  const g=id=>document.getElementById(id);
+  const val=id=>{const e=g(id);return e?e.value.trim():''};
+  const num=id=>{const e=g(id);return e?(parseFloat(e.value)||0):0};
+
+  const items=[];
+  if(qType==='bottle'||qType==='ownbrand'||qType==='ownlabel'||qType==='consign'){
+    botItems.forEach(rid=>{
+      const row=document.getElementById(`r-${rid}`); if(!row) return;
+      const name=gs(row,'name'); const sub=(gv(row,'price')+(colDed?gv(row,'ded'):0)+(colLogo?gv(row,'logo'):0))*gv(row,'qty');
+      if(!name && !sub) return;
+      const _marked=(row.querySelector('[data-f="mark"]')&&row.querySelector('[data-f="mark"]').checked)?'Y':'N';
+      const _gift=(row.querySelector('[data-f="gift"]')&&row.querySelector('[data-f="gift"]').checked)?'Y':'N';
+      let _lot=gs(row,'lot'); if(_lot.replace(/\s/g,'').toLowerCase()==='lot') _lot='';   // 未填數字的預填「Lot 」不存
+      const _lpEl=row.querySelector('[data-f="lp"]'),_diEl=row.querySelector('[data-f="disc"]');
+      items.push({ itemType:'bottle', name, lot:_lot, volume:gv(row,'vol'),
+        unitPrice:gv(row,'price'), deduction:colDed?gv(row,'ded'):0, logoFee:colLogo?gv(row,'logo'):0,
+        qty:gv(row,'qty'), unit:'瓶', subtotal:(_gift==='Y'?0:sub), flavorList:'',
+        is_oem:(qType==='bottle'?_marked:'N'), is_label:(qType==='ownlabel'?'Y':'N'), noCharge:_gift,
+        listPrice:(colOwn&&_lpEl?(parseFloat(_lpEl.value)||''):''), discount:(colOwn&&_diEl?_diEl.value.trim():'') });
+    });
+  } else {
+    // banquet groups
+    const g1p=num('ban-g1-price'),g1q=num('ban-g1-qty');
+    if(g1p||g1q) items.push({ itemType:'banquet_group', name:'客製化調酒', lot:'', volume:'',
+      unitPrice:g1p, deduction:0, logoFee:0, qty:g1q, unit:'杯', subtotal:g1p*g1q, flavorList:flavors.g1.join('、') });
+    const g2p=num('ban-g2-price'),g2q=num('ban-g2-qty');
+    if(g2p||g2q) items.push({ itemType:'banquet_group', name:'客製化無酒精雞尾酒', lot:'', volume:'',
+      unitPrice:g2p, deduction:0, logoFee:0, qty:g2q, unit:'杯', subtotal:g2p*g2q, flavorList:flavors.g2.join('、') });
+    banFreeItems.forEach(rid=>{
+      const row=document.getElementById(`bf-${rid}`); if(!row) return;
+      const name=gs(row,'name'); const sub=gv(row,'price')*gv(row,'qty');
+      if(!name && !sub) return;
+      items.push({ itemType:'banquet_free', name, lot:'', volume:'', unitPrice:gv(row,'price'),
+        deduction:0, logoFee:0, qty:gv(row,'qty'), unit:gs(row,'unit'), subtotal:sub, flavorList:'' });
+    });
+    banAddonItems.forEach(rid=>{
+      const row=document.getElementById(`ba-${rid}`); if(!row) return;
+      const name=gs(row,'name'); const sub=gv(row,'price')*gv(row,'qty');
+      if(!name && !sub) return;
+      items.push({ itemType:'banquet_addon', name, lot:'', volume:'', unitPrice:gv(row,'price'),
+        deduction:0, logoFee:0, qty:gv(row,'qty'), unit:gs(row,'unit'), subtotal:sub, flavorList:'' });
+    });
+  }
+  // bottle / 公版買斷 extras 也放進 items
+  if(qType==='bottle'||qType==='ownbrand'||qType==='ownlabel'||qType==='consign'){
+    extras.forEach(e=>{
+      items.push({ itemType:'extra', name:e.n, lot:'', volume:'', unitPrice:e.a,
+        deduction:0, logoFee:0, qty:1, unit:'', subtotal:e.a, flavorList:'' });
+    });
+  }
+  // 免運優惠（顯示用、不計價）：以特殊品項存進 items_json，適用所有單型；金額放 deduction，unitPrice/subtotal=0 不影響總計
+  { const _fs=parseFloat(document.getElementById('f-freeship')?.value)||0;
+    if(_fs>0){ items.push({ itemType:'freeship', name:'免運優惠', lot:'', volume:'', unitPrice:0, deduction:_fs, logoFee:0, qty:1, unit:'', subtotal:0, flavorList:'' }); } }
+
+  const numFromText=id=>parseFloat((document.getElementById(id).textContent||'0').replace(/[$,]/g,''))||0;
+  const svcMode=g('svc-mode')?g('svc-mode').value:'';
+  const svcAmt1=parseFloat(document.getElementById('svc-amt1')?.value)||0;
+  const svcAmt2=parseFloat(document.getElementById('svc-amt2')?.value)||0;
+  const svcQty=parseFloat(document.getElementById('svc-qty')?.value)||1;
+  let svcAmount=0;
+  if(svcMode){
+    svcAmount=(svcAmt1+(svcMode==='travel'?svcAmt2:0))*svcQty;
+  }
+
+  return {
+    quoteNo: editingQuoteNo || val('f-no'),
+    quoteType: qType,
+    clientName: val('f-cli'), contactName: val('f-con'), clientTaxId: val('f-tax'),
+    invoiceTitle: val('f-inv'),
+    contactPhone: val('f-ph'), clientAddress: val('f-ad'),
+    shipContact: val('f-shipcon'), shipPhone: val('f-shipph'), shipAddress: val('f-shipad'),
+    quoteDate: val('f-dt'), expiryDate: val('f-ex'), handler: val('f-hdl'),
+    itemsSubtotal: numFromText('t-sub'), taxAmount: numFromText('t-tax'),
+    extrasTotal: numFromText('t-ext'), grandTotal: numFromText('t-tot'),
+    priceMode: taxMode, taxRate: num('taxrate'),
+    paymentType: String(payTab), paymentDetail: getPayTerms(),
+    remark: val('f-note'),
+    images: imgs.filter(i=>i&&i.data).map(i=>({name:i.name||'圖片', mime:i.mime||'image/jpeg', data:i.data})), // B4：整組現有圖片以 base64 送後端；後端據此保存並回寫 imageLinks（不再送 imageLinks，避免清空後台已存連結）
+    status: '草稿',
+    venue: val('f-ven'), entryTime: val('f-ent'), serviceTime: val('f-svc'), exitTime: val('f-ext'),
+    svcMode: svcMode, svcAmount: svcAmount,
+    svcAmt1: svcAmt1, svcAmt2: svcAmt2, svcQty: svcQty,
+    tagLot: val('f-tag-lot'), tagCli: val('f-tag-cli'),
+    expectedShipDate: val('f-shipdate'), showShipDate: (document.getElementById('f-shipdate-show')?.checked ? 'Y' : 'N'),
+    items
+  };
+}
+
+/* ---- 儲存（新增 or 更新）---- */
+/* 判斷標準報價單是否至少有一筆品項（含瓶裝列／宴會自訂列／宴會加購列／宴會兩組數量）*/
+function quoteHasItems(){
+  const check=(ids,pfx)=>ids.some(id=>{ const r=document.getElementById(pfx+'-'+id); return r&&Array.from(r.querySelectorAll('[data-f]')).some(i=>i.value&&i.value.trim()!==''); });
+  if(check(botItems,'r')) return true;
+  if(check(banFreeItems,'bf')) return true;
+  if(check(banAddonItems,'ba')) return true;
+  if((parseFloat(document.getElementById('ban-g1-qty')?.value)||0)||(parseFloat(document.getElementById('ban-g2-qty')?.value)||0)) return true;
+  return false;
+}
+async function saveQuote(){
+  if(!AUTH_TOKEN){ showLogin(); return; }
+  // 擋空白單：客戶名稱空白且完全沒有品項時不儲存，避免存出一堆空單
+  const cliName=(document.getElementById('f-cli')?.value||'').trim();
+  if(!cliName && !quoteHasItems()){ toast('請至少填寫客戶名稱或一筆品項再儲存','err'); return; }
+  const quote=collectQuote();
+  const btn=document.getElementById('btn-save');
+  if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader"></i>儲存中…'; }
+  try {
+    let data;
+    if(editingQuoteNo){
+      data=await apiCall({ action:'updateQuote', token:AUTH_TOKEN, quoteNo:editingQuoteNo, quote });
+    } else {
+      data=await apiCall({ action:'createQuote', token:AUTH_TOKEN, quote });
+    }
+    if(data.ok){
+      editingQuoteNo=data.quoteNo;
+      FORM_DIRTY=false;
+      toast('已儲存：'+data.quoteNo,'ok');
+    } else {
+      toast(data.error||'儲存失敗','err');
+    }
+  } catch(e){
+    toast(e.message||'儲存失敗','err');
+  } finally {
+    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-device-floppy"></i>儲存'; }
+  }
+}
+
+/* ---- 產生正式 PDF/Word 文件（GAS 動態建立 Google Doc）----
+   v31：改為先開視窗選「保留舊版（預設）／覆蓋舊版」，並可查歷史版本（listQuotePdfs） */
+function generateOfficialDocument(){
+  if(!AUTH_TOKEN){ showLogin(); return; }
+  if(!editingQuoteNo){
+    toast('請先「儲存」報價單後再產生正式文件','err');
+    return;
+  }
+  document.getElementById('gd-title').textContent='產生正式文件 — '+editingQuoteNo;
+  const keep=document.querySelector('input[name="gd-ow"][value="keep"]'); if(keep) keep.checked=true;
+  document.getElementById('gd-overlay').style.display='flex';
+  loadGendocHistory();
+}
+function closeGendoc(){ document.getElementById('gd-overlay').style.display='none'; }
+function gdFmtDt(s){
+  if(!s) return '';
+  const str=String(s);
+  const d=new Date(str);
+  if(isNaN(d)) return str.slice(0,16);
+  const tpe=new Date(d.getTime()+8*60*60*1000);           // 以台北時間顯示（同 vmLocalYmd 作法）
+  return tpe.toISOString().slice(0,16).replace('T',' ');
+}
+async function loadGendocHistory(){
+  const box=document.getElementById('gd-history');
+  box.innerHTML='<div class="rec-empty">載入中…</div>';
+  try{
+    const d=await apiCall({ action:'listQuotePdfs', token:AUTH_TOKEN, quote_no:editingQuoteNo });
+    if(!d.ok){ box.innerHTML=`<div class="rec-empty">${d.error||'載入失敗'}</div>`; return; }
+    const list=(d.versions||d.pdfs||d.list||[]).slice();
+    if(!list.length){ box.innerHTML='<div class="rec-empty">這張單還沒產生過正式文件</div>'; return; }
+    list.sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+    box.innerHTML=list.map(v=>{
+      const inactive=(v.active===false||v.active===0||String(v.active).toUpperCase()==='FALSE');
+      return `<div style="display:flex;gap:8px;align-items:center;padding:7px 4px;border-bottom:1px solid #E8E5DD;${inactive?'opacity:.55':''}">
+        <span style="white-space:nowrap;color:var(--sub)">${escHtml(gdFmtDt(v.created_at))}</span>
+        <span style="flex:1;word-break:break-all">${escHtml(v.file_name||'')}${inactive?' <span class="ob grey">已作廢</span>':''}</span>
+        ${v.pdf_url?`<a class="rec-act-btn" href="${escHtml(v.pdf_url)}" target="_blank" rel="noopener">PDF</a>`:''}
+        ${v.doc_url?`<a class="rec-act-btn" href="${escHtml(v.doc_url)}" target="_blank" rel="noopener">Doc</a>`:''}
+      </div>`;
+    }).join('');
+  }catch(e){ box.innerHTML=`<div class="rec-empty">${e.message||'載入失敗'}</div>`; }
+}
+async function gendocRun(){
+  if(_busy.gendoc) return; _busy.gendoc=true;
+  const ow=((document.querySelector('input[name="gd-ow"]:checked')||{}).value==='over');
+  const btn=document.getElementById('gd-run');
+  if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader"></i>產生中…'; }
+  try {
+    const data=await apiCall({ action:'generateQuoteDocument', token:AUTH_TOKEN, quoteNo:editingQuoteNo, overwrite:ow });
+    if(!data.ok){ toast(data.error||'產生失敗','err'); return; }
+    downloadBase64_(data.pdfBase64, 'application/pdf', data.fileNameBase+'.pdf');
+    downloadBase64_(data.docxBase64, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', data.fileNameBase+'.docx');
+    toast(ow?'已產生新版並開始下載（舊版已丟垃圾桶）':'已產生新版並開始下載（舊版保留）','ok');
+    loadGendocHistory();
+  } catch(e){
+    toast(e.message||'產生失敗','err');
+  } finally {
+    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-file-text"></i>產生並下載'; }
+    _busy.gendoc=false;
+  }
+}
+
+function downloadBase64_(base64, mime, filename){
+  if(!base64) return;
+  const byteChars=atob(base64);
+  const byteNumbers=new Array(byteChars.length);
+  for(let i=0;i<byteChars.length;i++) byteNumbers[i]=byteChars.charCodeAt(i);
+  const byteArray=new Uint8Array(byteNumbers);
+  const blob=new Blob([byteArray],{type:mime});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+}
+/* ---- 載入報價記錄列表 ---- */
+async function loadRecords(){
+  const body=document.getElementById('rec-body');
+  body.innerHTML='<tr><td colspan="6" class="rec-empty">載入中…</td></tr>';
+  try {
+    const filters={};
+    const kw=document.getElementById('rec-search').value.trim();
+    const tf=document.getElementById('rec-type-filter').value;
+    if(tf) filters.quoteType=tf;
+    // 關鍵字改前端比對，讓「單號」也能搜到（後端只以報價單類型過濾）
+    const data=await apiCall({ action:'getQuotes', token:AUTH_TOKEN, filters });
+    if(!data.ok){ body.innerHTML=`<tr><td colspan="6" class="rec-empty">${data.error||'載入失敗'}</td></tr>`; return; }
+    let quotes=(data.quotes||[]).filter(q=>q.status!=='已刪除');
+    if(kw){ const k=kw.toLowerCase(); quotes=quotes.filter(q=> String(q.clientName||'').toLowerCase().includes(k) || String(q.quoteNo||'').toLowerCase().includes(k)); }
+    if(quotes.length===0){ body.innerHTML='<tr><td colspan="6" class="rec-empty">尚無報價單記錄</td></tr>'; return; }
+    body.innerHTML=quotes.map(q=>{
+      const typeBadge=q.quoteType==='bottle'
+        ? '<span class="rec-badge bottle">瓶裝酒代工</span>'
+        : q.quoteType==='ownbrand'
+        ? '<span class="rec-badge ownbrand">公版酒買斷</span>'
+        : q.quoteType==='ownlabel'
+        ? '<span class="rec-badge ownbrand">公版酒客製標</span>'
+        : q.quoteType==='consign'
+        ? '<span class="rec-badge consign">寄售月結</span>'
+        : '<span class="rec-badge banquet">宴會酒水</span>';
+      const total='$'+Math.round(q.grandTotal||0).toLocaleString();
+      return `<tr class="clickable" onclick="openRecord('${q.quoteNo}')">
+        <td style="font-weight:600">${q.quoteNo||'—'}</td>
+        <td>${q.clientName||'—'}</td>
+        <td>${typeBadge}</td>
+        <td>${q.quoteDate||'—'}</td>
+        <td style="font-weight:600">${total}</td>
+        <td class="rec-actions" onclick="event.stopPropagation()">
+          <button class="rec-act-btn" onclick="openRecord('${q.quoteNo}')">開啟</button>
+          ${['bottle','ownbrand','ownlabel','consign'].includes(q.quoteType)?`<button class="rec-act-btn" onclick="openVerifyForm('${q.quoteNo}')">驗收單</button>`:''}
+          <button class="rec-act-btn del" onclick="deleteRecord('${q.quoteNo}','${(q.clientName||'').replace(/'/g,'')}')">刪除</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e){
+    body.innerHTML=`<tr><td colspan="6" class="rec-empty">${e.message||'載入失敗'}</td></tr>`;
+  }
+}
+
+/* ---- 開啟既有報價單（載入到編輯表單）---- */
+async function openRecord(quoteNo){
+  if(isFormDirty() && !confirm('目前表單尚有未儲存的資料，開啟這張單會覆蓋目前內容，確定放棄？')) return;
+  try {
+    const data=await apiCall({ action:'getQuoteById', token:AUTH_TOKEN, quoteNo });
+    if(!data.ok){ toast(data.error||'讀取失敗','err'); return; }
+    loadQuoteIntoForm(data.quote);
+    gotoPage('new');
+    toast('已載入 '+quoteNo,'ok');
+  } catch(e){ toast(e.message||'讀取失敗','err'); }
+}
+
+/* ---- 刪除報價單 ---- */
+async function deleteRecord(quoteNo, cliName){
+  if(!confirm(`確定刪除報價單 ${quoteNo}（${cliName}）？\n此動作會將其標記為已刪除。`)) return;
+  try {
+    const data=await apiCall({ action:'deleteQuote', token:AUTH_TOKEN, quoteNo });
+    if(data.ok){ toast('已刪除 '+quoteNo,'ok'); loadRecords(); }
+    else toast(data.error||'刪除失敗','err');
+  } catch(e){ toast(e.message||'刪除失敗','err'); }
+}
+
+/* ---- 把 quote 物件灌回表單 ---- */
+function loadQuoteIntoForm(q){
+  editingQuoteNo=q.quoteNo;
+  // 載入舊單前先清掉「已選公司」狀態，避免殘留規則污染這張單的金額
+  SELECTED_COMPANY=null; RULE_SUPPRESS={};
+  { const csel=document.getElementById('qf-company'); if(csel) csel.value=''; }
+  { const box=document.getElementById('qf-detail'); if(box) box.style.display='none'; }
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v||''};
+  setType(q.quoteType||'bottle');
+  set('f-cli',q.clientName); set('f-con',q.contactName); set('f-tax',q.clientTaxId);
+  set('f-inv',q.invoiceTitle);
+  set('f-ph',q.contactPhone); set('f-ad',q.clientAddress);
+  set('f-shipcon',q.shipContact); set('f-shipph',q.shipPhone); set('f-shipad',q.shipAddress);
+  { const same=!(q.shipAddress||q.shipContact||q.shipPhone);
+    const chk=document.getElementById('f-shipsame'); if(chk) chk.checked=same;
+    toggleShipSame('f'); }
+  set('f-tag-lot',q.tagLot); set('f-tag-cli',q.tagCli);
+  set('f-dt',q.quoteDate); set('f-hdl',q.handler);
+  set('f-ven',q.venue); set('f-ent',q.entryTime); set('f-svc',q.serviceTime); set('f-ext',q.exitTime);
+  set('f-note',q.remark);
+  // B4：由後端回傳的 images（base64）還原附加圖片；相容舊資料（無 images 即清空）
+  imgs=(Array.isArray(q.images)?q.images:[]).filter(i=>i&&i.data).map(i=>({name:i.name||'圖片', mime:i.mime||'image/jpeg', data:i.data, url:'data:'+(i.mime||'image/jpeg')+';base64,'+i.data}));
+  renderImgs();
+  // 免運優惠：從 items 的 freeship 特殊列還原（所有單型共用）
+  { const _fs=(q.items||[]).find(it=>it.itemType==='freeship'); const fe=document.getElementById('f-freeship'); if(fe) fe.value=_fs?((+_fs.deduction||+_fs.unitPrice||'')||''):''; }
+  { const sd=document.getElementById('f-shipdate'); if(sd) sd.value=q.expectedShipDate||''; }
+  { const ss=document.getElementById('f-shipdate-show'); if(ss) ss.checked=(q.showShipDate!=='N'); } // 預設顯示；後端尚未存此欄前一律視為顯示
+  { const _tr=document.getElementById('taxrate'); if(_tr) _tr.value=(q.taxRate==null?5:q.taxRate); } // 稅率填 0（免稅）要保留 0，不能被 ||5 改回 5%
+  // 先把流水號從單號尾碼還原，onDate() 會用它重算單號，避免顯示/PDF 變成 -01
+  if(q.quoteNo){ const m=String(q.quoteNo).match(/-(\d+)\s*$/); if(m){ const s=document.getElementById('f-ser'); if(s) s.value=parseInt(m[1],10)||1; } }
+  setTaxMode(q.priceMode||'inc');
+  onDate();
+  // onDate()→upNo() 會依日期+流水號重組單號；強制還原成原本存的單號，確保與後台/客戶文件一致
+  if(q.quoteNo){ document.getElementById('f-no').value=q.quoteNo; document.getElementById('pl-no').textContent=q.quoteNo; }
+  const items=q.items||[];
+  if(q.quoteType==='bottle'||q.quoteType==='ownbrand'||q.quoteType==='ownlabel'||q.quoteType==='consign'){
+    document.getElementById('itbody-bot').innerHTML=''; botItems=[];
+    extras=[];
+    const realItems = items.filter(it=>it.itemType!=='extra'&&it.itemType!=='freeship');
+    // 贈品／不計價 還原：後端有存 noCharge 用它；沒存則以「有單價有瓶數但小計為0」判定（subtotal 是後端固定欄位，一定會回來）
+    const isGiftItem = it => (String(it.noCharge||'').toUpperCase()==='Y') || (parseFloat(it.unitPrice)>0 && parseFloat(it.qty)>0 && !(parseFloat(it.subtotal)>0));
+    colLot = realItems.some(it=>it.lot);
+    colDed = realItems.some(it=>it.deduction);
+    colLogo = realItems.some(it=>it.logoFee);
+    colGift = realItems.some(isGiftItem);
+    colMark = false;
+    colOwn = (q.quoteType==='ownbrand'||q.quoteType==='ownlabel');
+    document.getElementById('ctg-lot').classList.toggle('on',colLot);
+    document.getElementById('ctg-ded').classList.toggle('on',colDed);
+    document.getElementById('ctg-logo').classList.toggle('on',colLogo);
+    rebuildBotHeader();
+    items.forEach(it=>{
+      if(it.itemType==='extra'){ extras.push({id:`ext${++_extSeq}`,n:it.name,a:it.unitPrice||it.subtotal||0}); }
+      else if(it.itemType==='freeship'){ /* 免運優惠已於上方共用區還原到 f-freeship，不建品項列 */ }
+      else { addBotRow({name:it.name,lot:it.lot,vol:it.volume,price:it.unitPrice,ded:it.deduction,logo:it.logoFee,qty:it.qty,mark:((it.is_oem==='Y'||it.is_label==='Y')?1:0), gift:(isGiftItem(it)?1:0),
+        lp:((it.listPrice!=null&&it.listPrice!=='')?it.listPrice:it.unitPrice), disc:(it.discount!=null?it.discount:''), discManual:((it.discount!=null&&it.discount!=='')?1:0), listprice:(it.listPrice||it.unitPrice)}); }
+    });
+    if(botItems.length===0) addBotRow();
+    renderExt();
+  } else {
+    flavors={g1:[],g2:[]};
+    document.getElementById('ban-free-body').innerHTML=''; banFreeItems=[];
+    document.getElementById('ban-addon-body').innerHTML=''; banAddonItems=[];
+    items.forEach(it=>{
+      if(it.itemType==='banquet_group'){
+        if(it.name==='客製化調酒'){ set('ban-g1-price',it.unitPrice); set('ban-g1-qty',it.qty); flavors.g1=it.flavorList?String(it.flavorList).split('、').filter(Boolean):[]; }
+        else { set('ban-g2-price',it.unitPrice); set('ban-g2-qty',it.qty); flavors.g2=it.flavorList?String(it.flavorList).split('、').filter(Boolean):[]; }
+      } else if(it.itemType==='banquet_free'){
+        addBanFreeRow(); const rid=banFreeItems[banFreeItems.length-1]; const row=document.getElementById(`bf-${rid}`);
+        if(row){ row.querySelector('[data-f=name]').value=it.name||''; row.querySelector('[data-f=qty]').value=it.qty||''; row.querySelector('[data-f=unit]').value=it.unit||''; row.querySelector('[data-f=price]').value=it.unitPrice||''; }
+      } else if(it.itemType==='banquet_addon'){
+        addBanAddonRow({name:it.name,qty:it.qty,unit:it.unit,price:it.unitPrice});
+      }
+    });
+    if(banFreeItems.length===0) addBanFreeRow();
+    if(banAddonItems.length===0) addBanAddonRow();
+    if(q.svcMode){
+      set('svc-mode',q.svcMode); onSvcModeChange();
+      // 還原調酒師服務費金額（優先用存下的原始輸入，舊資料沒存則用合計金額回填）
+      if(q.svcAmt1!=null || q.svcAmt2!=null || q.svcQty!=null){
+        set('svc-amt1', q.svcAmt1||''); set('svc-amt2', q.svcAmt2||''); set('svc-qty', (q.svcQty!=null&&q.svcQty!=='')?q.svcQty:1);
+      } else if(q.svcAmount){
+        set('svc-amt1', q.svcAmount); set('svc-qty', 1);
+      }
+      calcBan();
+    }
+    renderFlavors('g1'); renderFlavors('g2');
+  }
+  // payment
+  const pt=parseInt(q.paymentType)||0; setPay(pt);
+  if(pt===3 && q.paymentDetail){ const e=document.getElementById('p3-txt'); if(e)e.value=q.paymentDetail; }
+  // 沿用存檔當下算好的付款文字，避免重載重算改掉客戶看到的條件（setPay 已把 LOADED_PAY_DETAIL 清為 null，這裡在其後設定）
+  LOADED_PAY_DETAIL=(q.paymentDetail!=null&&q.paymentDetail!=='')?q.paymentDetail:null;
+  calc();
+  FORM_DIRTY=false; // 剛載入的舊單視為已儲存狀態
+}
+
+/* ---- 開新（清空編輯狀態）---- */
+function isFormDirty(){
+  if(editingQuoteNo) return true;
+  if(document.getElementById('f-cli').value.trim()) return true;
+  if(document.getElementById('f-con').value.trim()) return true;
+  if(extras.length>0) return true;
+  const hasRowData = (ids, prefix) => ids.some(id=>{
+    const row=document.getElementById(`${prefix}-${id}`);
+    if(!row) return false;
+    return Array.from(row.querySelectorAll('[data-f]')).some(i=>i.value && i.value.trim()!=='');
+  });
+  if(hasRowData(botItems,'r')) return true;
+  if(hasRowData(banFreeItems,'bf')) return true;
+  if(hasRowData(banAddonItems,'ba')) return true;
+  if((parseFloat(document.getElementById('ban-g1-price').value)||0) || (parseFloat(document.getElementById('ban-g1-qty').value)||0)) return true;
+  if((parseFloat(document.getElementById('ban-g2-price').value)||0) || (parseFloat(document.getElementById('ban-g2-qty').value)||0)) return true;
+  if(document.getElementById('svc-mode').value) return true;
+  if(document.getElementById('f-note').value.trim()) return true;
+  return false;
+}
+function newQuote(){
+  if(isFormDirty()){
+    if(!confirm('目前表單尚有未儲存的資料，確定要清除並開立新報價單？')) return;
+  }
+  editingQuoteNo=null;
+  resetAll(true);
+  gotoPage('new');
+  autoNextSerial();   // 依今天已用單號自動帶下一個流水號，避免同一天重複
+}
+/* 依今天已存在的單號，把流水號帶到下一個未使用值（best-effort，失敗就維持預設 1） */
+async function autoNextSerial(){
+  if(!AUTH_TOKEN) return;
+  try{
+    const today=todayStr().replace(/-/g,'');
+    const lst=await apiCall({ action:'getQuotes', token:AUTH_TOKEN, filters:{} });
+    if(!lst.ok || !Array.isArray(lst.quotes)) return;
+    let mx=0;
+    lst.quotes.forEach(x=>{ const m=String(x.quoteNo||'').match(new RegExp('^'+today+'-(\\d+)$')); if(m){ const n=parseInt(m[1],10); if(n>mx) mx=n; } });
+    if(mx>0 && !editingQuoteNo){ const s=document.getElementById('f-ser'); if(s){ s.value=mx+1; upNo(); } }
+  }catch(_){}
+}
+
+/* ---- 組合另存新檔預設檔名 ---- */
+function sanitizeFilename(s){
+  return String(s).replace(/[\\/:*?"<>|]/g,'-').trim();
+}
+function buildExportFilename(){
+  const tagCli=document.getElementById('f-tag-cli')?.value.trim();
+  const tagLot=document.getElementById('f-tag-lot')?.value.trim();
+  const cli=document.getElementById('f-cli')?.value.trim();
+  const parts=[];
+  if(tagCli) parts.push(tagCli);
+  else if(cli) parts.push(cli);
+  if(tagLot) parts.push(tagLot);
+  parts.push('報價單_凱文南坡萬實業社');
+  return sanitizeFilename(parts.join('_'));
+}
+
+/* ---- 標準模式：PDF 匯出（瀏覽器列印；每頁固定 A4，與預覽分頁完全一致）---- */
+function exportPDF(){
+  const pages = buildStdPagesHtml();
+  const w=window.open('','_blank');
+  if(!w){ toast('瀏覽器擋住了新視窗，請允許本站彈出視窗後再匯出','err'); return; }
+  const fname=buildExportFilename();
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${fname}</title>
+    <style>
+      @page{size:A4;margin:10mm}
+      html,body{margin:0;padding:0}
+      .cpage{page-break-after:always}
+      .cpage:last-child{page-break-after:auto}
+      img{page-break-inside:avoid}
+    </style>
+    </head><body>${pages}</body></html>`);
+  w.document.close();
+  setTimeout(()=>{ w.print(); }, 500);
+}
+
