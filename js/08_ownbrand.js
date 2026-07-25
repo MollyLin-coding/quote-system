@@ -403,7 +403,7 @@ function consignMonthlyToQuote(){
 }
 
 async function initV2(){
-  gotoPage('cal');   // 登入後預設顯示「工作行事曆」
+  gotoPage('today');   // 登入後預設落地頁＝「今日待辦」（原本的行事曆保留，只是不再是預設）
   try{ await loadCompanyData(); }catch(e){ /* 靜默：未登入或後端未就緒不擋主流程 */ }
 }
 

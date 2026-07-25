@@ -33,6 +33,7 @@ async function apiCall(payload){
     // token 失效，回登入頁
     AUTH_TOKEN = null;
     sessionStorage.removeItem('quote_token');
+    if(typeof tdCacheClear==='function') tdCacheClear();   // 今日待辦的離線快取一併清掉，別讓下一個人看到上一個人的資料
     showLogin();
     throw new Error('登入已過期，請重新登入');
   }
@@ -93,9 +94,11 @@ function gotoPage(p){
   { const e=document.getElementById('page-report'); if(e) e.classList.toggle('on', p==='report'); }
   { const e=document.getElementById('page-verify'); if(e) e.classList.toggle('on', p==='verify'); }
   { const e=document.getElementById('page-consign'); if(e) e.classList.toggle('on', p==='consign'); }
-  document.getElementById('tbr-standard').style.display = (p==='custom'||p==='orders'||p==='report'||p==='cal'||p==='consign'||p==='verify') ? 'none' : 'flex';
+  { const e=document.getElementById('page-today'); if(e) e.classList.toggle('on', p==='today'); }
+  document.getElementById('tbr-standard').style.display = (p==='custom'||p==='orders'||p==='report'||p==='cal'||p==='consign'||p==='verify'||p==='today') ? 'none' : 'flex';
   document.getElementById('tbr-custom').style.display = p==='custom' ? 'flex' : 'none';
-  const _titles={custom:['自訂報價單','自由建立非常規報價單，可儲存到後台備份，並直接匯出 PDF / Word'],
+  const _titles={today:['今日待辦','今天該做的事，一頁看完，點下去就能處理'],
+    custom:['自訂報價單','自由建立非常規報價單，可儲存到後台備份，並直接匯出 PDF / Word'],
     orders:['訂單追蹤','報價 → 訂金 → 出貨 → 發票 → 尾款，一眼掌握每張單走到哪'],
     report:['月報表','對帳一眼看懂：已收訂金／已收尾款／還沒收的尾款，一頁掌握'],
     verify:['出貨驗收管理','驗收單留底、客戶掃碼回報處理、未回報催單，一頁掌握'],
@@ -108,6 +111,7 @@ function gotoPage(p){
   document.getElementById('nav-quote').classList.toggle('parent-active', QUOTE_SUBPAGES.includes(p));
   if(QUOTE_SUBPAGES.includes(p)) setQuoteMenuOpen(true);
   if(p==='new'){ document.getElementById('nav-new').classList.add('on'); }
+  if(p==='today'){ document.getElementById('nav-today').classList.add('on'); loadToday().catch(()=>{}); }
   if(p==='records'){ document.getElementById('nav-records').classList.add('on'); loadRecords(); }
   if(p==='orders'){ document.getElementById('nav-orders').classList.add('on'); loadOrders().catch(()=>{}); }
   if(p==='report'){ document.getElementById('nav-report').classList.add('on'); loadOrders().then(renderReport).catch(()=>{}); }

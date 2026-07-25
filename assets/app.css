@@ -348,6 +348,41 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
 .prodinfo{font-size:11px;color:#6B6B63;margin-top:5px;line-height:1.6}
 .moq-warn{font-size:11.5px;margin-top:8px;padding:6px 11px;border-radius:6px;background:#FBF1E9;color:#B5541F;border:1px solid #EBD2BC}
 
+/* ===== 今日待辦首頁（手機優先，2026-07-26）===== */
+.td-bar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+.td-stat{font-size:11.5px;color:var(--hint);display:flex;align-items:center;gap:6px}
+.td-stat .dot{width:7px;height:7px;border-radius:50%;background:#3E8E5A;display:inline-block}
+.td-stat.loading .dot{background:var(--gold);animation:tdpulse 1s ease-in-out infinite}
+@keyframes tdpulse{0%,100%{opacity:.35}50%{opacity:1}}
+.td-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.td-card{background:var(--wh);border:1px solid var(--bd);border-radius:var(--rad-lg);overflow:hidden}
+.td-ch{display:flex;align-items:center;gap:8px;padding:13px 16px;border-bottom:1px solid var(--bd);font-size:14px;font-weight:700}
+.td-ch .n{margin-left:auto;font-size:11.5px;font-weight:700;color:var(--wh);background:var(--gold);border-radius:20px;padding:2px 9px;min-width:24px;text-align:center}
+.td-ch .n.zero{background:#E8E5DD;color:var(--hint)}
+.td-row{display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid #F1EFE8;padding:13px 16px;cursor:pointer;font:inherit;color:inherit;transition:.12s}
+.td-row:last-child{border-bottom:none}
+.td-row:hover{background:var(--gold-pale)}
+.td-r1{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:15px;font-weight:600;line-height:1.4}
+.td-r2{margin-top:4px;font-size:12px;color:var(--sub);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.td-amt{margin-left:auto;font-size:15px;font-weight:700;color:var(--gold-deep);white-space:nowrap}
+.td-tag{font-size:10.5px;border-radius:20px;padding:2px 9px;font-weight:600;white-space:nowrap;border:1px solid transparent}
+.td-tag.red{background:#F9ECEA;color:#B03A2E;border-color:#E8C7C2}
+.td-tag.warn{background:#FBF1E9;color:#B5541F;border-color:#EBD2BC}
+.td-tag.grey{background:#EEF0F4;color:#4A5A78;border-color:#D6DCE6}
+.td-tag.time{background:var(--gold-pale);color:var(--gold-deep);border-color:#E7DCC4}
+.td-mini{background:none;border:1px solid var(--bd);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;color:var(--sub);white-space:nowrap}
+.td-mini:hover{border-color:var(--ink);color:var(--ink)}
+.td-none{padding:16px;font-size:12.5px;color:var(--hint)}
+.td-alldone{background:var(--wh);border:1px solid var(--bd);border-radius:var(--rad-lg);padding:48px 20px;text-align:center}
+.td-alldone .big{font-size:24px;font-weight:700;color:var(--gold-deep);margin-bottom:6px}
+.td-alldone .sm{font-size:12.5px;color:var(--hint)}
+.td-dotc{width:9px;height:9px;border-radius:50%;flex-shrink:0;display:inline-block}
+/* 統一骨架屏 */
+.skl{background:linear-gradient(90deg,#EFEDE6 25%,#F7F5EF 37%,#EFEDE6 63%);background-size:400% 100%;animation:sklmove 1.3s ease infinite;border-radius:5px;height:12px}
+@keyframes sklmove{0%{background-position:100% 50%}100%{background-position:0 50%}}
+.skl-row{padding:13px 16px;border-bottom:1px solid #F1EFE8}
+.skl-row:last-child{border-bottom:none}
+
 /* ===== 手機版面 RWD（2026-07-21）===== */
 .mob-menu-btn{display:none}
 .sb-backdrop{display:none}
@@ -386,7 +421,14 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
   .calhead{gap:8px}
   .rpt-head button.rec-act-btn{float:none!important;margin-top:8px;display:inline-block}
   .login-box{padding:30px 22px}
+  .td-grid{grid-template-columns:1fr;gap:12px}
+  .td-row{padding:15px 14px}
+  .td-r1{font-size:16px}
+  .td-r2{font-size:12.5px}
+  .td-amt{font-size:16px}
 }
 @media (max-width:420px){
   .rpt-stats{grid-template-columns:1fr}
+  .td-amt{margin-left:0}
+  .td-alldone{padding:36px 14px}
 }

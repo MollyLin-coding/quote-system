@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260725b">
-<script src="js/00_qrcode.js?v=20260725b"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260726">
+<script src="js/00_qrcode.js?v=20260726"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -50,6 +50,7 @@
   </div>
   <div class="sb-nav">
     <div style="font-size:9.5px;color:rgba(239,233,216,.3);letter-spacing:2px;padding:4px 11px 8px;text-transform:uppercase">功能</div>
+    <button class="nb" id="nav-today" onclick="gotoPage('today')"><i class="ti ti-checklist"></i>今日待辦</button>
     <button class="nb" id="nav-cal" onclick="gotoPage('cal')"><i class="ti ti-calendar"></i>工作行事曆</button>
     <button class="nb" id="nav-orders" onclick="gotoPage('orders')"><i class="ti ti-truck-delivery"></i>訂單追蹤</button>
     <button class="nb" id="nav-report" onclick="gotoPage('report')"><i class="ti ti-report-money"></i>月報表</button>
@@ -631,6 +632,17 @@
     </div>
   </div>
 
+  <div class="page" id="page-today">
+    <div class="rec-wrap">
+      <div class="td-bar">
+        <div class="td-stat" id="td-stat"></div>
+        <button class="rec-act-btn" onclick="loadToday(true)"><i class="ti ti-refresh"></i> 重新整理</button>
+      </div>
+      <div id="td-warn"></div>
+      <div id="td-body"></div>
+    </div>
+  </div>
+
   <div class="page" id="page-cal">
     <div class="rec-wrap">
       <div class="card"><div class="cb"><div id="cal-focus"></div></div></div>
@@ -958,15 +970,16 @@
   </div>
 </div>
 
-<script src="js/01_quote_form.js?v=20260725b"></script>
-<script src="js/02_core_api.js?v=20260725b"></script>
-<script src="js/03_quote_custom.js?v=20260725b"></script>
-<script src="js/04_company.js?v=20260725b"></script>
-<script src="js/05_orders.js?v=20260725b"></script>
-<script src="js/06_verify_mgmt.js?v=20260725b"></script>
-<script src="js/07_calendar.js?v=20260725b"></script>
-<script src="js/08_ownbrand.js?v=20260725b"></script>
-<script src="js/09_verify_form.js?v=20260725b"></script>
-<script src="js/99_boot.js?v=20260725b"></script>
+<script src="js/01_quote_form.js?v=20260726"></script>
+<script src="js/02_core_api.js?v=20260726"></script>
+<script src="js/03_quote_custom.js?v=20260726"></script>
+<script src="js/04_company.js?v=20260726"></script>
+<script src="js/05_orders.js?v=20260726"></script>
+<script src="js/06_verify_mgmt.js?v=20260726"></script>
+<script src="js/07_calendar.js?v=20260726"></script>
+<script src="js/08_ownbrand.js?v=20260726"></script>
+<script src="js/09_verify_form.js?v=20260726"></script>
+<script src="js/10_today.js?v=20260726"></script>
+<script src="js/99_boot.js?v=20260726"></script>
 </body>
 </html>
