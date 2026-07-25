@@ -30,6 +30,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
 .nb{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:7px;color:rgba(239,233,216,.55);cursor:pointer;border:none;background:transparent;width:100%;text-align:left;font-size:12.5px;transition:.15s}
 .nb:hover{background:rgba(255,255,255,.06);color:#EFE9D8}
 .nb.on{background:var(--gold);color:var(--forest);font-weight:600}
+/* 報價單子選單（原地展開） */
+.qm-chev{margin-left:auto;font-size:13px;transition:transform .15s}
+.qm-chev.rot{transform:rotate(180deg)}
+.qm-sub{display:flex;flex-direction:column;gap:2px;overflow:hidden;max-height:0;transition:max-height .2s ease}
+.qm-sub.open{max-height:220px}
+.nb-sub{padding-left:30px;font-size:12px}
+#nav-quote.parent-active{color:#EFE9D8}
+#nav-quote.parent-active .qm-chev{color:var(--gold)}
 .nb i{font-size:15px;width:18px;flex-shrink:0}
 .sb-foot{padding:16px 16px 26px}
 .bk{background:rgba(0,0,0,.18);border-radius:7px;padding:12px 14px;border:1px solid rgba(166,130,74,.15)}
@@ -427,12 +435,16 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
     <div style="font-size:9.5px;color:rgba(239,233,216,.3);letter-spacing:2px;padding:4px 11px 8px;text-transform:uppercase">功能</div>
     <button class="nb" id="nav-cal" onclick="gotoPage('cal')"><i class="ti ti-calendar"></i>工作行事曆</button>
     <button class="nb" id="nav-orders" onclick="gotoPage('orders')"><i class="ti ti-truck-delivery"></i>訂單追蹤</button>
+    <button class="nb" id="nav-report" onclick="gotoPage('report')"><i class="ti ti-report-money"></i>月報表</button>
     <button class="nb" id="nav-verify" onclick="gotoPage('verify')"><i class="ti ti-clipboard-check"></i>出貨驗收</button>
     <button class="nb" id="nav-consign" onclick="gotoPage('consign')"><i class="ti ti-building-warehouse"></i>寄售管理</button>
-    <button class="nb on" id="nav-new" onclick="newQuote()"><i class="ti ti-file-plus"></i>新增報價單</button>
-    <button class="nb" id="nav-custom" onclick="gotoPage('custom')"><i class="ti ti-edit"></i>自訂報價單</button>
-    <button class="nb" id="nav-records" onclick="gotoPage('records')"><i class="ti ti-files"></i>報價紀錄</button>
-    <button class="nb" onclick="previewCurrent()"><i class="ti ti-eye"></i>預覽報價單</button>
+    <button class="nb parent-active" id="nav-quote" onclick="toggleQuoteMenu()"><i class="ti ti-file-text"></i>報價單<i class="ti ti-chevron-down qm-chev rot" id="qm-chev"></i></button>
+    <div class="qm-sub open" id="qm-sub">
+      <button class="nb nb-sub on" id="nav-new" onclick="newQuote()"><i class="ti ti-file-plus"></i>新增報價單</button>
+      <button class="nb nb-sub" id="nav-custom" onclick="gotoPage('custom')"><i class="ti ti-edit"></i>自訂報價單</button>
+      <button class="nb nb-sub" id="nav-records" onclick="gotoPage('records')"><i class="ti ti-files"></i>報價紀錄</button>
+      <button class="nb nb-sub" onclick="previewCurrent()"><i class="ti ti-eye"></i>預覽報價單</button>
+    </div>
   </div>
   <div class="sb-foot">
     <div style="font-size:9.5px;color:rgba(239,233,216,.3);letter-spacing:2px;margin-bottom:8px;text-transform:uppercase">匯款資訊</div>
@@ -980,7 +992,12 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
         <tbody id="ord-body"><tr><td colspan="6" class="rec-empty">載入中…</td></tr></tbody>
       </table>
       </div>
-      <div class="card" style="margin-top:18px"><div class="cb"><div id="rpt-box"></div></div></div>
+    </div>
+  </div>
+
+  <div class="page" id="page-report">
+    <div class="rec-wrap">
+      <div class="card"><div class="cb"><div id="rpt-box"></div></div></div>
     </div>
   </div>
 
@@ -2498,21 +2515,27 @@ function gotoPage(p){
   document.getElementById('page-custom').classList.toggle('on', p==='custom');
   document.getElementById('page-orders').classList.toggle('on', p==='orders');
   document.getElementById('page-cal').classList.toggle('on', p==='cal');
+  { const e=document.getElementById('page-report'); if(e) e.classList.toggle('on', p==='report'); }
   { const e=document.getElementById('page-verify'); if(e) e.classList.toggle('on', p==='verify'); }
   { const e=document.getElementById('page-consign'); if(e) e.classList.toggle('on', p==='consign'); }
-  document.getElementById('tbr-standard').style.display = (p==='custom'||p==='orders'||p==='cal'||p==='consign'||p==='verify') ? 'none' : 'flex';
+  document.getElementById('tbr-standard').style.display = (p==='custom'||p==='orders'||p==='report'||p==='cal'||p==='consign'||p==='verify') ? 'none' : 'flex';
   document.getElementById('tbr-custom').style.display = p==='custom' ? 'flex' : 'none';
   const _titles={custom:['自訂報價單','自由建立非常規報價單，可儲存到後台備份，並直接匯出 PDF / Word'],
     orders:['訂單追蹤','報價 → 訂金 → 出貨 → 發票 → 尾款，一眼掌握每張單走到哪'],
+    report:['月報表','對帳一眼看懂：已收訂金／已收尾款／還沒收的尾款，一頁掌握'],
     verify:['出貨驗收管理','驗收單留底、客戶掃碼回報處理、未回報催單，一頁掌握'],
     cal:['工作行事曆','訂單日程自動連動＋備忘與待辦，防止遺漏'],
     consign:['寄售管理','公版酒鋪貨・銷售・庫存・保證金・月結，一頁掌握']};
   document.getElementById('tb-title').textContent = _titles[p]?_titles[p][0]:'報價單製作';
   document.getElementById('tb-sub').textContent = _titles[p]?_titles[p][1]:'填寫後可即時預覽，並匯出 PDF / Word';
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
+  const QUOTE_SUBPAGES=['new','custom','records'];
+  document.getElementById('nav-quote').classList.toggle('parent-active', QUOTE_SUBPAGES.includes(p));
+  if(QUOTE_SUBPAGES.includes(p)) setQuoteMenuOpen(true);
   if(p==='new'){ document.getElementById('nav-new').classList.add('on'); }
   if(p==='records'){ document.getElementById('nav-records').classList.add('on'); loadRecords(); }
-  if(p==='orders'){ document.getElementById('nav-orders').classList.add('on'); loadOrders().then(renderReport).catch(()=>{}); }
+  if(p==='orders'){ document.getElementById('nav-orders').classList.add('on'); loadOrders().catch(()=>{}); }
+  if(p==='report'){ document.getElementById('nav-report').classList.add('on'); loadOrders().then(renderReport).catch(()=>{}); }
   if(p==='verify'){ document.getElementById('nav-verify').classList.add('on'); loadVerifyMgmt().catch(()=>{}); }
   if(p==='cal'){ document.getElementById('nav-cal').classList.add('on'); loadCalendar().catch(()=>{}); }
   if(p==='consign'){ document.getElementById('nav-consign').classList.add('on'); initConsignPage().catch(()=>{}); }
@@ -2522,6 +2545,15 @@ function gotoPage(p){
     calcCustom();
   }
   closeMobileNav();
+}
+
+/* 側邊「報價單」原地展開子選單（新增／自訂／紀錄／預覽） */
+function setQuoteMenuOpen(open){
+  document.getElementById('qm-sub').classList.toggle('open', open);
+  document.getElementById('qm-chev').classList.toggle('rot', open);
+}
+function toggleQuoteMenu(){
+  setQuoteMenuOpen(!document.getElementById('qm-sub').classList.contains('open'));
 }
 
 /* ---- 手機版側邊選單開關 ---- */
