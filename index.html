@@ -302,6 +302,12 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
 .vtype{font-size:11px;font-weight:600}
 .vtype.issue{color:#B03A2E}
 .vtype.good{color:#2E6B44}
+.vtype.other{color:#8A6A2E}
+.vcat-bar{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.vcat{font-size:11.5px;border:1px solid var(--bd);background:#fff;border-radius:20px;padding:4px 11px;color:#6B6B63;cursor:pointer}
+.vcat.on{background:#22241F;color:#fff;border-color:#22241F}
+.vcat b{color:var(--gold);font-weight:700}
+.vcat.on b{color:#E7C98A}
 .ob.info{background:#EAF1FB;color:#2C5AA0;border:1px solid #C6D6EE}
 .rec-badge.custom{background:#EEF0F4;color:#4A5A78}
 .rec-badge.ownbrand{background:#F3ECDD;color:#7A5A1E}
@@ -1218,7 +1224,7 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
       <div class="fl"><label>訂單單號</label><input class="fi" id="vmm-no" list="vmm-nolist" placeholder="輸入或選單號"><datalist id="vmm-nolist"></datalist></div>
       <div class="fl"><label>客戶</label><input class="fi" id="vmm-client" placeholder="客戶名稱"></div>
-      <div class="fl"><label>回報類型</label><select class="fi" id="vmm-type"><option value="回報問題">回報問題</option><option value="驗收無誤">驗收無誤</option></select></div>
+      <div class="fl"><label>回報類型</label><select class="fi" id="vmm-type"><option value="回報問題">回報問題</option><option value="驗收無誤">驗收無誤</option><option value="其他">其他</option></select></div>
       <div class="fl"><label>品項（選填）</label><input class="fi" id="vmm-item" placeholder="例 蜂蜜醋 500ml"></div>
       <div class="fl" style="grid-column:1/-1"><label>問題說明</label><textarea class="fi" id="vmm-desc" rows="3" style="resize:vertical" placeholder="客戶反映的內容"></textarea></div>
       <div class="fl"><label>回報人／來源（選填）</label><input class="fi" id="vmm-reporter" placeholder="例 LINE・王小姐"></div>
@@ -4098,7 +4104,7 @@ function shpRowHtml(s, idx){
     <td><input class="fi" type="number" data-f="amount" value="${(s.amount!=null&&s.amount!=='')?escHtml(String(s.amount)):''}" style="min-width:92px;text-align:right"></td>
     <td><input class="fi" data-f="invoice_last5" maxlength="5" inputmode="numeric" value="${escHtml(s.invoice_last5||'')}" style="min-width:72px"></td>
     <td><input class="fi" data-f="note" value="${escHtml(s.note||'')}" style="min-width:120px"></td>
-    <td><button type="button" class="rec-act-btn" onclick="shpSaveRow(this)">儲存</button></td>
+    <td style="white-space:nowrap"><button type="button" class="rec-act-btn" onclick="shpSaveRow(this)">儲存</button> <button type="button" class="rec-act-btn del" onclick="shpDelRow(this)">刪除</button></td>
   </tr>`;
 }
 function renderShipments(){
@@ -4131,6 +4137,26 @@ async function shpSaveRow(btn){
     await loadShipments();
   }catch(e){ toast(e.message||'儲存失敗','err'); }
   finally{ btn.disabled=false; btn.textContent='儲存'; _busy.shpSave=false; }
+}
+async function shpDelRow(btn){
+  const tr=btn.closest('tr'); if(!tr) return;
+  const id=tr.getAttribute('data-shpid');
+  if(!id){                                   // 還沒存進後端的新列：直接把這一列移掉就好
+    tr.remove();
+    if(!document.getElementById('shp-body').children.length) renderShipments();
+    return;
+  }
+  if(!confirm('確定刪除這一批出貨紀錄？\n只刪這筆分批紀錄，訂單本身的出貨資料不受影響。刪除後無法復原。')) return;
+  if(_busy.shpDel) return; _busy.shpDel=true;
+  btn.disabled=true; btn.textContent='…';
+  try{
+    const d=await apiCall({ action:'deleteShipment', token:AUTH_TOKEN, id });
+    if(!d.ok){ toast(d.error||'刪除失敗','err'); return; }
+    toast('已刪除這一批','ok');
+    await loadShipments();
+    loadShipmentBadges();                    // 順手刷新訂單列的「分批×N」徽章
+  }catch(e){ toast(e.message||'刪除失敗','err'); }
+  finally{ btn.disabled=false; btn.textContent='刪除'; _busy.shpDel=false; }
 }
 /* 訂單列「分批×N」徽章：試打不帶 quote_no 的 listShipments，後端若回全部就能顯示；不支援就靜默略過 */
 async function loadShipmentBadges(){
@@ -4323,6 +4349,7 @@ function exportReport(){
    欄位皆容錯：後端欄位名若有出入，讀不到就留白、不會壞頁。
    ============================================================ */
 let VM_TAB='pending';           // pending | all | noreport | forms
+let VM_CAT='all';               // 客訴分類篩選：all | 回報問題 | 驗收無誤 | 其他
 let VM_DATA=null;
 let VM_PROC_ID=null;
 const VM_NOREPORT_DAYS=7;
@@ -4352,6 +4379,29 @@ function vmIsIssue(r){
   return !!String(r.desc||'').trim();
 }
 function vmIsUnhandled(r){ return vmIsIssue(r) && vmStatusNorm(r.status)==='待處理'; }
+/* 客訴分類（後端 v32 起 addVerification 會把「回報問題／驗收無誤／其他」如實存進 type 欄）。
+   客戶掃碼回報那條線的 type 是另一組（ok／外觀／瓶內異物／數量不符／其他），這裡統一歸成三類供顯示與篩選；
+   原本的 vmIsIssue／vmIsUnhandled 判斷完全不動，待處理計數與「處理」鈕行為維持原樣。 */
+function vmCat(r){
+  const t=String((r&&r.type)||'').trim();
+  if(t==='回報問題'||t==='驗收無誤'||t==='其他') return t;
+  if(!t) return vmIsIssue(r)?'回報問題':'驗收無誤';
+  if(/^ok$/i.test(t)||/無誤|合格|正常|收到/.test(t)) return '驗收無誤';
+  if(/問題|外觀|異物|不符|不良|客訴|退|補|異常|破|少|漏/.test(t)) return '回報問題';
+  return '其他';
+}
+function vmCatCounts(reps){
+  const c={'回報問題':0,'驗收無誤':0,'其他':0};
+  (reps||[]).forEach(r=>{ const k=vmCat(r); if(c[k]!=null) c[k]++; });
+  return c;
+}
+function setVmCat(c){ VM_CAT=c; renderVerifyMgmt(); }
+function vmCatBar(reps){
+  const c=vmCatCounts(reps);
+  const defs=[['all','全部',(reps||[]).length],['回報問題','⚠ 回報問題',c['回報問題']],['驗收無誤','✓ 驗收無誤',c['驗收無誤']],['其他','其他',c['其他']]];
+  return `<div class="vcat-bar">${defs.map(([k,l,n])=>
+    `<button type="button" class="vcat${VM_CAT===k?' on':''}" onclick="setVmCat('${k}')">${l} <b>${n}</b></button>`).join('')}</div>`;
+}
 function vmClientOf(no){
   if(VM_DATA){ const r=(VM_DATA.reports||[]).find(x=>x.no===no&&x.client); if(r) return r.client; }
   if(ORDERS_CACHE){ const o=ORDERS_CACHE.find(x=>x.no===no); if(o) return (o.client||'').split('｜')[0]; }
@@ -4420,21 +4470,28 @@ function vmStatusPill(r){
 function vmRenderReports(pendingOnly){
   let reps=(VM_DATA.reports||[]).slice();
   if(pendingOnly) reps=reps.filter(vmIsUnhandled);
+  const bar=vmCatBar(reps);                       // 分類徽章的數字＝套用分類篩選「之前」的數量
+  if(VM_CAT!=='all') reps=reps.filter(r=>vmCat(r)===VM_CAT);
   reps.sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
-  if(!reps.length) return `<div class="rec-empty">${pendingOnly?'目前沒有待處理的客戶回報 🎉':'尚無客戶回報紀錄'}</div>`;
+  if(!reps.length) return bar+`<div class="rec-empty">${VM_CAT!=='all'?('「'+VM_CAT+'」目前沒有紀錄'):(pendingOnly?'目前沒有待處理的客戶回報 🎉':'尚無客戶回報紀錄')}</div>`;
   const rows=reps.map(r=>{
     const photos=vmPhotos(r.photos).map((src,i)=>`<img class="vth" src="${escAttr(src)}" onclick="window.open('${escAttr(src)}','_blank')" alt="照片${i+1}">`).join('');
     const issue=vmIsIssue(r);
+    const cat=vmCat(r);
+    const catCls=cat==='回報問題'?'issue':(cat==='驗收無誤'?'good':'other');
+    const catTxt=cat==='回報問題'?'⚠ 回報問題':(cat==='驗收無誤'?'✓ 驗收無誤':'• 其他');
+    const rawT=String(r.type||'').trim();
+    const rawTxt=(rawT&&rawT!==cat)?`<span style="font-size:11px;color:#6B6B63">（${escHtml(rawT)}）</span>`:'';
     const dt=String(r.created_at||'').replace('T',' ').slice(0,16);
     return `<tr>
       <td style="white-space:nowrap;color:#6B6B63;font-size:11.5px">${escHtml(dt)||'—'}</td>
       <td><b>${escHtml(r.no||'—')}</b><br><span style="color:#6B6B63;font-size:11.5px">${escHtml(r.client||vmClientOf(r.no)||'')}</span></td>
-      <td><span class="vtype ${issue?'issue':'good'}">${issue?'⚠ 回報問題':'✓ 驗收無誤'}</span>${r.item?`<br><span style="font-size:11.5px;color:#6B6B63">${escHtml(r.item)}</span>`:''}${r.desc?`<br><span style="font-size:12px">${escHtml(r.desc)}</span>`:''}${photos?`<br>${photos}`:''}</td>
+      <td><span class="vtype ${catCls}">${catTxt}</span>${rawTxt}${r.item?`<br><span style="font-size:11.5px;color:#6B6B63">${escHtml(r.item)}</span>`:''}${r.desc?`<br><span style="font-size:12px">${escHtml(r.desc)}</span>`:''}${photos?`<br>${photos}`:''}</td>
       <td style="text-align:center">${vmStatusPill(r)}${r.handle_note?`<br><span style="font-size:11px;color:#6B6B63">${escHtml(r.handle_note)}</span>`:''}${(r.amount!=null&&r.amount!=='')?`<br><span style="font-size:11px;color:var(--gold-deep)">${money(r.amount)}</span>`:''}</td>
-      <td class="rec-actions">${issue?`<button class="rec-act-btn" onclick="openVmProc('${escAttr(r.id)}')">處理</button>`:''}</td>
+      <td class="rec-actions">${issue?`<button class="rec-act-btn" onclick="openVmProc('${escAttr(r.id)}')">處理</button>`:''}<button class="rec-act-btn del" onclick="vmDelReport('${escAttr(r.id)}','${escAttr(r.no||'')}')">刪除</button></td>
     </tr>`;
   }).join('');
-  return `<div class="tbl-scroll"><table class="rec-table">
+  return bar+`<div class="tbl-scroll"><table class="rec-table">
     <thead><tr><th>時間</th><th>單號／客戶</th><th>回報內容</th><th style="text-align:center">處理</th><th>操作</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
@@ -4471,11 +4528,35 @@ function vmRenderForms(){
       <td style="text-align:center">${escHtml(f.pm||'')||'—'}</td>
       <td style="text-align:center">${(f.boxes!=null&&f.boxes!=='')?escHtml(f.boxes)+' 箱':'—'}</td>
       <td style="font-size:11.5px;color:#6B6B63">${escHtml(names)||'—'}</td>
+      <td class="rec-actions"><button class="rec-act-btn del" onclick="vmDelForm('${escAttr(f.id)}','${escAttr(f.no||'')}')">刪除</button></td>
     </tr>`;
   }).join('');
   return `<div class="tbl-scroll"><table class="rec-table">
-    <thead><tr><th>產生時間</th><th>單號</th><th style="text-align:center">配送日</th><th style="text-align:center">PM</th><th style="text-align:center">箱數</th><th>品項</th></tr></thead>
+    <thead><tr><th>產生時間</th><th>單號</th><th style="text-align:center">配送日</th><th style="text-align:center">PM</th><th style="text-align:center">箱數</th><th>品項</th><th>操作</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
+}
+/* ---- 刪除（後端 v32：deleteVerification／deleteVerifyForm／deleteShipment，皆 {id}→整列刪除、不可復原）---- */
+async function vmDelReport(id, no){
+  if(!id){ toast('這筆沒有編號，無法刪除','err'); return; }
+  if(!confirm(`確定刪除這筆回報紀錄${no?`（單號 ${no}）`:''}？\n刪除後無法復原。`)) return;
+  if(_busy.vmDel) return; _busy.vmDel=true;
+  try{
+    const d=await apiCall({ action:'deleteVerification', token:AUTH_TOKEN, id });
+    if(!d.ok){ toast(d.error||'刪除失敗','err'); return; }
+    toast('已刪除這筆回報','ok'); await loadVerifyMgmt(true);
+  }catch(e){ toast(e.message||'刪除失敗','err'); }
+  finally{ _busy.vmDel=false; }
+}
+async function vmDelForm(id, no){
+  if(!id){ toast('這筆沒有編號，無法刪除','err'); return; }
+  if(!confirm(`確定刪除這筆驗收單留底${no?`（單號 ${no}）`:''}？\n只會刪掉這筆產生紀錄，已印出的驗收單 PDF 不受影響。刪除後無法復原。`)) return;
+  if(_busy.vmDelForm) return; _busy.vmDelForm=true;
+  try{
+    const d=await apiCall({ action:'deleteVerifyForm', token:AUTH_TOKEN, id });
+    if(!d.ok){ toast(d.error||'刪除失敗','err'); return; }
+    toast('已刪除這筆驗收單留底','ok'); await loadVerifyMgmt(true);
+  }catch(e){ toast(e.message||'刪除失敗','err'); }
+  finally{ _busy.vmDelForm=false; }
 }
 function vmCopyReminder(no, shipDate){
   const d=shipDate?String(shipDate).replace(/-/g,'/'):'';
