@@ -279,6 +279,18 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
 .otl-node.done .otl-lbl{color:var(--forest)}
 .otl-date{font-size:9.5px;color:#A8A69C;margin-top:2px;min-height:12px;text-align:center;line-height:1.25}
 .oe-sec{grid-column:1/-1;font-size:10.5px;color:var(--gold-deep);font-weight:700;letter-spacing:.4px;margin:6px 0 -2px;padding-top:8px;border-top:1px dashed var(--bd)}
+/* 出貨驗收管理 */
+.vpill{display:inline-block;font-size:10.5px;border-radius:20px;padding:2px 10px;font-weight:600;border:1px solid transparent;white-space:nowrap}
+.vpill.wait{background:#FBF1E9;color:#B5541F;border-color:#EBD2BC}
+.vpill.refund{background:#F9ECEA;color:#B03A2E;border-color:#E8C7C2}
+.vpill.resend{background:#EAF1FB;color:#2C5AA0;border-color:#C6D6EE}
+.vpill.done{background:#EAF3EC;color:#2E6B44;border-color:#BFE0C9}
+.vpill.ok{background:#EEF0F4;color:#4A5A78;border-color:#D6DCE6}
+.vth{display:inline-block;width:44px;height:44px;border-radius:6px;object-fit:cover;border:1px solid var(--bd);margin:2px 4px 2px 0;cursor:pointer;vertical-align:middle}
+.vtype{font-size:11px;font-weight:600}
+.vtype.issue{color:#B03A2E}
+.vtype.good{color:#2E6B44}
+.ob.info{background:#EAF1FB;color:#2C5AA0;border:1px solid #C6D6EE}
 .rec-badge.custom{background:#EEF0F4;color:#4A5A78}
 .rec-badge.ownbrand{background:#F3ECDD;color:#7A5A1E}
 .rec-badge.consign{background:#E4EEF2;color:#1F5266}
@@ -411,6 +423,7 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
     <div style="font-size:9.5px;color:rgba(239,233,216,.3);letter-spacing:2px;padding:4px 11px 8px;text-transform:uppercase">功能</div>
     <button class="nb" id="nav-cal" onclick="gotoPage('cal')"><i class="ti ti-calendar"></i>工作行事曆</button>
     <button class="nb" id="nav-orders" onclick="gotoPage('orders')"><i class="ti ti-truck-delivery"></i>訂單追蹤</button>
+    <button class="nb" id="nav-verify" onclick="gotoPage('verify')"><i class="ti ti-clipboard-check"></i>出貨驗收</button>
     <button class="nb" id="nav-consign" onclick="gotoPage('consign')"><i class="ti ti-building-warehouse"></i>寄售管理</button>
     <button class="nb on" id="nav-new" onclick="newQuote()"><i class="ti ti-file-plus"></i>新增報價單</button>
     <button class="nb" id="nav-custom" onclick="gotoPage('custom')"><i class="ti ti-edit"></i>自訂報價單</button>
@@ -967,6 +980,19 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
     </div>
   </div>
 
+  <div class="page" id="page-verify">
+    <div class="rec-wrap">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+        <div id="vm-filters" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+        <div style="display:flex;gap:8px">
+          <button class="rec-act-btn" onclick="loadVerifyMgmt(true)"><i class="ti ti-refresh"></i> 重新整理</button>
+          <button class="btn btn-gold" onclick="openVmManual()"><i class="ti ti-plus"></i>登記客訴／回報</button>
+        </div>
+      </div>
+      <div id="vm-body"><div class="rec-empty">載入中…</div></div>
+    </div>
+  </div>
+
   <div class="page" id="page-cal">
     <div class="rec-wrap">
       <div class="card"><div class="cb"><div id="cal-focus"></div></div></div>
@@ -1098,6 +1124,43 @@ input.hand-edit{outline:2px solid #E5C063;background:#FFFBEE!important}
   <div class="v2box" style="max-width:660px">
     <div class="v2h"><span id="cl-title">修改紀錄</span><button class="v2x" onclick="closeChangeLog()">✕</button></div>
     <div id="cl-body" style="max-height:62vh;overflow-y:auto"></div>
+  </div>
+</div>
+<div class="v2ov" id="vmp-overlay">
+  <div class="v2box" style="max-width:520px">
+    <div class="v2h"><span id="vmp-title">處理客戶回報</span><button class="v2x" onclick="closeVmProc()">✕</button></div>
+    <div id="vmp-info" style="font-size:12px;color:var(--sub);background:var(--gold-pale);border-radius:8px;padding:10px 12px;margin-bottom:12px;line-height:1.6"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+      <div class="fl"><label>處理狀態</label><select class="fi" id="vmp-status">
+        <option value="待處理">待處理</option><option value="退費">退費</option><option value="補發">補發</option><option value="結案">結案（無需處理）</option></select></div>
+      <div class="fl"><label>金額（退費／補發，選填）</label><input class="fi" type="number" id="vmp-amount" placeholder="例 1200"></div>
+      <div class="fl"><label>結案日</label><input class="fi" type="date" id="vmp-closed_date"></div>
+      <div></div>
+      <div class="fl" style="grid-column:1/-1"><label>處理說明／內部備註</label><textarea class="fi" id="vmp-handle_note" rows="3" style="resize:vertical" placeholder="例：已寄補發 6 瓶，宅配單號…"></textarea></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="btn btn-gold" onclick="saveVmProc()">儲存處理</button>
+      <button class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63" onclick="closeVmProc()">取消</button>
+    </div>
+  </div>
+</div>
+<div class="v2ov" id="vmm-overlay">
+  <div class="v2box" style="max-width:520px">
+    <div class="v2h"><span>登記客訴／回報（手動）</span><button class="v2x" onclick="closeVmManual()">✕</button></div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:12px;line-height:1.6">客戶用 LINE／電話反映、沒走掃碼時，在這裡手動補一筆進系統，方便一起追蹤處理。</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+      <div class="fl"><label>訂單單號</label><input class="fi" id="vmm-no" list="vmm-nolist" placeholder="輸入或選單號"><datalist id="vmm-nolist"></datalist></div>
+      <div class="fl"><label>客戶</label><input class="fi" id="vmm-client" placeholder="客戶名稱"></div>
+      <div class="fl"><label>回報類型</label><select class="fi" id="vmm-type"><option value="回報問題">回報問題</option><option value="驗收無誤">驗收無誤</option></select></div>
+      <div class="fl"><label>品項（選填）</label><input class="fi" id="vmm-item" placeholder="例 蜂蜜醋 500ml"></div>
+      <div class="fl" style="grid-column:1/-1"><label>問題說明</label><textarea class="fi" id="vmm-desc" rows="3" style="resize:vertical" placeholder="客戶反映的內容"></textarea></div>
+      <div class="fl"><label>回報人／來源（選填）</label><input class="fi" id="vmm-reporter" placeholder="例 LINE・王小姐"></div>
+      <div></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="btn btn-gold" onclick="saveVmManual()">登記</button>
+      <button class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63" onclick="closeVmManual()">取消</button>
+    </div>
   </div>
 </div>
 <div class="v2ov" id="ce-overlay">
@@ -2376,11 +2439,13 @@ function gotoPage(p){
   document.getElementById('page-custom').classList.toggle('on', p==='custom');
   document.getElementById('page-orders').classList.toggle('on', p==='orders');
   document.getElementById('page-cal').classList.toggle('on', p==='cal');
+  { const e=document.getElementById('page-verify'); if(e) e.classList.toggle('on', p==='verify'); }
   { const e=document.getElementById('page-consign'); if(e) e.classList.toggle('on', p==='consign'); }
-  document.getElementById('tbr-standard').style.display = (p==='custom'||p==='orders'||p==='cal'||p==='consign') ? 'none' : 'flex';
+  document.getElementById('tbr-standard').style.display = (p==='custom'||p==='orders'||p==='cal'||p==='consign'||p==='verify') ? 'none' : 'flex';
   document.getElementById('tbr-custom').style.display = p==='custom' ? 'flex' : 'none';
   const _titles={custom:['自訂報價單','自由建立非常規報價單，可儲存到後台備份，並直接匯出 PDF / Word'],
     orders:['訂單追蹤','報價 → 訂金 → 出貨 → 發票 → 尾款，一眼掌握每張單走到哪'],
+    verify:['出貨驗收管理','驗收單留底、客戶掃碼回報處理、未回報催單，一頁掌握'],
     cal:['工作行事曆','訂單日程自動連動＋備忘與待辦，防止遺漏'],
     consign:['寄售管理','公版酒鋪貨・銷售・庫存・保證金・月結，一頁掌握']};
   document.getElementById('tb-title').textContent = _titles[p]?_titles[p][0]:'報價單製作';
@@ -2389,6 +2454,7 @@ function gotoPage(p){
   if(p==='new'){ document.getElementById('nav-new').classList.add('on'); }
   if(p==='records'){ document.getElementById('nav-records').classList.add('on'); loadRecords(); }
   if(p==='orders'){ document.getElementById('nav-orders').classList.add('on'); loadOrders().then(renderReport).catch(()=>{}); }
+  if(p==='verify'){ document.getElementById('nav-verify').classList.add('on'); loadVerifyMgmt().catch(()=>{}); }
   if(p==='cal'){ document.getElementById('nav-cal').classList.add('on'); loadCalendar().catch(()=>{}); }
   if(p==='consign'){ document.getElementById('nav-consign').classList.add('on'); initConsignPage().catch(()=>{}); }
   if(p==='custom'){
@@ -3614,6 +3680,7 @@ async function loadOrders(force){
     list.sort((a,b)=> (b.quoteDate||'').localeCompare(a.quoteDate||'') || (b.no||'').localeCompare(a.no||''));
     ORDERS_CACHE=list;
     renderOrders();
+    loadOrderVerifyBadges();   // 非同步補上驗收單／客訴徽章，不擋列表
     return list;
   }catch(e){
     if(body) body.innerHTML=`<tr><td colspan="6" class="rec-empty">${e.message||'載入失敗'}</td></tr>`;
@@ -3638,6 +3705,34 @@ function orderBadges(o){
     if(d!=null && d<0) h+='<span class="ob red">尾款已逾期</span>';
     else if(d!=null && d<=3) h+=`<span class="ob warn">尾款倒數 ${d} 天</span>`;
   }
+  return h;
+}
+/* 訂單列的驗收單／客訴徽章（資料來自 ORDER_VSUM，非同步載入後重繪） */
+let ORDER_VSUM=null;
+async function loadOrderVerifyBadges(){
+  try{
+    if(!AUTH_TOKEN) return;
+    const [lf,gv]=await Promise.all([
+      apiCall({action:'listVerifyForms', token:AUTH_TOKEN, filters:{}}).catch(()=>({})),
+      apiCall({action:'getVerifications', token:AUTH_TOKEN, filters:{}}).catch(()=>({}))
+    ]);
+    ORDER_VSUM={ forms:(lf&&lf.summary)||{}, reps:(gv&&gv.summary)||{}, repList:(gv&&gv.records)||[] };
+    renderOrders();
+  }catch(_){}
+}
+function orderUnhandledCount(no){
+  if(!ORDER_VSUM) return 0;
+  const s=ORDER_VSUM.reps[no];
+  if(s&&(s.unhandled!=null||s.pending!=null)) return (s.unhandled!=null?s.unhandled:s.pending)||0;
+  return (ORDER_VSUM.repList||[]).filter(r=>r.no===no&&(typeof vmIsIssue==='function'?vmIsIssue(r):true)&&(typeof vmStatusNorm==='function'?vmStatusNorm(r.status)==='待處理':true)).length;
+}
+function orderVerifyBadge(o){
+  if(!ORDER_VSUM) return '';
+  let h=''; const f=ORDER_VSUM.forms[o.no];
+  const cnt=f?(f.count||f.n||f.total):0;
+  if(cnt){ const last=String(f.last_at||f.last||f.last_date||'').slice(5,10); h+=`<span class="ob info">驗收單×${cnt}${last?'·'+last:''}</span>`; }
+  const unh=orderUnhandledCount(o.no);
+  if(unh>0) h+=`<span class="ob red">客訴 ${unh} 待處理</span>`;
   return h;
 }
 function orderDots(o){
@@ -3684,7 +3779,7 @@ function renderOrders(){
       <td>${orderDots(o)}${note?`<br><span class="onote">📌 ${escHtml(note)}${(o.st.track_note.includes('\n'))?'…':''}</span>`:''}</td>
       <td style="text-align:right;font-weight:600">${money(o.total)}</td>
       <td style="text-align:center">${shipD}</td>
-      <td>${orderBadges(o)}</td>
+      <td>${orderBadges(o)}${orderVerifyBadge(o)}</td>
       <td class="rec-actions">
         <button class="rec-act-btn" onclick="openOrdEdit('${escHtml(o.no)}')">編輯進度</button>
         <button class="rec-act-btn" onclick="copyOrder('${escHtml(o.no)}','${o.src}')">複製</button>
@@ -3842,6 +3937,221 @@ function exportReport(){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download=`訂單報表_${mm}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+}
+
+/* ============================================================
+   二之二、出貨驗收管理（第三批）
+   資料來源：getVerifications（客戶掃碼回報）／listVerifyForms（驗收單留底）
+   欄位皆容錯：後端欄位名若有出入，讀不到就留白、不會壞頁。
+   ============================================================ */
+let VM_TAB='pending';           // pending | all | noreport | forms
+let VM_DATA=null;
+let VM_PROC_ID=null;
+const VM_NOREPORT_DAYS=7;
+
+function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function vmDaysSince(dstr){ const d=daysBetween(dstr); return d==null?null:-d; }
+function vmArr(v){ if(v==null||v==='') return []; if(Array.isArray(v)) return v; return String(v).split(/[\n,｜|]+/).map(s=>s.trim()).filter(Boolean); }
+function vmPhotos(p){ return vmArr(p).map(x=>{ if(x&&typeof x==='object') return x.url||x.src||x.link||x.dataUrl||''; return x; }).filter(Boolean); }
+function vmStatusNorm(s){ s=String(s||'').trim(); if(!s||s==='待處理'||s==='未處理'||s==='新'||s==='pending') return '待處理'; return s; }
+function vmIsIssue(r){
+  const t=String(r.type||'').trim();
+  if(/問題|issue|不良|客訴|退|補|異常/i.test(t)) return true;
+  if(/無誤|合格|ok|good|正常|收到/i.test(t)) return false;
+  return !!String(r.desc||'').trim();
+}
+function vmIsUnhandled(r){ return vmIsIssue(r) && vmStatusNorm(r.status)==='待處理'; }
+function vmClientOf(no){
+  if(VM_DATA){ const r=(VM_DATA.reports||[]).find(x=>x.no===no&&x.client); if(r) return r.client; }
+  if(ORDERS_CACHE){ const o=ORDERS_CACHE.find(x=>x.no===no); if(o) return (o.client||'').split('｜')[0]; }
+  return '';
+}
+function vmToday(){ const t=new Date(),p=n=>String(n).padStart(2,'0'); return t.getFullYear()+'-'+p(t.getMonth()+1)+'-'+p(t.getDate()); }
+
+async function loadVerifyMgmt(force){
+  const body=document.getElementById('vm-body');
+  if(body && (force||!VM_DATA)) body.innerHTML='<div class="rec-empty">載入中…</div>';
+  try{
+    if(!ORDERS_CACHE){ try{ await loadOrders(); }catch(_){} }
+    const [gv, lf] = await Promise.all([
+      apiCall({action:'getVerifications', token:AUTH_TOKEN, filters:{}}).catch(e=>({ok:false,error:e.message})),
+      apiCall({action:'listVerifyForms', token:AUTH_TOKEN, filters:{}}).catch(e=>({ok:false,error:e.message}))
+    ]);
+    VM_DATA={
+      reports:(gv&&gv.records)||[], repSum:(gv&&gv.summary)||{},
+      forms:(lf&&lf.records)||[], formSum:(lf&&lf.summary)||{},
+      gvErr:(gv&&gv.ok===false)?gv.error:null, lfErr:(lf&&lf.ok===false)?lf.error:null
+    };
+    fillVmNoList();
+    renderVerifyMgmt();
+  }catch(e){ if(body) body.innerHTML=`<div class="rec-empty">${escHtml(e.message||'載入失敗')}</div>`; }
+}
+function setVmTab(t){ VM_TAB=t; renderVerifyMgmt(); }
+function vmNoReportList(){
+  if(!VM_DATA) return [];
+  const shipped={};
+  Object.keys(VM_DATA.formSum||{}).forEach(no=>{ const s=VM_DATA.formSum[no]||{}; shipped[no]=s.last_at||s.last||s.last_date||''; });
+  (VM_DATA.forms||[]).forEach(f=>{ if(shipped[f.no]==null||shipped[f.no]==='') shipped[f.no]=f.ship_date||f.created_at||''; });
+  const reported={};
+  (VM_DATA.reports||[]).forEach(r=>{ if(r.no) reported[r.no]=true; });
+  Object.keys(VM_DATA.repSum||{}).forEach(no=>{ reported[no]=true; });
+  const list=[];
+  Object.keys(shipped).forEach(no=>{
+    if(reported[no]) return;
+    const d=vmDaysSince(shipped[no]);
+    if(d==null||d>=VM_NOREPORT_DAYS) list.push({no, shipDate:shipped[no], days:d, client:vmClientOf(no)});
+  });
+  list.sort((a,b)=>(b.days||0)-(a.days||0));
+  return list;
+}
+function vmCounts(){
+  const reps=VM_DATA?VM_DATA.reports:[];
+  return { pending:reps.filter(vmIsUnhandled).length, all:reps.length, noreport:vmNoReportList().length, forms:(VM_DATA?VM_DATA.forms:[]).length };
+}
+function renderVerifyMgmt(){
+  const wrap=document.getElementById('vm-body'); if(!wrap) return;
+  if(!VM_DATA){ wrap.innerHTML='<div class="rec-empty">載入中…</div>'; return; }
+  const c=vmCounts();
+  const fs=[['pending','待處理回報',c.pending],['all','全部回報',c.all],['noreport','未回報催單',c.noreport],['forms','驗收單留底',c.forms]];
+  document.getElementById('vm-filters').innerHTML=fs.map(([k,l,n])=>
+    `<button class="fchip${VM_TAB===k?' on':''}" onclick="setVmTab('${k}')">${l} <b>${n}</b></button>`).join('');
+  let warn='';
+  if(VM_DATA.gvErr||VM_DATA.lfErr) warn=`<div class="ob warn" style="display:block;margin:0 0 10px;padding:8px 12px;font-size:11.5px">部分資料讀取失敗（後端可能尚未更新此功能）：${escHtml(VM_DATA.gvErr||VM_DATA.lfErr||'')}</div>`;
+  if(VM_TAB==='forms') wrap.innerHTML=warn+vmRenderForms();
+  else if(VM_TAB==='noreport') wrap.innerHTML=warn+vmRenderNoReport();
+  else wrap.innerHTML=warn+vmRenderReports(VM_TAB==='pending');
+}
+function vmStatusPill(r){
+  if(!vmIsIssue(r)) return '<span class="vpill ok">驗收無誤</span>';
+  const s=vmStatusNorm(r.status), map={'待處理':'wait','退費':'refund','補發':'resend','結案':'done'};
+  return `<span class="vpill ${map[s]||'wait'}">${escHtml(s)}</span>`;
+}
+function vmRenderReports(pendingOnly){
+  let reps=(VM_DATA.reports||[]).slice();
+  if(pendingOnly) reps=reps.filter(vmIsUnhandled);
+  reps.sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+  if(!reps.length) return `<div class="rec-empty">${pendingOnly?'目前沒有待處理的客戶回報 🎉':'尚無客戶回報紀錄'}</div>`;
+  const rows=reps.map(r=>{
+    const photos=vmPhotos(r.photos).map((src,i)=>`<img class="vth" src="${escAttr(src)}" onclick="window.open('${escAttr(src)}','_blank')" alt="照片${i+1}">`).join('');
+    const issue=vmIsIssue(r);
+    const dt=String(r.created_at||'').replace('T',' ').slice(0,16);
+    return `<tr>
+      <td style="white-space:nowrap;color:#6B6B63;font-size:11.5px">${escHtml(dt)||'—'}</td>
+      <td><b>${escHtml(r.no||'—')}</b><br><span style="color:#6B6B63;font-size:11.5px">${escHtml(r.client||vmClientOf(r.no)||'')}</span></td>
+      <td><span class="vtype ${issue?'issue':'good'}">${issue?'⚠ 回報問題':'✓ 驗收無誤'}</span>${r.item?`<br><span style="font-size:11.5px;color:#6B6B63">${escHtml(r.item)}</span>`:''}${r.desc?`<br><span style="font-size:12px">${escHtml(r.desc)}</span>`:''}${photos?`<br>${photos}`:''}</td>
+      <td style="text-align:center">${vmStatusPill(r)}${r.handle_note?`<br><span style="font-size:11px;color:#6B6B63">${escHtml(r.handle_note)}</span>`:''}${(r.amount!=null&&r.amount!=='')?`<br><span style="font-size:11px;color:var(--gold-deep)">${money(r.amount)}</span>`:''}</td>
+      <td class="rec-actions">${issue?`<button class="rec-act-btn" onclick="openVmProc('${escAttr(r.id)}')">處理</button>`:''}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="tbl-scroll"><table class="rec-table">
+    <thead><tr><th>時間</th><th>單號／客戶</th><th>回報內容</th><th style="text-align:center">處理</th><th>操作</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+function vmRenderNoReport(){
+  const list=vmNoReportList();
+  if(!list.length) return `<div class="rec-empty">沒有逾 ${VM_NOREPORT_DAYS} 天未回報的單 🎉（已出貨的都回報了，或尚無驗收單留底可對照）</div>`;
+  const rows=list.map(o=>{
+    const dtxt=o.days==null?'—':(o.days+' 天');
+    return `<tr>
+      <td><b>${escHtml(o.no)}</b><br><span style="color:#6B6B63;font-size:11.5px">${escHtml(o.client||'')}</span></td>
+      <td style="text-align:center">${escHtml((o.shipDate||'').slice(0,10))||'—'}</td>
+      <td style="text-align:center"><span class="ob ${(o.days!=null&&o.days>=VM_NOREPORT_DAYS)?'red':'warn'}">出貨 ${dtxt} 未回報</span></td>
+      <td class="rec-actions"><button class="rec-act-btn" onclick="vmCopyReminder('${escAttr(o.no)}','${escAttr((o.shipDate||'').slice(0,10))}')">複製催單訊息</button></td>
+    </tr>`;
+  }).join('');
+  return `<div style="font-size:11.5px;color:#A8A69C;margin-bottom:8px">已出貨（有開驗收單）滿 ${VM_NOREPORT_DAYS} 天、客戶仍未掃碼回報的單。按「複製催單訊息」貼到 LINE 即可。</div>
+    <div class="tbl-scroll"><table class="rec-table">
+    <thead><tr><th>單號／客戶</th><th style="text-align:center">出貨日</th><th style="text-align:center">狀態</th><th>操作</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+function vmRenderForms(){
+  const forms=(VM_DATA.forms||[]).slice();
+  forms.sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+  if(!forms.length) return `<div class="rec-empty">尚無驗收單留底（之後每次產生驗收單會自動存一筆）</div>`;
+  const rows=forms.map(f=>{
+    const items=parseJsonSafe(f.items_json,[]);
+    const names=(Array.isArray(items)?items:[]).map(it=>it.name).filter(Boolean).slice(0,3).join('、')+((Array.isArray(items)&&items.length>3)?'…':'');
+    const dt=String(f.created_at||'').replace('T',' ').slice(0,16);
+    return `<tr>
+      <td style="white-space:nowrap;color:#6B6B63;font-size:11.5px">${escHtml(dt)||'—'}</td>
+      <td><b>${escHtml(f.no||'—')}</b>${f.lot?` <span style="color:#6B6B63">Lot ${escHtml(f.lot)}</span>`:''}</td>
+      <td style="text-align:center">${escHtml((f.ship_date||'').slice(0,10))||'—'}</td>
+      <td style="text-align:center">${escHtml(f.pm||'')||'—'}</td>
+      <td style="text-align:center">${(f.boxes!=null&&f.boxes!=='')?escHtml(f.boxes)+' 箱':'—'}</td>
+      <td style="font-size:11.5px;color:#6B6B63">${escHtml(names)||'—'}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="tbl-scroll"><table class="rec-table">
+    <thead><tr><th>產生時間</th><th>單號</th><th style="text-align:center">配送日</th><th style="text-align:center">PM</th><th style="text-align:center">箱數</th><th>品項</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+function vmCopyReminder(no, shipDate){
+  const d=shipDate?String(shipDate).replace(/-/g,'/'):'';
+  const msg=`您好，這裡是凱文南坡萬 🍶\n您於 ${d||'近日'} 收到的商品（單號 ${no}）目前系統尚未收到您的線上驗收回報。\n煩請掃描出貨單上的 QR Code 完成驗收（約 30 秒）；若逾期未回報將視同驗收合格。如商品有任何問題也歡迎直接回覆，我們會立即為您處理，謝謝！`;
+  vmClip(msg);
+}
+function vmClip(text){
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(()=>toast('催單訊息已複製，貼到 LINE 即可','ok'),()=>vmClipFallback(text));
+    else vmClipFallback(text);
+  }catch(e){ vmClipFallback(text); }
+}
+function vmClipFallback(text){
+  const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); toast('催單訊息已複製','ok'); }catch(_){ toast('複製失敗，請手動選取','err'); }
+  document.body.removeChild(ta);
+}
+/* 處理狀態 */
+function openVmProc(id){
+  const r=(VM_DATA.reports||[]).find(x=>String(x.id)===String(id)); if(!r){ toast('查無此回報','err'); return; }
+  VM_PROC_ID=id;
+  document.getElementById('vmp-info').innerHTML=`<b>${escHtml(r.no||'')}</b>　${escHtml(r.client||vmClientOf(r.no)||'')}${r.item?('<br>'+escHtml(r.item)):''}${r.desc?('<br>'+escHtml(r.desc)):''}`;
+  document.getElementById('vmp-status').value=vmStatusNorm(r.status);
+  document.getElementById('vmp-amount').value=(r.amount!=null?r.amount:'');
+  document.getElementById('vmp-handle_note').value=r.handle_note||'';
+  document.getElementById('vmp-closed_date').value=r.closed_date||'';
+  document.getElementById('vmp-overlay').style.display='flex';
+}
+function closeVmProc(){ document.getElementById('vmp-overlay').style.display='none'; VM_PROC_ID=null; }
+async function saveVmProc(){
+  if(!VM_PROC_ID) return;
+  if(_busy.vmProc) return; _busy.vmProc=true;
+  const fields={ status:document.getElementById('vmp-status').value, handle_note:document.getElementById('vmp-handle_note').value,
+    amount:document.getElementById('vmp-amount').value, closed_date:document.getElementById('vmp-closed_date').value };
+  if(fields.status==='結案'&&!fields.closed_date) fields.closed_date=vmToday();
+  try{
+    const d=await apiCall({action:'updateVerificationStatus', token:AUTH_TOKEN, id:VM_PROC_ID, fields});
+    if(!d.ok){ toast(d.error||'儲存失敗','err'); return; }
+    toast('已更新處理狀態','ok'); closeVmProc(); await loadVerifyMgmt(true);
+  }catch(e){ toast(e.message||'儲存失敗','err'); }
+  finally{ _busy.vmProc=false; }
+}
+/* 手動登記客訴 */
+function fillVmNoList(){
+  const dl=document.getElementById('vmm-nolist'); if(!dl||!ORDERS_CACHE) return;
+  dl.innerHTML=ORDERS_CACHE.slice(0,300).map(o=>`<option value="${escAttr(o.no)}">${escAttr((o.client||'').split('｜')[0])}</option>`).join('');
+}
+function openVmManual(){
+  ['vmm-no','vmm-client','vmm-item','vmm-desc','vmm-reporter'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  document.getElementById('vmm-type').value='回報問題';
+  fillVmNoList();
+  document.getElementById('vmm-overlay').style.display='flex';
+}
+function closeVmManual(){ document.getElementById('vmm-overlay').style.display='none'; }
+async function saveVmManual(){
+  if(_busy.vmManual) return;
+  const no=document.getElementById('vmm-no').value.trim();
+  const desc=document.getElementById('vmm-desc').value.trim();
+  if(!no&&!desc){ toast('請至少填單號或問題說明','err'); return; }
+  _busy.vmManual=true;
+  const record={ no, client:document.getElementById('vmm-client').value.trim(), type:document.getElementById('vmm-type').value,
+    item:document.getElementById('vmm-item').value.trim(), desc, reporter:document.getElementById('vmm-reporter').value.trim(), status:'待處理', source:'manual' };
+  try{
+    const d=await apiCall({action:'addVerification', token:AUTH_TOKEN, record});
+    if(!d.ok){ toast(d.error||'登記失敗（後端可能尚未支援手動登記）','err'); return; }
+    toast('已登記','ok'); closeVmManual(); await loadVerifyMgmt(true);
+  }catch(e){ toast(e.message||'登記失敗','err'); }
+  finally{ _busy.vmManual=false; }
 }
 
 /* ============================================================
@@ -4833,7 +5143,17 @@ function generateVerifyPdf(mode){
   const w=window.open('','_blank');
   if(!w){ toast('請允許彈出視窗，才能列印／存成 PDF','err'); return; }
   w.document.open(); w.document.write(buildVerifyDocHtml(d)); w.document.close();
+  saveVerifyFormRecord(d);
   toast('已開啟驗收單，於列印視窗選「另存為 PDF」','ok');
+}
+/* 產生驗收單時，把這次的出貨紀錄留底到後台（fire-and-forget，失敗不擋前端） */
+function saveVerifyFormRecord(d){
+  try{
+    if(!AUTH_TOKEN) return;
+    const record={ no:d.no, lot:d.lot, shipDate:d.shipDate, pm:d.shipper, boxes:d.boxes,
+      items:(d.rows||[]).map(r=>({ name:r.name, lot:r.lot, vol:r.vol, mfg:r.mfg, thisShip:r.thisShip, ordered:r.ordered, shipped:r.shipped })) };
+    apiCall({action:'saveVerifyForm', token:AUTH_TOKEN, record}).catch(()=>{});
+  }catch(_){}
 }
 
 function buildVerifyDocHtml(d){
