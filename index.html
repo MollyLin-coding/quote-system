@@ -1008,13 +1008,14 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
         </span>
         <span style="width:8px"></span>
         <button class="fchip" id="gcal-sync-btn" onclick="syncGCal()" title="把訂單日程與備忘推送到 Google 日曆「南坡萬」">⟳ 同步 Google 日曆</button>
-        <span id="cal-filters" style="display:inline-flex;gap:6px">
-          <button class="fchip on" data-f="all" onclick="setCalFilter('all')">全部</button>
-          <button class="fchip" data-f="order" onclick="setCalFilter('order')">訂單日程</button>
-          <button class="fchip" data-f="memo" onclick="setCalFilter('memo')">備忘</button>
-          <button class="fchip" data-f="recur" onclick="setCalFilter('recur')">重複行程</button>
+        <span id="cal-filters" style="display:inline-flex;gap:6px;flex-wrap:wrap">
+          <button class="fchip on" data-f="all" onclick="calAllOn()" title="全部打開">全部</button>
+          <button class="fchip on" data-f="order" onclick="toggleCalKind('order')">🚚 訂單日程</button>
+          <button class="fchip on" data-f="memo" onclick="toggleCalKind('memo')">📌 備忘</button>
+          <button class="fchip on" data-f="recur" onclick="toggleCalKind('recur')">🔁 重複行程</button>
         </span>
       </div>
+      <div id="cal-catbar" style="display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 12px;align-items:center"></div>
       <div class="card"><div class="cb"><div id="cal-root"><div class="rec-empty">載入中…</div></div></div></div>
       <div class="card" style="margin-top:14px"><div class="cb"><div id="cal-todos"></div></div></div>
     </div>
@@ -1242,7 +1243,8 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
       <div class="fl" style="flex:1"><label>分類（依分類自動上色）</label>
         <div style="display:flex;gap:8px;align-items:center">
           <select class="fi" id="ce-category" onchange="onCalCategoryChange()" style="flex:1">
-            <option>工作</option><option>採購</option><option>私人</option><option>其他</option></select>
+            <option>工作</option><option>會議</option><option>拜訪客戶</option><option>採購</option>
+            <option>出貨物流</option><option>收款提醒</option><option>私人</option><option>其他</option></select>
           <span id="ce-cat-dot" style="display:inline-block;width:16px;height:16px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,.1)"></span>
         </div>
       </div>
@@ -3392,13 +3394,19 @@ let RULE_SUPPRESS = {};           // 使用者刪掉的自動規則列（rule ke
 let ORDERS_CACHE = null;          // 合併後的訂單列表
 let CAL_ITEMS = [];               // calendar_items
 let CAL_VIEW = 'month';           // month | week | list
-let CAL_FILTER = 'all';           // all | order | memo | recur
+/* 勾選式篩選：類型（訂單日程/備忘/重複）與分類都可個別開關，預設全開 */
+let CAL_KINDS = {order:true, memo:true, recur:true};
+let CAL_CATS = {};                // {分類名:false}＝關閉；沒記錄＝開
 let CAL_Y = new Date().getFullYear(), CAL_M = new Date().getMonth(); // 0-based
 let ORD_FILTER = 'all';
 /* 行事曆分類配色（依「分類」自動上色，不用另外挑顏色） */
 const CAL_CATEGORY_COLORS = {
   '工作': {bg:'#EAF0FF', fg:'#3457C7', bd:'#C7D6F5'},
+  '會議': {bg:'#E7F3EA', fg:'#2F7A46', bd:'#C5E0CC'},
+  '拜訪客戶': {bg:'#FBEFE4', fg:'#B25E1F', bd:'#EFD3B8'},
   '採購': {bg:'#F7EFDD', fg:'#8A6A2E', bd:'#E9D9B5'},
+  '出貨物流': {bg:'#E4F2F2', fg:'#1F7A7A', bd:'#C2E0E0'},
+  '收款提醒': {bg:'#F9ECEA', fg:'#B03A2E', bd:'#E8C7C2'},
   '私人': {bg:'#F1EAF9', fg:'#6B3FA0', bd:'#DDCBEF'},
   '其他': {bg:'#EDEDED', fg:'#5A5A5A', bd:'#D6D6D6'}
 };
@@ -4505,7 +4513,7 @@ async function loadCalendar(force){
 function eventsOn(dstr){
   const evs=[];
   const d=new Date(dstr+'T00:00:00');
-  if(CAL_FILTER==='all'||CAL_FILTER==='order'){
+  if(CAL_KINDS.order){
     (ORDERS_CACHE||[]).forEach(o=>{
       const s=o.st?.status||'quoted';
       if(s==='cancelled') return;
@@ -4516,10 +4524,10 @@ function eventsOn(dstr){
   }
   CAL_ITEMS.forEach(it=>{
     const timeTxt = (it.all_day!=='Y' && it.time) ? it.time+' ' : '';
-    if(it.kind==='memo' && (CAL_FILTER==='all'||CAL_FILTER==='memo')){
+    if(it.kind==='memo' && CAL_KINDS.memo && calCatOn(it.category)){
       if(it.date===dstr) evs.push({t:'memo', txt:'📌 '+timeTxt+it.title, item:it, done:it.done==='Y', time:timeTxt?it.time:''});
     }
-    if(it.kind==='recur' && (CAL_FILTER==='all'||CAL_FILTER==='recur')){
+    if(it.kind==='recur' && CAL_KINDS.recur && calCatOn(it.category)){
       const r=parseJsonSafe(it.recur_json,{});
       const hit=(r.freq==='weekly'&&d.getDay()===(r.weekday??-1))
         || (r.freq==='monthly'&&d.getDate()===(r.day||0)&&monthlyIntervalHit(r,d))
@@ -4535,7 +4543,10 @@ function renderCalendar(){
   const el=document.getElementById('cal-root'); if(!el) return;
   renderTodayFocus();
   document.querySelectorAll('#cal-views .fchip').forEach(b=>b.classList.toggle('on', b.dataset.v===CAL_VIEW));
-  document.querySelectorAll('#cal-filters .fchip').forEach(b=>b.classList.toggle('on', b.dataset.f===CAL_FILTER));
+  document.querySelectorAll('#cal-filters .fchip').forEach(b=>{ if(b.dataset.f!=='all') b.classList.toggle('on', !!CAL_KINDS[b.dataset.f]); });
+  const _allOn = CAL_KINDS.order && CAL_KINDS.memo && CAL_KINDS.recur && calCatList().every(c=>calCatOn(c));
+  const _ab=document.querySelector('#cal-filters .fchip[data-f="all"]'); if(_ab) _ab.classList.toggle('on', _allOn);
+  renderCalCatBar();
   if(CAL_VIEW==='month') renderCalMonth(el);
   else if(CAL_VIEW==='week') renderCalList(el, 7, '本週起 7 天');
   else renderCalList(el, 30, '未來 30 天');
@@ -4795,7 +4806,25 @@ async function syncGCal(){
   finally{ b.textContent=orig; b.disabled=false; }
 }
 function setCalView(v){ CAL_VIEW=v; renderCalendar(); }
-function setCalFilter(f){ CAL_FILTER=f; renderCalendar(); }
+/* ---- 勾選式篩選：類型與分類都可個別開關 ---- */
+function calCatList(){
+  const set=new Set(Object.keys(CAL_CATEGORY_COLORS));
+  CAL_ITEMS.forEach(it=>{ if((it.kind==='memo'||it.kind==='recur') && it.category) set.add(it.category); });  // 舊資料的自訂分類也列出
+  return [...set];
+}
+function calCatOn(cat){ return CAL_CATS[cat||'其他']!==false; }
+function toggleCalKind(k){ CAL_KINDS[k]=!CAL_KINDS[k]; renderCalendar(); }
+function toggleCalCat(cat){ CAL_CATS[cat]=!calCatOn(cat); renderCalendar(); }
+function calAllOn(){ CAL_KINDS={order:true,memo:true,recur:true}; CAL_CATS={}; renderCalendar(); }
+function renderCalCatBar(){
+  const el=document.getElementById('cal-catbar'); if(!el) return;
+  el.innerHTML='<span style="font-size:11px;color:var(--hint)">分類（點一下可開關顯示）：</span>'+calCatList().map(cat=>{
+    const c=CAL_CATEGORY_COLORS[cat]||{bg:'#EDEDED',fg:'#5A5A5A',bd:'#D6D6D6'};
+    const on=calCatOn(cat);
+    const st=on?`background:${c.bg};color:${c.fg};border:1px solid ${c.bd}`:'background:#F4F3EF;color:#B5B3A8;border:1px dashed #D6D3C8';
+    return `<button class="fchip" style="${st}" onclick="toggleCalCat('${escHtml(cat)}')">${on?'✓ ':''}${escHtml(cat)}</button>`;
+  }).join('');
+}
 
 /* ============================================================
    五、掛勾：calc 尾端套規則、登入後載資料
