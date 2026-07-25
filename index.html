@@ -3950,7 +3950,20 @@ let VM_PROC_ID=null;
 const VM_NOREPORT_DAYS=7;
 
 function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function vmDaysSince(dstr){ const d=daysBetween(dstr); return d==null?null:-d; }
+/* 驗收管理後端某些日期欄位（saveVerifyForm 的 ship_date／updateVerificationStatus 的 closed_date）
+   會把純日期字串轉存成 UTC 時間戳（如 2026-07-24T16:00:00.000Z），讀回來若直接切前10碼會早一天。
+   這裡統一轉回台北在地日期字串（YYYY-MM-DD）再顯示／計算。 */
+function vmLocalYmd(s){
+  if(!s) return '';
+  const str=String(s);
+  const m=str.match(/^(\d{4}-\d{2}-\d{2})(?!T)/);
+  if(m) return m[1];               // 已經是純日期字串，直接用
+  const d=new Date(str);
+  if(isNaN(d)) return str.slice(0,10);
+  const tpe=new Date(d.getTime()+8*60*60*1000);   // 轉回台北（+08:00）在地日期
+  return tpe.toISOString().slice(0,10);
+}
+function vmDaysSince(dstr){ const d=daysBetween(vmLocalYmd(dstr)); return d==null?null:-d; }
 function vmArr(v){ if(v==null||v==='') return []; if(Array.isArray(v)) return v; return String(v).split(/[\n,｜|]+/).map(s=>s.trim()).filter(Boolean); }
 function vmPhotos(p){ return vmArr(p).map(x=>{ if(x&&typeof x==='object') return x.url||x.src||x.link||x.dataUrl||''; return x; }).filter(Boolean); }
 function vmStatusNorm(s){ s=String(s||'').trim(); if(!s||s==='待處理'||s==='未處理'||s==='新'||s==='pending') return '待處理'; return s; }
@@ -3999,7 +4012,7 @@ function vmNoReportList(){
   Object.keys(shipped).forEach(no=>{
     if(reported[no]) return;
     const d=vmDaysSince(shipped[no]);
-    if(d==null||d>=VM_NOREPORT_DAYS) list.push({no, shipDate:shipped[no], days:d, client:vmClientOf(no)});
+    if(d==null||d>=VM_NOREPORT_DAYS) list.push({no, shipDate:vmLocalYmd(shipped[no]), days:d, client:vmClientOf(no)});
   });
   list.sort((a,b)=>(b.days||0)-(a.days||0));
   return list;
@@ -4069,13 +4082,14 @@ function vmRenderForms(){
   forms.sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
   if(!forms.length) return `<div class="rec-empty">尚無驗收單留底（之後每次產生驗收單會自動存一筆）</div>`;
   const rows=forms.map(f=>{
-    const items=parseJsonSafe(f.items_json,[]);
+    // items 欄位後端可能回陣列（items）或 JSON 字串（items_json），兩種都容錯讀
+    const items=Array.isArray(f.items)?f.items:parseJsonSafe(f.items_json,[]);
     const names=(Array.isArray(items)?items:[]).map(it=>it.name).filter(Boolean).slice(0,3).join('、')+((Array.isArray(items)&&items.length>3)?'…':'');
     const dt=String(f.created_at||'').replace('T',' ').slice(0,16);
     return `<tr>
       <td style="white-space:nowrap;color:#6B6B63;font-size:11.5px">${escHtml(dt)||'—'}</td>
       <td><b>${escHtml(f.no||'—')}</b>${f.lot?` <span style="color:#6B6B63">Lot ${escHtml(f.lot)}</span>`:''}</td>
-      <td style="text-align:center">${escHtml((f.ship_date||'').slice(0,10))||'—'}</td>
+      <td style="text-align:center">${escHtml(vmLocalYmd(f.ship_date))||'—'}</td>
       <td style="text-align:center">${escHtml(f.pm||'')||'—'}</td>
       <td style="text-align:center">${(f.boxes!=null&&f.boxes!=='')?escHtml(f.boxes)+' 箱':'—'}</td>
       <td style="font-size:11.5px;color:#6B6B63">${escHtml(names)||'—'}</td>
@@ -4109,7 +4123,7 @@ function openVmProc(id){
   document.getElementById('vmp-status').value=vmStatusNorm(r.status);
   document.getElementById('vmp-amount').value=(r.amount!=null?r.amount:'');
   document.getElementById('vmp-handle_note').value=r.handle_note||'';
-  document.getElementById('vmp-closed_date').value=r.closed_date||'';
+  document.getElementById('vmp-closed_date').value=vmLocalYmd(r.closed_date);
   document.getElementById('vmp-overlay').style.display='flex';
 }
 function closeVmProc(){ document.getElementById('vmp-overlay').style.display='none'; VM_PROC_ID=null; }
@@ -4144,10 +4158,12 @@ async function saveVmManual(){
   const desc=document.getElementById('vmm-desc').value.trim();
   if(!no&&!desc){ toast('請至少填單號或問題說明','err'); return; }
   _busy.vmManual=true;
-  const record={ no, client:document.getElementById('vmm-client').value.trim(), type:document.getElementById('vmm-type').value,
-    item:document.getElementById('vmm-item').value.trim(), desc, reporter:document.getElementById('vmm-reporter').value.trim(), status:'待處理', source:'manual' };
+  // 後端 addVerification 吃「扁平頂層欄位」，不是包在 record:{...} 裡面（已實測對齊）
+  const payload={ action:'addVerification', token:AUTH_TOKEN, no,
+    client:document.getElementById('vmm-client').value.trim(), type:document.getElementById('vmm-type').value,
+    item:document.getElementById('vmm-item').value.trim(), desc, reporter:document.getElementById('vmm-reporter').value.trim(), status:'待處理' };
   try{
-    const d=await apiCall({action:'addVerification', token:AUTH_TOKEN, record});
+    const d=await apiCall(payload);
     if(!d.ok){ toast(d.error||'登記失敗（後端可能尚未支援手動登記）','err'); return; }
     toast('已登記','ok'); closeVmManual(); await loadVerifyMgmt(true);
   }catch(e){ toast(e.message||'登記失敗','err'); }
