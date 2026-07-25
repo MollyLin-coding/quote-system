@@ -9,22 +9,6 @@ let VM_DATA=null;
 let VM_PROC_ID=null;
 const VM_NOREPORT_DAYS=7;
 
-function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-/* 驗收管理後端某些日期欄位（saveVerifyForm 的 ship_date／updateVerificationStatus 的 closed_date）
-   會把純日期字串轉存成 UTC 時間戳（如 2026-07-24T16:00:00.000Z），讀回來若直接切前10碼會早一天。
-   這裡統一轉回台北在地日期字串（YYYY-MM-DD）再顯示／計算。 */
-function vmLocalYmd(s){
-  if(!s) return '';
-  const str=String(s);
-  const m=str.match(/^(\d{4}-\d{2}-\d{2})(?!T)/);
-  if(m) return m[1];               // 已經是純日期字串，直接用
-  const d=new Date(str);
-  if(isNaN(d)) return str.slice(0,10);
-  const tpe=new Date(d.getTime()+8*60*60*1000);   // 轉回台北（+08:00）在地日期
-  return tpe.toISOString().slice(0,10);
-}
-function vmDaysSince(dstr){ const d=daysBetween(vmLocalYmd(dstr)); return d==null?null:-d; }
-function vmArr(v){ if(v==null||v==='') return []; if(Array.isArray(v)) return v; return String(v).split(/[\n,｜|]+/).map(s=>s.trim()).filter(Boolean); }
 function vmPhotos(p){ return vmArr(p).map(x=>{ if(x&&typeof x==='object') return x.url||x.src||x.link||x.dataUrl||''; return x; }).filter(Boolean); }
 function vmStatusNorm(s){ s=String(s||'').trim(); if(!s||s==='待處理'||s==='未處理'||s==='新'||s==='pending') return '待處理'; return s; }
 function vmIsIssue(r){
@@ -66,7 +50,7 @@ function vmToday(){ const t=new Date(),p=n=>String(n).padStart(2,'0'); return t.
 
 async function loadVerifyMgmt(force){
   const body=document.getElementById('vm-body');
-  if(body && (force||!VM_DATA)) body.innerHTML='<div class="rec-empty">載入中…</div>';
+  if(body && (force||!VM_DATA)) body.innerHTML=sklBlock(4);
   try{
     if(!ORDERS_CACHE){ try{ await loadOrders(); }catch(_){} }
     const [gv, lf] = await Promise.all([
@@ -106,7 +90,7 @@ function vmCounts(){
 }
 function renderVerifyMgmt(){
   const wrap=document.getElementById('vm-body'); if(!wrap) return;
-  if(!VM_DATA){ wrap.innerHTML='<div class="rec-empty">載入中…</div>'; return; }
+  if(!VM_DATA){ wrap.innerHTML=sklBlock(4); return; }
   const c=vmCounts();
   const fs=[['pending','待處理回報',c.pending],['all','全部回報',c.all],['noreport','未回報催單',c.noreport],['forms','驗收單留底',c.forms]];
   document.getElementById('vm-filters').innerHTML=fs.map(([k,l,n])=>
@@ -139,14 +123,14 @@ function vmRenderReports(pendingOnly){
     const rawTxt=(rawT&&rawT!==cat)?`<span style="font-size:11px;color:#6B6B63">（${escHtml(rawT)}）</span>`:'';
     const dt=String(r.created_at||'').replace('T',' ').slice(0,16);
     return `<tr>
-      <td style="white-space:nowrap;color:#6B6B63;font-size:11.5px">${escHtml(dt)||'—'}</td>
-      <td><b>${escHtml(r.no||'—')}</b><br><span style="color:#6B6B63;font-size:11.5px">${escHtml(r.client||vmClientOf(r.no)||'')}</span></td>
-      <td><span class="vtype ${catCls}">${catTxt}</span>${rawTxt}${r.item?`<br><span style="font-size:11.5px;color:#6B6B63">${escHtml(r.item)}</span>`:''}${r.desc?`<br><span style="font-size:12px">${escHtml(r.desc)}</span>`:''}${photos?`<br>${photos}`:''}</td>
-      <td style="text-align:center">${vmStatusPill(r)}${r.handle_note?`<br><span style="font-size:11px;color:#6B6B63">${escHtml(r.handle_note)}</span>`:''}${(r.amount!=null&&r.amount!=='')?`<br><span style="font-size:11px;color:var(--gold-deep)">${money(r.amount)}</span>`:''}</td>
-      <td class="rec-actions">${issue?`<button class="rec-act-btn" onclick="openVmProc('${escAttr(r.id)}')">處理</button>`:''}<button class="rec-act-btn del" onclick="vmDelReport('${escAttr(r.id)}','${escAttr(r.no||'')}')">刪除</button></td>
+      <td data-l="時間" style="white-space:nowrap;color:#6B6B63;font-size:11.5px">${escHtml(dt)||'—'}</td>
+      <td class="mc-main"><b>${escHtml(r.no||'—')}</b><br><span style="color:#6B6B63;font-size:11.5px">${escHtml(r.client||vmClientOf(r.no)||'')}</span></td>
+      <td data-l="內容"><span class="vtype ${catCls}">${catTxt}</span>${rawTxt}${r.item?`<br><span style="font-size:11.5px;color:#6B6B63">${escHtml(r.item)}</span>`:''}${r.desc?`<br><span style="font-size:12px">${escHtml(r.desc)}</span>`:''}${photos?`<br>${photos}`:''}</td>
+      <td data-l="處理" style="text-align:center">${vmStatusPill(r)}${r.handle_note?`<br><span style="font-size:11px;color:#6B6B63">${escHtml(r.handle_note)}</span>`:''}${(r.amount!=null&&r.amount!=='')?`<br><span style="font-size:11px;color:var(--gold-deep)">${money(r.amount)}</span>`:''}</td>
+      <td class="rec-actions" data-l="操作">${issue?`<button class="rec-act-btn" onclick="openVmProc('${escAttr(r.id)}')">處理</button>`:''}<button class="rec-act-btn del" onclick="vmDelReport('${escAttr(r.id)}','${escAttr(r.no||'')}')">刪除</button></td>
     </tr>`;
   }).join('');
-  return bar+`<div class="tbl-scroll"><table class="rec-table">
+  return bar+`<div class="tbl-scroll"><table class="rec-table mcard">
     <thead><tr><th>時間</th><th>單號／客戶</th><th>回報內容</th><th style="text-align:center">處理</th><th>操作</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
@@ -156,14 +140,14 @@ function vmRenderNoReport(){
   const rows=list.map(o=>{
     const dtxt=o.days==null?'—':(o.days+' 天');
     return `<tr>
-      <td><b>${escHtml(o.no)}</b><br><span style="color:#6B6B63;font-size:11.5px">${escHtml(o.client||'')}</span></td>
-      <td style="text-align:center">${escHtml((o.shipDate||'').slice(0,10))||'—'}</td>
-      <td style="text-align:center"><span class="ob ${(o.days!=null&&o.days>=VM_NOREPORT_DAYS)?'red':'warn'}">出貨 ${dtxt} 未回報</span></td>
-      <td class="rec-actions"><button class="rec-act-btn" onclick="vmCopyReminder('${escAttr(o.no)}','${escAttr((o.shipDate||'').slice(0,10))}')">複製催單訊息</button></td>
+      <td class="mc-main"><b>${escHtml(o.no)}</b><br><span style="color:#6B6B63;font-size:11.5px">${escHtml(o.client||'')}</span></td>
+      <td data-l="出貨日" style="text-align:center">${escHtml((o.shipDate||'').slice(0,10))||'—'}</td>
+      <td data-l="狀態" style="text-align:center"><span class="ob ${(o.days!=null&&o.days>=VM_NOREPORT_DAYS)?'red':'warn'}">出貨 ${dtxt} 未回報</span></td>
+      <td class="rec-actions" data-l="操作"><button class="rec-act-btn" onclick="vmCopyReminder('${escAttr(o.no)}','${escAttr((o.shipDate||'').slice(0,10))}')">複製催單訊息</button></td>
     </tr>`;
   }).join('');
   return `<div style="font-size:11.5px;color:#A8A69C;margin-bottom:8px">已出貨（有開驗收單）滿 ${VM_NOREPORT_DAYS} 天、客戶仍未掃碼回報的單。按「複製催單訊息」貼到 LINE 即可。</div>
-    <div class="tbl-scroll"><table class="rec-table">
+    <div class="tbl-scroll"><table class="rec-table mcard">
     <thead><tr><th>單號／客戶</th><th style="text-align:center">出貨日</th><th style="text-align:center">狀態</th><th>操作</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
@@ -177,16 +161,16 @@ function vmRenderForms(){
     const names=(Array.isArray(items)?items:[]).map(it=>it.name).filter(Boolean).slice(0,3).join('、')+((Array.isArray(items)&&items.length>3)?'…':'');
     const dt=String(f.created_at||'').replace('T',' ').slice(0,16);
     return `<tr>
-      <td style="white-space:nowrap;color:#6B6B63;font-size:11.5px">${escHtml(dt)||'—'}</td>
-      <td><b>${escHtml(f.no||'—')}</b>${f.lot?` <span style="color:#6B6B63">Lot ${escHtml(f.lot)}</span>`:''}</td>
-      <td style="text-align:center">${escHtml(vmLocalYmd(f.ship_date))||'—'}</td>
-      <td style="text-align:center">${escHtml(f.pm||'')||'—'}</td>
-      <td style="text-align:center">${(f.boxes!=null&&f.boxes!=='')?escHtml(f.boxes)+' 箱':'—'}</td>
-      <td style="font-size:11.5px;color:#6B6B63">${escHtml(names)||'—'}</td>
-      <td class="rec-actions"><button class="rec-act-btn del" onclick="vmDelForm('${escAttr(f.id)}','${escAttr(f.no||'')}')">刪除</button></td>
+      <td data-l="產生時間" style="white-space:nowrap;color:#6B6B63;font-size:11.5px">${escHtml(dt)||'—'}</td>
+      <td class="mc-main"><b>${escHtml(f.no||'—')}</b>${f.lot?` <span style="color:#6B6B63">Lot ${escHtml(f.lot)}</span>`:''}</td>
+      <td data-l="配送日" style="text-align:center">${escHtml(vmLocalYmd(f.ship_date))||'—'}</td>
+      <td data-l="PM" style="text-align:center">${escHtml(f.pm||'')||'—'}</td>
+      <td data-l="箱數" style="text-align:center">${(f.boxes!=null&&f.boxes!=='')?escHtml(f.boxes)+' 箱':'—'}</td>
+      <td data-l="品項" style="font-size:11.5px;color:#6B6B63">${escHtml(names)||'—'}</td>
+      <td class="rec-actions" data-l="操作"><button class="rec-act-btn del" onclick="vmDelForm('${escAttr(f.id)}','${escAttr(f.no||'')}')">刪除</button></td>
     </tr>`;
   }).join('');
-  return `<div class="tbl-scroll"><table class="rec-table">
+  return `<div class="tbl-scroll"><table class="rec-table mcard">
     <thead><tr><th>產生時間</th><th>單號</th><th style="text-align:center">配送日</th><th style="text-align:center">PM</th><th style="text-align:center">箱數</th><th>品項</th><th>操作</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
@@ -329,14 +313,14 @@ async function saveCustomToBackend(){
 }
 async function loadMyCustomQuotes(){
   const box=document.getElementById('cq-list'); if(!box) return;
-  box.innerHTML='<div class="rec-empty">載入中…</div>';
+  box.innerHTML=sklBlock(3);
   try{
     const d=await apiCall({ action:'listCustomQuotes', token:AUTH_TOKEN });
     if(!d.ok){ box.innerHTML=`<div class="rec-empty">${d.error||'載入失敗'}</div>`; return; }
     const qs=(d.quotes||[]).sort((a,b)=>(b.updated_at||'').localeCompare(a.updated_at||''));
     window._CQ_CACHE=qs;
     if(!qs.length){ box.innerHTML='<div class="rec-empty">尚無已備份的自訂單</div>'; return; }
-    box.innerHTML=`<div class="tbl-scroll"><table class="rec-table"><thead><tr><th>單號 / 案名</th><th>客戶</th><th style="text-align:right">總計</th><th>更新</th><th>操作</th></tr></thead><tbody>`+
+    box.innerHTML=`<div class="tbl-scroll"><table class="rec-table mcard"><thead><tr><th>單號 / 案名</th><th>客戶</th><th style="text-align:right">總計</th><th>更新</th><th>操作</th></tr></thead><tbody>`+
       qs.map(q=>{
         const tot=parseJsonSafe(q.totals_json,{}).total||0;
         return `<tr><td><b>${escHtml(q.quote_no||'—')}</b><br><span style="color:#6B6B63;font-size:11.5px">${escHtml(q.tag||'')}</span></td>

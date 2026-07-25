@@ -145,7 +145,7 @@ function onSelectConsignCustomer(){
 }
 async function loadConsignInventory(){
   const body=document.getElementById('cs-inv-body');
-  body.innerHTML='<tr><td colspan="4" class="rec-empty">載入中…</td></tr>';
+  body.innerHTML=sklTableRows(4,4);
   try{
     const d=await apiCall({action:'getConsignInventory', token:AUTH_TOKEN, customer_id:CS_CUR});
     if(!d.ok) throw new Error(d.error||'載入庫存失敗');
@@ -167,7 +167,7 @@ async function loadConsignInventory(){
 }
 async function loadConsignLedger(){
   const body=document.getElementById('cs-ledger-body');
-  body.innerHTML='<tr><td colspan="6" class="rec-empty">載入中…</td></tr>';
+  body.innerHTML=sklTableRows(6,4);
   try{
     const d=await apiCall({action:'getConsignLedger', token:AUTH_TOKEN, customer_id:CS_CUR});
     if(!d.ok) throw new Error(d.error||'載入明細失敗');
@@ -408,27 +408,19 @@ async function initV2(){
 }
 
 /* resetAll 後同步清掉公司選擇與發票抬頭 */
-(function(){
-  const _r = window.resetAll;
-  window.resetAll = function(s){
-    _r(s);
-    const e=document.getElementById('f-inv'); if(e) e.value='';
-    const c=document.getElementById('qf-company'); if(c) c.value='';
-    SELECTED_COMPANY=null; RULE_SUPPRESS={};
-    const d=document.getElementById('qf-detail'); if(d) d.style.display='none';
-    const sc=document.getElementById('f-shipsame'); if(sc) sc.checked=true;
-    toggleShipSame('f');
-    { const ss=document.getElementById('f-shipdate-show'); if(ss) ss.checked=true; } // 出貨日「顯示」勾選回到預設
-    FORM_DIRTY=false; // 清空/開新單後視為無未儲存內容
-  };
-})();
+onHook('afterReset', function(){
+  const e=document.getElementById('f-inv'); if(e) e.value='';
+  const c=document.getElementById('qf-company'); if(c) c.value='';
+  SELECTED_COMPANY=null; RULE_SUPPRESS={};
+  const d=document.getElementById('qf-detail'); if(d) d.style.display='none';
+  const sc=document.getElementById('f-shipsame'); if(sc) sc.checked=true;
+  toggleShipSame('f');
+  { const ss=document.getElementById('f-shipdate-show'); if(ss) ss.checked=true; } // 出貨日「顯示」勾選回到預設
+  FORM_DIRTY=false; // 清空/開新單後視為無未儲存內容
+});
 /* 使用者手動移除自動規則列 → 記住不要再自動加回 */
-(function(){
-  const _rm = window.removeExt;
-  window.removeExt = function(id){
-    const e = extras.find(x=>x.id===id);
-    if(e && e.auto) RULE_SUPPRESS[e.auto]=true;
-    _rm(id);
-  };
-})();
+onHook('beforeRemoveExt', function(id){
+  const e = extras.find(x=>x.id===id);
+  if(e && e.auto) RULE_SUPPRESS[e.auto]=true;
+});
 

@@ -36,10 +36,10 @@ function orderTimelineHtml(o){
 
 async function loadOrders(force){
   const body=document.getElementById('ord-body');
-  if(body) body.innerHTML='<tr><td colspan="6" class="rec-empty">載入中…</td></tr>';
+  if(body) body.innerHTML=sklTableRows(6,5);
   try{
     const [qs, cq, os] = await Promise.all([
-      apiCall({action:'getQuotes', token:AUTH_TOKEN, filters:{}}),
+      apiCall(withLimit({action:'getQuotes', token:AUTH_TOKEN, filters:{}})),
       apiCall({action:'listCustomQuotes', token:AUTH_TOKEN}),
       apiCall({action:'getOrderStatusList', token:AUTH_TOKEN})
     ]);
@@ -149,18 +149,18 @@ function renderOrders(){
   document.getElementById('ord-filters').innerHTML=fs.map(([k,l])=>
     `<button class="fchip${ORD_FILTER===k?' on':''}" onclick="setOrdFilter('${k}',this)">${l} <b>${cnt(k)}</b></button>`).join('');
   const rows=ORDERS_CACHE.filter(passOrdFilter);
-  if(!rows.length){ body.innerHTML='<tr><td colspan="6" class="rec-empty">沒有符合的訂單</td></tr>'; return; }
+  if(!rows.length){ body.innerHTML='<tr><td colspan="6" class="rec-empty">沒有符合的訂單</td></tr>'+(listMaybeMore(ORDERS_CACHE.length)?moreRowHtml(6):''); return; }
   body.innerHTML=rows.map(o=>{
     const note=(o.st?.track_note||'').split('\n')[0];
     const shipD=o.st?.ship_date_actual?`${o.st.ship_date_actual.slice(5)} ✓`:(o.st?.ship_date_est?o.st.ship_date_est.slice(5):'—');
     return `<tr>
-      <td><b>${escHtml(o.no)}</b> <span class="rec-badge ${o.typeKey==='banquet'?'banquet':o.typeKey==='custom'?'custom':'bottle'}">${o.type}</span><br>
+      <td class="mc-main"><b>${escHtml(o.no)}</b> <span class="rec-badge ${o.typeKey==='banquet'?'banquet':o.typeKey==='custom'?'custom':'bottle'}">${o.type}</span><br>
         <span style="color:#6B6B63;font-size:11.5px">${escHtml(o.client)}</span></td>
-      <td>${orderDots(o)}${note?`<br><span class="onote">📌 ${escHtml(note)}${(o.st.track_note.includes('\n'))?'…':''}</span>`:''}</td>
-      <td style="text-align:right;font-weight:600">${money(o.total)}</td>
-      <td style="text-align:center">${shipD}</td>
-      <td>${orderBadges(o)}${orderVerifyBadge(o)}</td>
-      <td class="rec-actions">
+      <td data-l="進度">${orderDots(o)}${note?`<br><span class="onote">📌 ${escHtml(note)}${(o.st.track_note.includes('\n'))?'…':''}</span>`:''}</td>
+      <td data-l="總計" style="text-align:right;font-weight:600">${money(o.total)}</td>
+      <td data-l="出貨日" style="text-align:center">${shipD}</td>
+      <td data-l="提醒">${orderBadges(o)}${orderVerifyBadge(o)}</td>
+      <td class="rec-actions" data-l="操作">
         <button class="rec-act-btn" onclick="openOrdEdit('${escHtml(o.no)}')">編輯進度</button>
         <button class="rec-act-btn" onclick="copyOrder('${escHtml(o.no)}','${o.src}')">複製</button>
         <button class="rec-act-btn" onclick="openChangeLog('${escHtml(o.no)}')">修改紀錄</button>
@@ -168,7 +168,7 @@ function renderOrders(){
         ${o.src==='custom'?`<button class="rec-act-btn" onclick="loadCustomFromOrders('${escHtml(o.no)}')">載入編輯</button>`:''}
       </td>
     </tr>`;
-  }).join('');
+  }).join('') + (listMaybeMore(ORDERS_CACHE.length) ? moreRowHtml(6) : '');
 }
 
 /* ---- 單筆進度編輯 ---- */
@@ -280,7 +280,7 @@ function shpReset(){
   SHP_LOADED=false; SHP_LIST=[];
   const box=document.getElementById('shp-box'); if(box) box.style.display='none';
   const btn=document.getElementById('shp-toggle'); if(btn) btn.textContent='▸ 分批出貨（例外時才用）';
-  const body=document.getElementById('shp-body'); if(body) body.innerHTML='<tr><td colspan="7" class="rec-empty">載入中…</td></tr>';
+  const body=document.getElementById('shp-body'); if(body) body.innerHTML=sklTableRows(7,2);
 }
 function shpToggle(){
   const box=document.getElementById('shp-box');
@@ -292,7 +292,7 @@ function shpToggle(){
 }
 async function loadShipments(){
   const body=document.getElementById('shp-body');
-  body.innerHTML='<tr><td colspan="7" class="rec-empty">載入中…</td></tr>';
+  body.innerHTML=sklTableRows(7,2);
   try{
     const d=await apiCall({ action:'listShipments', token:AUTH_TOKEN, quote_no:ORD_EDITING });
     if(!d.ok){ body.innerHTML=`<tr><td colspan="7" class="rec-empty">${d.error||'載入失敗'}</td></tr>`; return; }
@@ -412,7 +412,7 @@ async function copyOrder(no, src){
 async function openChangeLog(no){
   const box=document.getElementById('cl-body');
   document.getElementById('cl-title').textContent=`修改紀錄 — ${no}`;
-  box.innerHTML='<div class="rec-empty">載入中…</div>';
+  box.innerHTML=sklBlock(5);
   document.getElementById('cl-overlay').style.display='flex';
   try{
     const d=await apiCall({ action:'getChangeLog', token:AUTH_TOKEN, ref_no:no });

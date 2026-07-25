@@ -10,6 +10,8 @@ let TD_DATA = null;         // 目前畫面上的資料
 let TD_FROM_CACHE = false;  // 現在顯示的是不是快取（尚未拿到新資料）
 let TD_CACHED_AT = null;    // 快取寫入時間（ISO 字串）
 let TD_BUSY = false;
+let TD_LAST_FETCH = 0;      // 上次真的打後端的時間（節流用）
+const TD_MIN_GAP_MS = 90000; // 90 秒內在頁面之間來回切，不重複打後端（按「重新整理」不受限）
 
 /* ---- 台北在地「今天」（沿用全站慣例，不用 UTC 切字串）---- */
 function tdToday(){ return fmtD(new Date()); }
@@ -56,6 +58,10 @@ async function loadToday(force){
     TD_FROM_CACHE = true;   // 手動重新整理：畫面留著舊資料，狀態列顯示「更新中…」
     renderToday();
   }
+  // 剛剛才更新過就不要再打一次（例如在頁面之間來回切）；按「重新整理」一定重打
+  if(!force && TD_DATA && !TD_FROM_CACHE && (Date.now() - TD_LAST_FETCH) < TD_MIN_GAP_MS){
+    renderToday(); tdRenderStat(false); return;
+  }
   tdRenderStat(true);
 
   if(TD_BUSY) return;
@@ -69,7 +75,7 @@ async function loadToday(force){
 
     if(!d) d = await tdBuildFallback();
 
-    TD_DATA = d; TD_FROM_CACHE = false; TD_CACHED_AT = new Date().toISOString();
+    TD_DATA = d; TD_FROM_CACHE = false; TD_CACHED_AT = new Date().toISOString(); TD_LAST_FETCH = Date.now();
     tdCacheWrite(d);
     renderToday();
   }catch(e){

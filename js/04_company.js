@@ -52,15 +52,6 @@ const CAL_CATEGORY_COLORS = {
 };
 let _rulesBusy = false;
 
-function fmtD(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-function money(n){ const v=Math.round(parseFloat(n)||0); return v<0 ? '-$'+Math.abs(v).toLocaleString() : '$'+v.toLocaleString(); }
-function parseJsonSafe(s, fb){ try{ const v=JSON.parse(s); return v==null?fb:v; }catch(e){ return fb; } }
-function daysBetween(dstr){ // 今天到 dstr 的天數（負=已過）
-  if(!dstr) return null;
-  const d=new Date(dstr+'T00:00:00'); if(isNaN(d)) return null;
-  const t=new Date(); t.setHours(0,0,0,0);
-  return Math.round((d-t)/86400000);
-}
 
 /* ============================================================
    一、公司報價檔（三模式快速帶入）

@@ -341,13 +341,11 @@ function renderCalCatBar(){
 /* ============================================================
    五、掛勾：calc 尾端套規則、登入後載資料
    ============================================================ */
-(function(){
-  const _calcOrig = window.calc;
-  window.calc = function(){
-    _calcOrig();
-    if(_rulesBusy) return;
-    _rulesBusy = true;
-    try{ if(applyAutoRules()){ renderExt(); _calcOrig(); } updateMoqWarnings(); }
-    finally{ _rulesBusy=false; }
-  };
-})();
+/* calc() 跑完後：套公司報價檔的自動規則（免運／扣標費／級距）＋更新 MOQ 提醒。
+   _rulesBusy 是防重入旗標：規則改了額外費用後要再算一次總計，那次再進來就直接跳過。 */
+onHook('afterCalc', function(){
+  if(_rulesBusy) return;
+  _rulesBusy = true;
+  try{ if(applyAutoRules()){ renderExt(); calc(); } updateMoqWarnings(); }
+  finally{ _rulesBusy=false; }
+});

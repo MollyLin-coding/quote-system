@@ -382,8 +382,11 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
 @keyframes sklmove{0%{background-position:100% 50%}100%{background-position:0 50%}}
 .skl-row{padding:13px 16px;border-bottom:1px solid #F1EFE8}
 .skl-row:last-child{border-bottom:none}
+.skl-wrap{background:var(--wh);border:1px solid var(--bd);border-radius:var(--rad-lg);overflow:hidden}
 
-/* ===== 手機版面 RWD（2026-07-21）===== */
+/* ===== 手機卡片式列表（2026-07-26）=====
+   標了 .mcard 的表格，在手機上從「左右滑動的寬表格」變成「一列一張卡片」。
+   每個 td 用 data-l 屬性帶欄位名稱，手機上會顯示在值的左邊；桌機完全不受影響。 */
 .mob-menu-btn{display:none}
 .sb-backdrop{display:none}
 .tbl-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -421,6 +424,24 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
   .calhead{gap:8px}
   .rpt-head button.rec-act-btn{float:none!important;margin-top:8px;display:inline-block}
   .login-box{padding:30px 22px}
+  /* ---- 卡片式列表 ---- */
+  .tbl-scroll:has(> .mcard){overflow-x:visible}
+  .mcard{border:none;background:transparent;display:block}
+  .mcard thead{display:none}
+  .mcard tbody,.mcard tr,.mcard td{display:block;width:100%}
+  .mcard tr{background:var(--wh);border:1px solid var(--bd);border-radius:var(--rad-lg);margin-bottom:10px;overflow:hidden}
+  .mcard tr:last-child{margin-bottom:0}
+  .mcard td{border-bottom:1px solid #F3F1EA;padding:10px 14px;text-align:left!important;font-size:13px;display:flex;align-items:flex-start;gap:10px}
+  .mcard tr td:last-child{border-bottom:none}
+  .mcard td[data-l]::before{content:attr(data-l);flex:0 0 76px;color:var(--hint);font-size:11px;font-weight:600;padding-top:2px}
+  .mcard td[data-l] > *:not(br){min-width:0}
+  .mcard td.mc-main{display:block;background:var(--bg);font-size:14px;padding:12px 14px}
+  .mcard td.mc-main::before{content:none}
+  .mcard td.rec-actions{display:flex;flex-wrap:wrap;gap:6px;padding:11px 14px}
+  .mcard td.rec-actions::before{flex-basis:100%;padding-bottom:2px}
+  .mcard td.rec-actions .rec-act-btn{padding:7px 12px;font-size:12px}
+  .mcard td:empty{display:none}
+  .mcard .rec-empty{display:block;background:var(--wh);border:1px solid var(--bd);border-radius:var(--rad-lg);padding:22px 14px;text-align:center}
   .td-grid{grid-template-columns:1fr;gap:12px}
   .td-row{padding:15px 14px}
   .td-r1{font-size:16px}

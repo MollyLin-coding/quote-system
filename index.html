@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260726">
-<script src="js/00_qrcode.js?v=20260726"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260726c">
+<script src="js/00_qrcode.js?v=20260726c"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -589,12 +589,12 @@
         <button class="btn btn-dk" onclick="loadRecords()"><i class="ti ti-search"></i>查詢</button>
       </div>
       <div class="tbl-scroll">
-      <table class="rec-table">
+      <table class="rec-table mcard">
         <thead><tr>
           <th>報價單號</th><th>客戶</th><th>類型</th><th>報價日期</th><th>總計</th><th>操作</th>
         </tr></thead>
         <tbody id="rec-body">
-          <tr><td colspan="6" class="rec-empty">載入中…</td></tr>
+          <tr><td colspan="6" style="padding:12px 14px"><div class="skl" style="width:52%"></div></td></tr><tr><td colspan="6" style="padding:12px 14px"><div class="skl" style="width:64%"></div></td></tr><tr><td colspan="6" style="padding:12px 14px"><div class="skl" style="width:44%"></div></td></tr>
         </tbody>
       </table>
       </div>
@@ -605,9 +605,9 @@
     <div class="rec-wrap">
       <div id="ord-filters" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
       <div class="tbl-scroll">
-      <table class="rec-table">
+      <table class="rec-table mcard">
         <thead><tr><th>單號 / 客戶</th><th>進度</th><th style="text-align:right">總計</th><th style="text-align:center">出貨日</th><th>提醒</th><th>操作</th></tr></thead>
-        <tbody id="ord-body"><tr><td colspan="6" class="rec-empty">載入中…</td></tr></tbody>
+        <tbody id="ord-body"><tr><td colspan="6" style="padding:12px 14px"><div class="skl" style="width:52%"></div></td></tr><tr><td colspan="6" style="padding:12px 14px"><div class="skl" style="width:64%"></div></td></tr><tr><td colspan="6" style="padding:12px 14px"><div class="skl" style="width:44%"></div></td></tr></tbody>
       </table>
       </div>
     </div>
@@ -628,7 +628,7 @@
           <button class="btn btn-gold" onclick="openVmManual()"><i class="ti ti-plus"></i>登記客訴／回報</button>
         </div>
       </div>
-      <div id="vm-body"><div class="rec-empty">載入中…</div></div>
+      <div id="vm-body"></div>
     </div>
   </div>
 
@@ -662,7 +662,7 @@
         </span>
       </div>
       <div id="cal-catbar" style="display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 12px;align-items:center"></div>
-      <div class="card"><div class="cb"><div id="cal-root"><div class="rec-empty">載入中…</div></div></div></div>
+      <div class="card"><div class="cb"><div id="cal-root"></div></div></div>
       <div class="card" style="margin-top:14px"><div class="cb"><div id="cal-todos"></div></div></div>
     </div>
   </div>
@@ -756,7 +756,7 @@
           <div class="tbl-scroll">
             <table class="rec-table" style="font-size:12px">
               <thead><tr><th style="text-align:center">批</th><th>預計出貨</th><th>實際出貨</th><th style="text-align:right">金額</th><th>發票末五碼</th><th>備註</th><th></th></tr></thead>
-              <tbody id="shp-body"><tr><td colspan="7" class="rec-empty">載入中…</td></tr></tbody>
+              <tbody id="shp-body"></tbody>
             </table>
           </div>
           <button type="button" class="rec-act-btn" onclick="shpAddRow()" style="margin-top:6px">＋ 新增一批</button>
@@ -813,7 +813,7 @@
       <button class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63" onclick="closeGendoc()">取消</button>
     </div>
     <div class="oe-sec" style="margin:0 0 6px;padding-top:10px">歷史版本（點可開啟雲端檔案）</div>
-    <div id="gd-history" style="max-height:38vh;overflow-y:auto;font-size:12px"><div class="rec-empty">載入中…</div></div>
+    <div id="gd-history" style="max-height:38vh;overflow-y:auto;font-size:12px"></div>
   </div>
 </div>
 <div class="v2ov" id="vmp-overlay">
@@ -970,16 +970,18 @@
   </div>
 </div>
 
-<script src="js/01_quote_form.js?v=20260726"></script>
-<script src="js/02_core_api.js?v=20260726"></script>
-<script src="js/03_quote_custom.js?v=20260726"></script>
-<script src="js/04_company.js?v=20260726"></script>
-<script src="js/05_orders.js?v=20260726"></script>
-<script src="js/06_verify_mgmt.js?v=20260726"></script>
-<script src="js/07_calendar.js?v=20260726"></script>
-<script src="js/08_ownbrand.js?v=20260726"></script>
-<script src="js/09_verify_form.js?v=20260726"></script>
-<script src="js/10_today.js?v=20260726"></script>
-<script src="js/99_boot.js?v=20260726"></script>
+<script src="js/00_utils.js?v=20260726c"></script>
+<script src="js/01_quote_form.js?v=20260726c"></script>
+<script src="js/01b_quote_preview.js?v=20260726c"></script>
+<script src="js/02_core_api.js?v=20260726c"></script>
+<script src="js/03_quote_custom.js?v=20260726c"></script>
+<script src="js/04_company.js?v=20260726c"></script>
+<script src="js/05_orders.js?v=20260726c"></script>
+<script src="js/06_verify_mgmt.js?v=20260726c"></script>
+<script src="js/07_calendar.js?v=20260726c"></script>
+<script src="js/08_ownbrand.js?v=20260726c"></script>
+<script src="js/09_verify_form.js?v=20260726c"></script>
+<script src="js/10_today.js?v=20260726c"></script>
+<script src="js/99_boot.js?v=20260726c"></script>
 </body>
 </html>

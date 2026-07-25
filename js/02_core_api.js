@@ -300,7 +300,7 @@ function gdFmtDt(s){
 }
 async function loadGendocHistory(){
   const box=document.getElementById('gd-history');
-  box.innerHTML='<div class="rec-empty">載入中…</div>';
+  box.innerHTML=sklBlock(4);
   try{
     const d=await apiCall({ action:'listQuotePdfs', token:AUTH_TOKEN, quote_no:editingQuoteNo });
     if(!d.ok){ box.innerHTML=`<div class="rec-empty">${d.error||'載入失敗'}</div>`; return; }
@@ -354,14 +354,14 @@ function downloadBase64_(base64, mime, filename){
 /* ---- 載入報價記錄列表 ---- */
 async function loadRecords(){
   const body=document.getElementById('rec-body');
-  body.innerHTML='<tr><td colspan="6" class="rec-empty">載入中…</td></tr>';
+  body.innerHTML=sklTableRows(6,5);
   try {
     const filters={};
     const kw=document.getElementById('rec-search').value.trim();
     const tf=document.getElementById('rec-type-filter').value;
     if(tf) filters.quoteType=tf;
     // 關鍵字改前端比對，讓「單號」也能搜到（後端只以報價單類型過濾）
-    const data=await apiCall({ action:'getQuotes', token:AUTH_TOKEN, filters });
+    const data=await apiCall(withLimit({ action:'getQuotes', token:AUTH_TOKEN, filters }));
     if(!data.ok){ body.innerHTML=`<tr><td colspan="6" class="rec-empty">${data.error||'載入失敗'}</td></tr>`; return; }
     let quotes=(data.quotes||[]).filter(q=>q.status!=='已刪除');
     if(kw){ const k=kw.toLowerCase(); quotes=quotes.filter(q=> String(q.clientName||'').toLowerCase().includes(k) || String(q.quoteNo||'').toLowerCase().includes(k)); }
@@ -378,18 +378,18 @@ async function loadRecords(){
         : '<span class="rec-badge banquet">宴會酒水</span>';
       const total='$'+Math.round(q.grandTotal||0).toLocaleString();
       return `<tr class="clickable" onclick="openRecord('${q.quoteNo}')">
-        <td style="font-weight:600">${q.quoteNo||'—'}</td>
-        <td>${q.clientName||'—'}</td>
-        <td>${typeBadge}</td>
-        <td>${q.quoteDate||'—'}</td>
-        <td style="font-weight:600">${total}</td>
-        <td class="rec-actions" onclick="event.stopPropagation()">
+        <td class="mc-main" style="font-weight:600">${q.quoteNo||'—'}</td>
+        <td data-l="客戶">${q.clientName||'—'}</td>
+        <td data-l="類型">${typeBadge}</td>
+        <td data-l="報價日">${q.quoteDate||'—'}</td>
+        <td data-l="總計" style="font-weight:600">${total}</td>
+        <td class="rec-actions" data-l="操作" onclick="event.stopPropagation()">
           <button class="rec-act-btn" onclick="openRecord('${q.quoteNo}')">開啟</button>
           ${['bottle','ownbrand','ownlabel','consign'].includes(q.quoteType)?`<button class="rec-act-btn" onclick="openVerifyForm('${q.quoteNo}')">驗收單</button>`:''}
           <button class="rec-act-btn del" onclick="deleteRecord('${q.quoteNo}','${(q.clientName||'').replace(/'/g,'')}')">刪除</button>
         </td>
       </tr>`;
-    }).join('');
+    }).join('') + (listMaybeMore((data.quotes||[]).length) ? moreRowHtml(6) : '');
   } catch(e){
     body.innerHTML=`<tr><td colspan="6" class="rec-empty">${e.message||'載入失敗'}</td></tr>`;
   }
