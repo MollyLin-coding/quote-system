@@ -320,14 +320,19 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
 .rpt-stat .k{font-size:11px;color:#A8A69C}
 .rpt-stat .v{font-size:19px;font-weight:700;margin-top:2px}
 .calhead{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
-.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+/* 週一～週五格子較大、六日稍微縮小；順序改成一到五在前、六日排最後（Molly 2026-07-25 選定「低調文字風」） */
+.cal{display:grid;grid-template-columns:1.08fr 1.08fr 1.08fr 1.08fr 1.08fr 0.85fr 0.85fr;gap:4px}
 .cwd{font-size:10px;color:#A8A69C;text-align:center;padding:4px 0;font-weight:600}
-.cd{background:#FAF9F5;border:1px solid var(--bd);border-radius:8px;min-height:64px;padding:4px 5px;font-size:10px;cursor:pointer}
+.cd{background:#FAF9F5;border:1px solid var(--bd);border-radius:8px;min-height:64px;padding:4px 5px;font-size:10px;cursor:pointer;position:relative}
 .cd:hover{border-color:var(--gold)}
 .cd .n{font-size:10.5px;color:#6B6B63;font-weight:600;display:block}
 .cd.dim{opacity:.3;cursor:default}
 .cd.today{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
 .cd.today .n{color:var(--gold)}
+.cd.weekend{background:#F3F2ED}
+.cd.holiday .n{color:#B03A2E;font-weight:700}
+.holname{display:block;font-size:8.5px;color:#B03A2E;margin-top:1px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.lunar-mark{font-size:9px;color:#A8A69C;margin-left:3px}
 .cev{display:block;font-size:9px;border-radius:4px;padding:1.5px 4px;margin-top:3px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .cev.ship{background:#EFF4EE;color:#3E7A4E;border:1px solid #C9DCCE}
 .cev.exp{background:#F9ECEA;color:#B03A2E;border:1px solid #E8C7C2}
@@ -3445,6 +3450,29 @@ let CAL_KINDS = {order:true, memo:true, recur:true};
 let CAL_CATS = {};                // {分類名:false}＝關閉；沒記錄＝開
 let CAL_Y = new Date().getFullYear(), CAL_M = new Date().getMonth(); // 0-based
 let ORD_FILTER = 'all';
+/* 國定假日（資料來源：行政院人事行政總處「政府行政機關辦公日曆表」官方公告，經 ruyut/TaiwanCalendar 整理）
+   ⚠ 政府每年約 11~12 月才會公告隔年行事曆，此表需每年手動補上新一年資料才會繼續顯示；
+   舊的年份不用刪，保留著沒關係。要補資料時可到 https://github.com/ruyut/TaiwanCalendar/tree/master/data 抓當年 isHoliday=true 的項目。 */
+const TAIWAN_HOLIDAYS = {
+  '2025-01-01':'開國紀念日','2025-01-27':'小年夜','2025-01-28':'農曆除夕','2025-01-29':'春節','2025-01-30':'春節','2025-01-31':'春節',
+  '2025-02-28':'和平紀念日','2025-04-03':'補假','2025-04-04':'兒童節及民族掃墓節','2025-05-30':'補假','2025-05-31':'端午節',
+  '2025-09-28':'孔子誕辰紀念日','2025-09-29':'補假','2025-10-06':'中秋節','2025-10-10':'國慶日','2025-10-24':'補假',
+  '2025-10-25':'臺灣光復節','2025-12-25':'行憲紀念日',
+  '2026-01-01':'開國紀念日','2026-02-15':'小年夜','2026-02-16':'農曆除夕','2026-02-17':'春節','2026-02-18':'春節','2026-02-19':'春節',
+  '2026-02-28':'和平紀念日','2026-04-04':'兒童節','2026-04-05':'清明節','2026-05-01':'勞動節','2026-06-19':'端午節',
+  '2026-09-25':'中秋節','2026-09-28':'教師節','2026-10-10':'國慶日','2026-10-25':'臺灣光復節','2026-12-25':'行憲紀念日',
+};
+/* 農曆初二／十六（拜拜日，凱文南坡萬每月做牙習慣）：用瀏覽器內建 Intl 農曆換算，不是查表，任何年份都能自動算對，不用維護 */
+function lunarDayOfMonth(ds){
+  try{
+    const d=new Date(ds+'T12:00:00');
+    if(isNaN(d)) return null;
+    const parts=new Intl.DateTimeFormat('zh-TW-u-ca-chinese',{month:'numeric',day:'numeric'}).formatToParts(d);
+    const day=parseInt((parts.find(p=>p.type==='day')||{}).value);
+    return isNaN(day)?null:day;
+  }catch(e){ return null; }
+}
+function isWorshipDay(ds){ const d=lunarDayOfMonth(ds); return d===2||d===16; }
 /* 行事曆分類配色（依「分類」自動上色，不用另外挑顏色） */
 const CAL_CATEGORY_COLORS = {
   '工作': {bg:'#EAF0FF', fg:'#3457C7', bd:'#C7D6F5'},
@@ -4680,17 +4708,22 @@ function calEvHtml(e){
 }
 function renderCalMonth(el){
   const first=new Date(CAL_Y, CAL_M, 1);
-  const startDow=first.getDay();
+  const startDow=(first.getDay()+6)%7;   // 週一為第 0 欄、週日為第 6 欄
   const daysIn=new Date(CAL_Y, CAL_M+1, 0).getDate();
   const today=fmtD(new Date());
   let cells='';
-  ['日','一','二','三','四','五','六'].forEach(w=>cells+=`<div class="cwd">${w}</div>`);
+  ['一','二','三','四','五','六','日'].forEach(w=>cells+=`<div class="cwd">${w}</div>`);
   for(let i=0;i<startDow;i++) cells+='<div class="cd dim"></div>';
   for(let d=1;d<=daysIn;d++){
     const ds=`${CAL_Y}-${String(CAL_M+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dow=new Date(CAL_Y,CAL_M,d).getDay();   // 0=日...6=六（僅用來判斷是否為六日，跟顯示順序無關）
+    const isWeekend=dow===0||dow===6;
+    const hol=TAIWAN_HOLIDAYS[ds];
+    const worship=isWorshipDay(ds);
     const evs=eventsOn(ds);
-    cells+=`<div class="cd${ds===today?' today':''}" onclick="openCalAdd('${ds}')">
-      <span class="n">${d}${ds===today?' 今天':''}</span>${evs.map(calEvHtml).join('')}</div>`;
+    const cls='cd'+(ds===today?' today':'')+(isWeekend?' weekend':'')+(hol?' holiday':'');
+    cells+=`<div class="${cls}" onclick="openCalAdd('${ds}')">
+      <span class="n">${d}${ds===today?' 今天':''}${worship?'<span class="lunar-mark">🙏</span>':''}</span>${hol?`<span class="holname">${escHtml(hol)}</span>`:''}${evs.map(calEvHtml).join('')}</div>`;
   }
   el.innerHTML=`<div class="calhead">
     <span class="qf-chip act" onclick="CAL_M--;if(CAL_M<0){CAL_M=11;CAL_Y--;}renderCalendar()">◀ 上月</span>
@@ -4699,7 +4732,7 @@ function renderCalMonth(el){
     <span style="flex:1"></span>
     <button class="btn btn-gold" style="font-size:12px;padding:6px 14px" onclick="openCalAdd('')">＋ 新增事項</button>
   </div><div class="cal">${cells}</div>
-  <div class="cal-legend">🚚 出貨（訂單自動）　⏰ 報價到期（自動）　📌 備忘　🔁 重複行程　※ 點日期格可直接新增事項；點訂單事件跳到訂單追蹤　｜　顏色依「分類」自動區分：${Object.entries(CAL_CATEGORY_COLORS).map(([name,c])=>`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c.fg};margin:0 3px 0 8px;vertical-align:middle"></span>${name}`).join('')}</div>`;
+  <div class="cal-legend">🚚 出貨（訂單自動）　⏰ 報價到期（自動）　📌 備忘　🔁 重複行程　🙏 拜拜日（農曆初二／十六，自動換算）　紅字＝國定假日　※ 點日期格可直接新增事項；點訂單事件跳到訂單追蹤　｜　顏色依「分類」自動區分：${Object.entries(CAL_CATEGORY_COLORS).map(([name,c])=>`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c.fg};margin:0 3px 0 8px;vertical-align:middle"></span>${name}`).join('')}</div>`;
 }
 function renderCalList(el, days, title){
   const t=new Date(); t.setHours(0,0,0,0);
@@ -4710,9 +4743,12 @@ function renderCalList(el, days, title){
     const d=new Date(t); d.setDate(t.getDate()+i);
     const ds=fmtD(d);
     const evs=eventsOn(ds);
-    if(!evs.length) continue;
+    const hol=TAIWAN_HOLIDAYS[ds];
+    const worship=isWorshipDay(ds);
+    if(!evs.length && !hol && !worship) continue;
     any=true;
-    h+=`<div class="cal-day"><div class="cal-day-h">${ds.slice(5)}（${'日一二三四五六'[d.getDay()]}）${i===0?'・今天':''}</div>${evs.map(calEvHtml).join(' ')}</div>`;
+    const tag=(hol?` · <span style="color:#B03A2E;font-weight:600">${escHtml(hol)}</span>`:'')+(worship?' · 🙏拜拜日（農曆初二／十六）':'');
+    h+=`<div class="cal-day"><div class="cal-day-h">${ds.slice(5)}（${'一二三四五六日'[(d.getDay()+6)%7]}）${i===0?'・今天':''}${tag}</div>${evs.map(calEvHtml).join(' ')}</div>`;
   }
   if(!any) h+='<div class="rec-empty">這段期間沒有事項</div>';
   el.innerHTML=h;
