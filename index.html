@@ -320,10 +320,11 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
 .rpt-stat .k{font-size:11px;color:#A8A69C}
 .rpt-stat .v{font-size:19px;font-weight:700;margin-top:2px}
 .calhead{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
-/* 週一～週五格子較大、六日稍微縮小；順序改成一到五在前、六日排最後（Molly 2026-07-25 選定「低調文字風」） */
-.cal{display:grid;grid-template-columns:1.08fr 1.08fr 1.08fr 1.08fr 1.08fr 0.85fr 0.85fr;gap:4px}
+/* 週一～週五格子較大、六日稍微縮小；順序改成一到五在前、六日排最後（Molly 2026-07-25 選定「低調文字風」）
+   用 minmax(0,Nfr) 而不是單純 Nfr：格子裡塞了兩三個事件標籤時，欄寬才不會被內容「撐開」導致七欄寬度不平均（.cd 也要 overflow:hidden 配合） */
+.cal{display:grid;grid-template-columns:repeat(5,minmax(0,1.08fr)) repeat(2,minmax(0,0.85fr));gap:4px}
 .cwd{font-size:10px;color:#A8A69C;text-align:center;padding:4px 0;font-weight:600}
-.cd{background:#FAF9F5;border:1px solid var(--bd);border-radius:8px;min-height:64px;padding:4px 5px;font-size:10px;cursor:pointer;position:relative}
+.cd{background:#FAF9F5;border:1px solid var(--bd);border-radius:8px;min-height:64px;padding:4px 5px;font-size:10px;cursor:pointer;position:relative;overflow:hidden}
 .cd:hover{border-color:var(--gold)}
 .cd .n{font-size:10.5px;color:#6B6B63;font-weight:600;display:block}
 .cd.dim{opacity:.3;cursor:default}

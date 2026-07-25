@@ -85,9 +85,26 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
   check('renderCalList 可讀到 10/10 假日名稱', listHasHoliday.hol === '國慶日');
   check('renderCalList 可讀到 10/11 拜拜判定', listHasHoliday.worship === true);
 
+  /* ---------- 欄寬不被內容撐開（Molly 2026-07-25 回報：一格塞兩個事件標籤，欄寬就跑掉） ---------- */
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await page.evaluate(() => {
+    CAL_ITEMS = [
+      {item_id:'g1', kind:'memo', title:'菸酒稅', date:'2026-07-15', category:'其他', done:'N'},
+      {item_id:'g2', kind:'memo', title:'營業稅', date:'2026-07-15', category:'其他', done:'N'},
+      {item_id:'g3', kind:'memo', title:'Beyou 報價到期提醒事項', date:'2026-07-22', category:'其他', done:'N'},
+      {item_id:'g4', kind:'memo', title:'酒旺有限公司 報價到期提醒', date:'2026-07-23', category:'其他', done:'N'},
+    ];
+    CAL_Y = 2026; CAL_M = 6; renderCalendar();
+  });
+  await page.waitForTimeout(150);
+  const gridWidths = await page.evaluate(() => getComputedStyle(document.querySelector('.cal')).gridTemplateColumns.split(' ').map(v => parseFloat(v)));
+  const monToFriDiff = Math.max(...gridWidths.slice(0, 5)) - Math.min(...gridWidths.slice(0, 5));
+  check('多個事件標籤塞進同一格，週一～五欄寬仍幾乎相等（差距<1px）', gridWidths.length === 7 && monToFriDiff < 1);
+  check('六日欄寬彼此也相等', Math.abs(gridWidths[5] - gridWidths[6]) < 1);
+
   /* ---------- 手機版：無橫向溢出 ---------- */
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.evaluate(() => { CAL_Y = 2026; CAL_M = 9; renderCalendar(); });
+  await page.evaluate(() => { CAL_ITEMS = []; CAL_Y = 2026; CAL_M = 9; renderCalendar(); });
   await page.waitForTimeout(150);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   check('手機版（390px）月曆無橫向溢出', overflow === 0);
