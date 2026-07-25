@@ -4698,7 +4698,9 @@ function renderCalendar(){
 }
 function calEvHtml(e){
   const cls={ship:'ship',exp:'exp',memo:'memo',recur:'recur'}[e.t];
-  const click=e.no?`onclick="gotoPage('orders')"`:(e.item?`onclick="openCalEdit('${escHtml(e.item.item_id)}')"`:'');
+  /* event.stopPropagation()：月曆檢視下事件標籤疊在「當日格子」上面，格子本身也有 onclick（新增事項），
+     沒擋住冒泡的話點標籤會先開編輯視窗、又立刻被冒泡上去的「新增事項」蓋掉，變成永遠打不開編輯/刪除 */
+  const click=e.no?`onclick="event.stopPropagation();gotoPage('orders')"`:(e.item?`onclick="event.stopPropagation();openCalEdit('${escHtml(e.item.item_id)}')"`:'');
   /* memo／recur 依「分類」上色；ship／exp（訂單自動事件）維持原本固定配色 */
   let style='';
   if((e.t==='memo'||e.t==='recur') && e.item){
