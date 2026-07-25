@@ -4663,7 +4663,7 @@ async function openVerifyForm(no){
     for(const it of items){ const m=String(it.lot||'').match(/(\d+)/); if(m){ hdrLot=m[1]; break; } }
     VERIFY_DATA={ no:q.quoteNo, client:q.clientName||'',
       rows:items.map(it=>({ name:it.name||'', lot:it.lot||'', vol:it.volume||'',
-        ordered:parseFloat(it.qty)||0, mfg:'', thisShip:'', shipped:0 })) };
+        ordered:parseFloat(it.qty)||0, mfg:'', thisShip:(parseFloat(it.qty)||0), shipped:0 })) };
     buildVerifyModal(hdrLot);
     document.getElementById('vf-overlay').style.display='flex';
   }catch(e){ toast(e.message||'讀取失敗','err'); }
@@ -4679,10 +4679,10 @@ function buildVerifyModal(hdrLot){
     <td><input type="date" style="${inS};width:130px" data-i="${i}" data-k="mfg" class="vfi"></td>
     <td><input style="${inS};width:70px" data-i="${i}" data-k="lot" class="vfi" value="${escHtml(r.lot)}"></td>
     <td style="text-align:center;color:#6B6B63">${escHtml(r.vol)||'—'}</td>
-    <td><input type="number" min="0" style="${inS};width:72px" data-i="${i}" data-k="thisShip" class="vfi" oninput="recalcVerify()"></td>
+    <td><input type="number" min="0" style="${inS};width:72px" data-i="${i}" data-k="thisShip" data-manual="0" class="vfi" value="${(r.thisShip!==''&&r.thisShip!=null)?r.thisShip:''}" oninput="onThisShipInput(this)"></td>
     <td style="text-align:center;font-weight:600">${r.ordered||0}</td>
-    <td><input type="number" min="0" style="${inS};width:72px" data-i="${i}" data-k="shipped" class="vfi" value="0" oninput="recalcVerify()"></td>
-    <td style="text-align:center;font-weight:700;color:var(--gold-deep)" id="vf-remain-${i}">${r.ordered||0}</td>
+    <td><input type="number" min="0" style="${inS};width:72px" data-i="${i}" data-k="shipped" class="vfi" value="0" oninput="onShippedInput(this)"></td>
+    <td style="text-align:center;font-weight:700;color:var(--gold-deep)" id="vf-remain-${i}">${(parseFloat(r.ordered)||0)-(parseFloat(r.shipped)||0)-(parseFloat(r.thisShip)||0)}</td>
   </tr>`).join('');
   document.getElementById('vf-body').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
@@ -4710,6 +4710,19 @@ function buildVerifyModal(hdrLot){
       不良品（外觀／瓶內異物）、驗收日期、驗收者簽名欄會留白，印在驗收單上給客戶收貨時填寫。PDF 右下會有 QR，客戶掃碼即可快速回報驗收結果。</p>`;
 }
 
+function onThisShipInput(el){ if(el) el.dataset.manual='1'; recalcVerify(); }
+function onShippedInput(el){
+  if(!VERIFY_DATA||!el) return;
+  const i=+el.dataset.i;
+  const ts=document.querySelector('#vf-body .vfi[data-i="'+i+'"][data-k="thisShip"]');
+  if(ts && ts.dataset.manual!=='1' && VERIFY_DATA.rows[i]){
+    const ordered=parseFloat(VERIFY_DATA.rows[i].ordered)||0;
+    const shipped=parseFloat(el.value)||0;
+    const rem=ordered-shipped;
+    ts.value = rem>0 ? rem : 0;
+  }
+  recalcVerify();
+}
 function recalcVerify(){
   if(!VERIFY_DATA) return;
   document.querySelectorAll('#vf-body .vfi').forEach(el=>{
