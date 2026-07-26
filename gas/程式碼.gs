@@ -545,7 +545,13 @@ function handleLogin_(params) {
   }
   pinFailClear_();
   const token = generateToken_();
-  return { ok: true, token: token };
+  var res = { ok: true, token: token };
+  // v38：登入成功順便把「今日待辦」一起帶回去。
+  // 前端原本要先 login（2.5 秒）拿到 token，才能再打 getTodayDigest（又 2.5 秒），
+  // 兩趟一定是接力的、沒辦法平行；合併之後只剩一趟往返。
+  // 整段 try/catch：彙總萬一出錯也絕不能害使用者登不進來。
+  try { res.digest = handleGetTodayDigest_({}); } catch (e) { /* 前端會自己再打一次 */ }
+  return res;
 }
 
 function handleCreateQuote_(params) {

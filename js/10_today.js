@@ -48,6 +48,16 @@ function tdAgoText(iso){
   return h + ' 小時前';
 }
 
+/* ---- 後端 v38：登入時就一起帶回來的今日待辦，直接當成「剛剛才拿到的」---- */
+function tdSeed(d){
+  if(!d) return;
+  TD_DATA = d;
+  TD_FROM_CACHE = false;
+  TD_CACHED_AT = new Date().toISOString();
+  TD_LAST_FETCH = Date.now();        // 讓接下來的 loadToday() 走節流、不再打一次
+  tdCacheWrite(d);
+}
+
 /* ---- 載入 ---- */
 async function loadToday(force){
   const body = document.getElementById('td-body');

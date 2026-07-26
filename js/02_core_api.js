@@ -33,6 +33,7 @@ async function apiCall(payload){
     // token 失效，回登入頁
     AUTH_TOKEN = null;
     sessionStorage.removeItem('quote_token');
+    rememberClear();                                       // 記住我的通行證也失效了，一起清掉
     if(typeof tdCacheClear==='function') tdCacheClear();   // 今日待辦的離線快取一併清掉，別讓下一個人看到上一個人的資料
     rcClear();                                             // 讀取快取也整包清掉，同理
     showLogin();
@@ -42,6 +43,34 @@ async function apiCall(payload){
   // 下一次進任何頁面都會拿到最新資料，不會出現「明明存好了卻還顯示舊的」。
   if(!rcIsRead(payload && payload.action)) rcClear();
   return data;
+}
+
+/* ---- 「在這台裝置記住我」------------------------------------------
+   後端發的通行證本來就有 8 小時效期，只是原本存在 sessionStorage，
+   分頁一關就沒了，所以每次回來都要重打 PIN（而登入這一趟就要 2.5 秒）。
+   勾了才會改存 localStorage，8 小時內回到網站直接進去。
+   ⚠ 這是使用者自己選的：勾了等於「這台裝置在 8 小時內免 PIN」，
+     所以只在自己的電腦勾；側邊選單有「登出」可以隨時清掉。
+   ------------------------------------------------------------------ */
+const REMEMBER_KEY = 'qs_session_v1';
+function rememberSave(token){
+  try{ localStorage.setItem(REMEMBER_KEY, JSON.stringify({ t:token, exp:Date.now()+8*60*60*1000 })); }catch(e){}
+}
+function rememberClear(){ try{ localStorage.removeItem(REMEMBER_KEY); }catch(e){} }
+function rememberRead(){
+  try{
+    const c = JSON.parse(localStorage.getItem(REMEMBER_KEY) || 'null');
+    if(!c || !c.t || !c.exp || Date.now() >= c.exp){ rememberClear(); return null; }
+    return c.t;
+  }catch(e){ rememberClear(); return null; }
+}
+function doLogout(){
+  AUTH_TOKEN = null;
+  try{ sessionStorage.removeItem('quote_token'); }catch(e){}
+  rememberClear();
+  if(typeof tdCacheClear==='function') tdCacheClear();
+  rcClear();
+  location.reload();
 }
 
 /* ---- 登入 ---- */
@@ -57,8 +86,13 @@ async function doLogin(){
     if(data.ok && data.token){
       AUTH_TOKEN = data.token;
       sessionStorage.setItem('quote_token', data.token);
+      const rem = document.getElementById('login-remember');
+      if(rem && rem.checked) rememberSave(data.token); else rememberClear();
       hideLogin();
       toast('登入成功','ok');
+      // v38：後端登入時就把今日待辦一起帶回來了，直接用，省掉第二趟 2.5 秒。
+      // 舊後端沒有這個欄位也沒關係，loadToday() 會照舊自己去要。
+      if(data.digest && data.digest.ok !== false && typeof tdSeed==='function') tdSeed(data.digest);
       initV2();
     } else {
       errEl.textContent = data.error || 'PIN 碼錯誤';
