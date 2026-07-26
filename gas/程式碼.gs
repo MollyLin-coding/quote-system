@@ -483,6 +483,19 @@ function handleRequest_(e) {
       case 'getTodayDigest':
         requireAuth_(params);
         return jsonResponse_(handleGetTodayDigest_(params));
+      // ===== v39 客戶主檔（實作在 v2_extensions.gs）=====
+      case 'getCustomers':
+        requireAuth_(params);
+        return jsonResponse_(handleGetCustomers_(params));
+      case 'saveCustomer':
+        requireAuth_(params);
+        return jsonResponse_(handleSaveCustomer_(params));
+      case 'deleteCustomer':
+        requireAuth_(params);
+        return jsonResponse_(handleDeleteCustomer_(params));
+      case 'seedCustomersFromQuotes':
+        requireAuth_(params);
+        return jsonResponse_(handleSeedCustomersFromQuotes_(params));
       default:
         return jsonResponse_({ ok: false, error: 'Unknown action: ' + action });
     }

@@ -1354,7 +1354,7 @@ var BATCH_ALLOWED_ = ['verifyHeaders', 'getQuotes', 'getQuoteById', 'getCompanyD
   'getOrderStatusList', 'listQuotePdfs', 'listShipments', 'listCustomQuotes',
   'listCalendarItems', 'getChangeLog', 'getOwnbrandProducts', 'getOwnbrandTiers',
   'getConsignCustomers', 'getConsignInventory', 'getConsignLedger', 'getConsignMonthly',
-  'getVerifications', 'listVerifyForms', 'getTodayDigest'];
+  'getVerifications', 'listVerifyForms', 'getTodayDigest', 'getCustomers'];
 
 function handleBatch_(params) {
   var calls = (params && params.calls) || [];
@@ -1380,4 +1380,166 @@ function handleBatch_(params) {
     }
   }
   return { ok: true, results: results };
+}
+
+
+/* ============================================================
+   v39：客戶主檔（customers）—— 可自己新增／修改客戶資料
+   前端「客戶管理」原本純粹從報價單歸戶算出客戶，讀得到但改不了。
+   這裡加一張真正的客戶表，讓 Molly 能自己維護：
+     ・getCustomers   讀全部（預設只回 active，帶 includeInactive 才含停用）
+     ・saveCustomer   以 customer_id upsert；沒給 id 就用「客戶名稱去空白比對」歸戶，
+                      仍找不到才建新列（避免同一個客戶被建成兩筆）
+     ・deleteCustomer 預設軟刪除（active=N，資料留著可還原）；hard:true 才真的刪列
+     ・seedCustomersFromQuotes 一鍵把既有報價單的客戶匯進主檔（只補沒有的，不覆蓋）
+   ⚠ 只有 saveCustomer 會寫入使用者填的欄位；空字串會照實寫入（代表「清空這欄」），
+      undefined 才是「這次不動這欄」——前端只送使用者真的編輯過的欄位即可。
+   ============================================================ */
+var SHEET_CUSTOMERS = 'customers';
+var CUSTOMERS_HEADERS = ['customer_id', 'name', 'contact', 'phone', 'email', 'tax_id', 'invoice_title',
+  'address', 'ship_contact', 'ship_phone', 'ship_address', 'pay_habit', 'tags', 'note',
+  'active', 'created_at', 'updated_at'];
+
+/* 歸戶鍵：去掉所有空白（含全形）再轉小寫，與前端 cusKey 同一套規則 */
+function custKey_(name) {
+  return String(name == null ? '' : name).replace(/[\s　]+/g, '').toLowerCase();
+}
+
+/* 以「客戶名稱歸戶鍵」找列號，找不到回 -1 */
+function findCustomerRowByName_(name) {
+  var key = custKey_(name);
+  if (!key) return -1;
+  var sh = v2Sheet_(SHEET_CUSTOMERS, CUSTOMERS_HEADERS);
+  var lastRow = sh.getLastRow();
+  if (lastRow < 2) return -1;
+  var col = CUSTOMERS_HEADERS.indexOf('name') + 1;
+  var vals = sh.getRange(2, col, lastRow - 1, 1).getValues();
+  for (var i = 0; i < vals.length; i++) {
+    if (custKey_(vals[i][0]) === key) return i + 2;
+  }
+  return -1;
+}
+
+function customerRowObj_(sh, rowNum) {
+  var vals = sh.getRange(rowNum, 1, 1, CUSTOMERS_HEADERS.length).getValues()[0];
+  var o = {};
+  CUSTOMERS_HEADERS.forEach(function (h, i) { o[h] = vals[i]; });
+  return o;
+}
+
+function handleGetCustomers_(params) {
+  var p = params || {};
+  var f = p.filters || {};
+  var inc = (p.includeInactive === true) || (f.includeInactive === true);
+  var rows = v2ReadAll_(SHEET_CUSTOMERS, CUSTOMERS_HEADERS).filter(function (r) {
+    return String(r.customer_id || '') !== '' || String(r.name || '') !== '';
+  });
+  if (!inc) rows = rows.filter(function (r) { return String(r.active).toUpperCase() !== 'N'; });
+  return { ok: true, customers: rows };
+}
+
+function handleSaveCustomer_(params) {
+  var c = (params && params.customer) || {};
+  var name = String(c.name == null ? '' : c.name).trim();
+  var id = String(c.customer_id == null ? '' : c.customer_id).trim();
+  if (!id && !name) return { ok: false, error: '客戶名稱必填' };
+
+  var sh = v2Sheet_(SHEET_CUSTOMERS, CUSTOMERS_HEADERS);
+  var rowNum = -1;
+  if (id) rowNum = v2FindRow_(SHEET_CUSTOMERS, CUSTOMERS_HEADERS, 'customer_id', id);
+  if (rowNum === -1 && name) {
+    rowNum = findCustomerRowByName_(name);
+    // 名稱撞到別人、但這次明確帶了不同的 id → 視為兩個不同客戶，不要合併
+    if (rowNum !== -1 && id) {
+      var hitId = String(sh.getRange(rowNum, CUSTOMERS_HEADERS.indexOf('customer_id') + 1).getValue() || '').trim();
+      if (hitId && hitId !== id) return { ok: false, error: '已經有同名客戶了：' + name };
+    }
+  }
+
+  var now = tpeNow_();
+  if (rowNum === -1) {
+    if (!name) return { ok: false, error: '找不到這個客戶：' + id };
+    if (!id) id = 'CU-' + Utilities.getUuid().slice(0, 8);
+    var newRow = CUSTOMERS_HEADERS.map(function (h) {
+      if (h === 'customer_id') return id;
+      if (h === 'name') return name;
+      if (h === 'active') return (c.active !== undefined && c.active !== '') ? v2AsCell_(c.active) : 'Y';
+      if (h === 'created_at' || h === 'updated_at') return now;
+      return v2AsCell_(c[h]);
+    });
+    sh.appendRow(newRow);
+    rowNum = sh.getLastRow();
+  } else {
+    CUSTOMERS_HEADERS.forEach(function (h, i) {
+      if (h === 'customer_id' || h === 'created_at') return;
+      if (h === 'updated_at') { sh.getRange(rowNum, i + 1).setValue(now); return; }
+      if (c[h] !== undefined) sh.getRange(rowNum, i + 1).setValue(v2AsCell_(c[h]));
+    });
+  }
+
+  var saved = customerRowObj_(sh, rowNum);
+  logChange_('saveCustomer', saved.customer_id, saved);
+  return { ok: true, customer: saved };
+}
+
+function handleDeleteCustomer_(params) {
+  var p = params || {};
+  var id = String(p.customer_id || p.id || '').trim();
+  if (!id) return { ok: false, error: '缺少 customer_id' };
+  var rowNum = v2FindRow_(SHEET_CUSTOMERS, CUSTOMERS_HEADERS, 'customer_id', id);
+  if (rowNum === -1) return { ok: false, error: '找不到這個客戶：' + id };
+  var sh = v2Sheet_(SHEET_CUSTOMERS, CUSTOMERS_HEADERS);
+  var snap = customerRowObj_(sh, rowNum);
+  if (p.hard === true) {
+    sh.deleteRow(rowNum);
+    logChange_('deleteCustomerHard', id, snap);
+    return { ok: true, deleted: 'hard', customer: snap };
+  }
+  sh.getRange(rowNum, CUSTOMERS_HEADERS.indexOf('active') + 1).setValue('N');
+  sh.getRange(rowNum, CUSTOMERS_HEADERS.indexOf('updated_at') + 1).setValue(tpeNow_());
+  logChange_('deleteCustomer', id, snap);
+  return { ok: true, deleted: 'soft', customer: snap };
+}
+
+/* 一鍵匯入：把報價單主表裡的客戶歸戶後，補進客戶主檔（已存在的完全不動）
+   欄位取「最近一張有填的單」，與前端客戶管理的算法一致。 */
+function handleSeedCustomersFromQuotes_(params) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var mainSheet = ss.getSheetByName(SHEET_MAIN);
+  var lastRow = mainSheet ? mainSheet.getLastRow() : 0;
+  if (lastRow < 2) return { ok: true, added: 0, skipped: 0, names: [] };
+
+  var data = mainSheet.getRange(2, 1, lastRow - 1, effW_(mainSheet, MAIN_HEADERS)).getValues();
+  var pick = ['contact', 'phone', 'tax_id', 'invoice_title', 'address', 'ship_contact', 'ship_phone', 'ship_address'];
+  var srcCol = { contact: MAIN_COLS.contactName, phone: MAIN_COLS.contactPhone, tax_id: MAIN_COLS.clientTaxId,
+    invoice_title: MAIN_COLS.invoiceTitle, address: MAIN_COLS.clientAddress,
+    ship_contact: MAIN_COLS.shipContact, ship_phone: MAIN_COLS.shipPhone, ship_address: MAIN_COLS.shipAddress };
+  var agg = {};
+  data.forEach(function (row) {
+    if (String(row[MAIN_COLS.status - 1] || '') === '已刪除') return;
+    var nm = String(row[MAIN_COLS.clientName - 1] || '').trim();
+    var key = custKey_(nm);
+    if (!key) return;
+    var d = row[MAIN_COLS.quoteDate - 1];
+    var dstr = (d instanceof Date) ? Utilities.formatDate(d, 'Asia/Taipei', 'yyyy-MM-dd') : String(d || '');
+    if (!agg[key]) agg[key] = { name: nm, at: '' };
+    var a = agg[key];
+    if (dstr >= a.at) { a.name = nm || a.name; a.at = dstr; }
+    pick.forEach(function (f) {
+      var v = String(row[srcCol[f] - 1] || '').trim();
+      if (v && (!a[f] || dstr >= (a[f + '_at'] || ''))) { a[f] = v; a[f + '_at'] = dstr; }
+    });
+  });
+
+  var added = 0, skipped = 0, names = [];
+  Object.keys(agg).forEach(function (key) {
+    if (findCustomerRowByName_(agg[key].name) !== -1) { skipped++; return; }
+    var c = { name: agg[key].name };
+    pick.forEach(function (f) { if (agg[key][f]) c[f] = agg[key][f]; });
+    c.note = '（由既有報價單自動建立）';
+    var r = handleSaveCustomer_({ customer: c });
+    if (r && r.ok) { added++; names.push(agg[key].name); } else { skipped++; }
+  });
+  logChange_('seedCustomersFromQuotes', '', { added: added, skipped: skipped, names: names });
+  return { ok: true, added: added, skipped: skipped, names: names };
 }
