@@ -377,6 +377,11 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
 .td-alldone .big{font-size:24px;font-weight:700;color:var(--gold-deep);margin-bottom:6px}
 .td-alldone .sm{font-size:12.5px;color:var(--hint)}
 .td-dotc{width:9px;height:9px;border-radius:50%;flex-shrink:0;display:inline-block}
+/* 急／不急（後端 v35 urgent 旗標）：不急的淡化，並用一條分隔線隔開 */
+.td-sep{padding:6px 16px;font-size:11px;color:var(--hint);background:#FAF9F5;border-top:1px solid #F1EFE8;border-bottom:1px solid #F1EFE8;letter-spacing:.03em}
+.td-row.dim{opacity:.52}
+.td-row.dim:hover{opacity:1}
+.td-calm{background:#F1F7F2;border:1px solid #D7E7DC;color:#2F6B45;border-radius:var(--rad-lg);padding:11px 15px;font-size:12.5px;margin-bottom:12px}
 /* 統一骨架屏 */
 .skl{background:linear-gradient(90deg,#EFEDE6 25%,#F7F5EF 37%,#EFEDE6 63%);background-size:400% 100%;animation:sklmove 1.3s ease infinite;border-radius:5px;height:12px}
 @keyframes sklmove{0%{background-position:100% 50%}100%{background-position:0 50%}}
