@@ -41,7 +41,7 @@ function verifyGetOrCreateFolder_(name, parent) {
   return parent.createFolder(name);
 }
 function getOrCreateVerifySheet_() {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var ss = ssApp_();
   var sh = ss.getSheetByName(SHEET_VERIFY);
   var needHeader = false;
   if (!sh) { sh = ss.insertSheet(SHEET_VERIFY); needHeader = true; }
@@ -57,7 +57,7 @@ function getOrCreateVerifySheet_() {
 // ---- 依單號查報價單（客戶名 / 品名清單）----
 function verifyFindQuoteRow_(no) {
   resolveColMaps_();
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var ss = ssApp_();
   var sh = ss.getSheetByName(SHEET_MAIN);
   var lastRow = sh.getLastRow();
   if (lastRow < 2) return null;
@@ -71,7 +71,7 @@ function verifyFindQuoteRow_(no) {
 }
 function verifyGetItemNames_(no) {
   resolveColMaps_();
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var ss = ssApp_();
   var sh = ss.getSheetByName(SHEET_ITEMS);
   var lastRow = sh.getLastRow();
   if (lastRow < 2) return [];
@@ -416,7 +416,7 @@ const VERIFY_FORM_COLS = {
   id: 1, created_at: 2, no: 3, lot: 4, ship_date: 5, pm: 6, boxes: 7, items_json: 8
 };
 function getOrCreateVerifyFormSheet_() {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var ss = ssApp_();
   var sh = ss.getSheetByName(SHEET_VERIFY_FORM);
   var needHeader = false;
   if (!sh) { sh = ss.insertSheet(SHEET_VERIFY_FORM); needHeader = true; }

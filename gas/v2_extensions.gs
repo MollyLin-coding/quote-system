@@ -96,12 +96,16 @@ function setupV2Sheets() {
 // ===================================================================
 // 共用小工具
 // ===================================================================
+var V2_HDR_OK_ = {};   // v39：同一次請求裡，同一張表的表頭只檢查一次
 function v2Sheet_(name, headers) {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = ssApp_();
   let sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);
+    V2_HDR_OK_[name] = false;
   }
+  if (V2_HDR_OK_[name]) return sh;   // 這次請求已經檢查過了，省下一趟讀取
+  V2_HDR_OK_[name] = true;
   // 表頭列空白時補上表頭（不動既有資料）
   if (String(sh.getRange(1, 1).getValue()) === '') {
     sh.getRange(1, 1, 1, headers.length).setValues([headers]);
@@ -115,7 +119,7 @@ function v2Sheet_(name, headers) {
 }
 
 function v2IsEmpty_(name) {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = ssApp_();
   const sh = ss.getSheetByName(name);
   return !sh || sh.getLastRow() < 2;
 }
@@ -310,7 +314,7 @@ function handleUpdateOrderStatus_(params) {
 // ===================================================================
 function orderGrandTotal_(quoteNo) {
   try {
-    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var ss = ssApp_();
     var sh = ss.getSheetByName(SHEET_MAIN);
     if (!sh) return 0;
     var last = sh.getLastRow();
@@ -326,7 +330,7 @@ function orderGrandTotal_(quoteNo) {
 }
 
 function setupOrderStatusV30Columns() {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var ss = ssApp_();
   var sh = ss.getSheetByName(SHEET_ORDER_STATUS);
   if (!sh) { v2Sheet_(SHEET_ORDER_STATUS, ORDER_STATUS_HEADERS); return 'order_status 新建，含 ' + ORDER_STATUS_HEADERS.length + ' 欄'; }
   var out = [];
@@ -521,7 +525,7 @@ function generateV2QuoteNo_(dateStr) {
   let maxSerial = 0;
 
   const scan = function (sheetName, colIdx) {
-    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const ss = ssApp_();
     const sh = ss.getSheetByName(sheetName);
     if (!sh || sh.getLastRow() < 2) return;
     const vals = sh.getRange(2, colIdx, sh.getLastRow() - 1, 1).getValues();
@@ -651,7 +655,7 @@ function handleGetChangeLog_(params) {
 // 手動執行一次，補上既有分頁的新表頭（idempotent，可重複執行）
 // ===================================================================
 function setupBrandAndInvoiceColumns() {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = ssApp_();
   const out = [];
 
   const compSh = ss.getSheetByName(SHEET_COMPANIES);
@@ -715,7 +719,7 @@ function runV2Tests() {
   out.push('getChangeLog(全部): ok=' + clAll.ok + ' logs=' + clAll.logs.length);
 
   // 清掉測試寫入的資料（change_log 依規格永不刪除，保留測試紀錄）
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = ssApp_();
   const osRow = v2FindRow_(SHEET_ORDER_STATUS, ORDER_STATUS_HEADERS, 'quote_no', 'TEST-V2-01');
   if (osRow !== -1) ss.getSheetByName(SHEET_ORDER_STATUS).deleteRow(osRow);
   const cqRow = v2FindRow_(SHEET_CUSTOM_QUOTES, CUSTOM_QUOTES_HEADERS, 'quote_no', 'TEST-V2-CQ-01');
@@ -736,7 +740,7 @@ function runV2Tests() {
 // 首次部署後手動執行一次 setupProductV22Columns()。
 // ===================================================================
 function setupProductV22Columns() {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var ss = ssApp_();
   var sh = ss.getSheetByName(SHEET_PRODUCTS);
   if (!sh) { return 'products 分頁不存在，請先執行 setupV2Sheets()'; }
   var defs = [[12, 'bottle_cap'], [13, 'moq'], [14, 'lead_time']];
@@ -858,7 +862,7 @@ function syncGoogleCalendar_() {
   // ---- 客戶名稱 / 到期日查表（主表 + custom_quotes）----
   var clientByNo = {}, expiryByNo = {};
   try {
-    var mss = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_MAIN);
+    var mss = ssApp_().getSheetByName(SHEET_MAIN);
     if (mss && mss.getLastRow() > 1) {
       var width = MAIN_COLS.svcAmount;
       var mrows = mss.getRange(2, 1, mss.getLastRow() - 1, width).getValues();
@@ -1039,7 +1043,7 @@ function calCreateRecurSeries_(cal, d, key) {
 // 首次部署後手動各執行一次 setupCompanyV24Columns() 與 setupQuoteShipColumns()。
 // ===================================================================
 function setupCompanyV24Columns() {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var ss = ssApp_();
   var sh = ss.getSheetByName(SHEET_COMPANIES);
   if (!sh) { return 'companies 分頁不存在，請先執行 setupV2Sheets()'; }
   var defs = [[12, 'ship_contact'], [13, 'ship_phone'], [14, 'ship_address']];
@@ -1058,7 +1062,7 @@ function setupCompanyV24Columns() {
 }
 
 function setupQuoteShipColumns() {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var ss = ssApp_();
   var sh = ss.getSheetByName(SHEET_MAIN);
   if (!sh) { return '報價單主表不存在'; }
   var defs = [[33, '出貨聯絡人'], [34, '出貨電話'], [35, '出貨地址']];
@@ -1083,7 +1087,7 @@ function setupQuoteShipColumns() {
 // 首次部署後手動執行一次 setupCustomerRecipeColumns()。
 // ===================================================================
 function setupCustomerRecipeColumns() {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var ss = ssApp_();
   var sh = ss.getSheetByName(SHEET_COMPANIES);
   if (!sh) { return 'companies 分頁不存在，請先執行 setupV2Sheets()'; }
   var defs = [[15, 'recipe_sheet_id'], [16, 'recipe_tab'], [17, 'recipe_col_map']];
@@ -1109,7 +1113,7 @@ function setupCustomerRecipeColumns() {
 // 首次部署後手動執行一次 setupV25Columns()。
 // ===================================================================
 function setupV25Columns() {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var ss = ssApp_();
   var out = [];
   function addCol(sheetName, col, name){
     var sh = ss.getSheetByName(sheetName);
@@ -1238,7 +1242,7 @@ function handleRunBackupNow_(params) {
 var HEADER_PROTECT_DESC_ = '系統標題列勿動';
 
 function protectHeaders() {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var ss = ssApp_();
   var sheets = ss.getSheets();
   var processed = 0;
   sheets.forEach(function (sheet) {

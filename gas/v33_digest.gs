@@ -69,7 +69,7 @@ function dgClientShort_(s) {
 function dgClientMap_() {
   var map = {};
   resolveColMaps_();
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var ss = ssApp_();
   var sh = ss.getSheetByName(SHEET_MAIN);
   if (sh && sh.getLastRow() >= 2) {
     var w = effW_(sh, MAIN_HEADERS);

@@ -113,7 +113,7 @@ function setupDatabase() {
   if (String(guard) !== 'YES') {
     throw new Error('setupDatabase 已上鎖：這支會清空「報價單主表」與「報價單品項」。若真的要重建，請先在 Script Properties 設定 ALLOW_SETUP_DATABASE 為 YES。');
   }
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = ssApp_();
 
   // 建立或取得「報價單主表」
   let mainSheet = ss.getSheetByName(SHEET_MAIN);
@@ -184,7 +184,7 @@ function resolveOneColMap_(sh, headers, colsObj) {
 function resolveColMaps_() {
   if (_COLS_RESOLVED_) return;
   try {
-    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var ss = ssApp_();
     resolveOneColMap_(ss.getSheetByName(SHEET_MAIN), MAIN_HEADERS, MAIN_COLS);
     resolveOneColMap_(ss.getSheetByName(SHEET_ITEMS), ITEM_HEADERS, ITEM_COLS);
     _COLS_RESOLVED_ = true;
@@ -238,7 +238,7 @@ function validateToken_(token) {
 // 報價單號產生：YYYYMMDD-NN
 // ===================================================================
 function generateQuoteNo_(dateStr) {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = ssApp_();
   const sheet = ss.getSheetByName(SHEET_MAIN);
   const datePart = dateStr.replace(/-/g, ''); // 2026-06-17 -> 20260617
 
@@ -261,7 +261,24 @@ function generateQuoteNo_(dateStr) {
 // ===================================================================
 // 主要 entry points
 // ===================================================================
+/* ---- v39：同一次請求內共用同一個試算表連線 ----------------------
+   實測 getTodayDigest 要 7 秒，主因不是資料多，而是一次請求裡
+   SpreadsheetApp.openById() 被呼叫了六七次，每次都是一趟對 Google 的連線。
+   這個物件只是「把手」，getValues() 每次還是即時去讀，所以共用不會拿到舊資料。
+   每次 doGet/doPost 進來時重設，跨請求不會沿用。
+   ------------------------------------------------------------------ */
+var SS_CACHE_ = null;
+function ssApp_() {
+  if (!SS_CACHE_) SS_CACHE_ = SpreadsheetApp.openById(SHEET_ID);
+  return SS_CACHE_;
+}
+function ssCacheReset_() {
+  SS_CACHE_ = null;
+  try { V2_HDR_OK_ = {}; } catch (e) {}
+}
+
 function doGet(e) {
+  ssCacheReset_();
   resolveColMaps_();
   if (e && e.parameter && e.parameter.page === 'verify') {
     return renderVerifyPage_(e.parameter);
@@ -270,6 +287,7 @@ function doGet(e) {
 }
 
 function doPost(e) {
+  ssCacheReset_();
   return handleRequest_(e);
 }
 
@@ -558,7 +576,7 @@ function handleCreateQuote_(params) {
   const quote = params.quote;
   if (!quote) throw new Error('缺少 quote 資料');
 
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = ssApp_();
   const mainSheet = ss.getSheetByName(SHEET_MAIN);
   const itemSheet = ss.getSheetByName(SHEET_ITEMS);
 
@@ -641,7 +659,7 @@ function handleCreateQuote_(params) {
 }
 
 function handleGetQuotes_(params) {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = ssApp_();
   const mainSheet = ss.getSheetByName(SHEET_MAIN);
   const lastRow = mainSheet.getLastRow();
   const filters = params.filters || {};
@@ -697,7 +715,7 @@ function handleGetQuotes_(params) {
 }
 
 function verifyHeaders_(ss) {
-  ss = ss || SpreadsheetApp.openById(SHEET_ID);
+  ss = ss || ssApp_();
   function chk(sheetName, expected) {
     var sh = ss.getSheetByName(sheetName);
     if (!sh) throw new Error('缺少分頁：' + sheetName);
@@ -743,7 +761,7 @@ function handleGetQuoteById_(params) {
   const quoteNo = params.quoteNo;
   if (!quoteNo) throw new Error('缺少 quoteNo');
 
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = ssApp_();
   const mainSheet = ss.getSheetByName(SHEET_MAIN);
   const lastRow = mainSheet.getLastRow();
   if (lastRow < 2) return { ok: false, error: '找不到報價單' };
@@ -790,7 +808,7 @@ function handleUpdateQuote_(params) {
   const quote = params.quote;
   if (!quoteNo || !quote) throw new Error('缺少 quoteNo 或 quote 資料');
 
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = ssApp_();
   verifyHeaders_(ss);
   const mainSheet = ss.getSheetByName(SHEET_MAIN);
 
@@ -903,7 +921,7 @@ function handleDeleteQuote_(params) {
   const quoteNo = params.quoteNo;
   if (!quoteNo) throw new Error('缺少 quoteNo');
 
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = ssApp_();
   verifyHeaders_(ss);
   const mainSheet = ss.getSheetByName(SHEET_MAIN);
   const lastRow = mainSheet.getLastRow();
@@ -996,7 +1014,7 @@ function handleGenerateQuoteDocument_(params) {
   const built = buildQuoteDoc_(quote);
 
   // 把連結寫回主表 pdfUrl / docUrl，供之後查詢/分享
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = ssApp_();
   const mainSheet = ss.getSheetByName(SHEET_MAIN);
   const lastRow = mainSheet.getLastRow();
   const data = mainSheet.getRange(2, 1, lastRow - 1, effW_(mainSheet, MAIN_HEADERS)).getValues();
@@ -1030,7 +1048,7 @@ function handleGenerateQuoteDocument_(params) {
 // 與 handleGetQuoteById_ 邏輯類似但獨立一份，刻意不共用／不改動已驗證過的
 // handleGetQuoteById_，降低改動既有已驗證功能的風險。
 function getQuoteWithItems_(quoteNo) {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = ssApp_();
   const mainSheet = ss.getSheetByName(SHEET_MAIN);
   const lastRow = mainSheet.getLastRow();
   if (lastRow < 2) return null;
@@ -1088,7 +1106,7 @@ function appendImages_(body, quote) {
 }
 
 function setupItemPricingColumns() {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var ss = ssApp_();
   var sh = ss.getSheetByName(SHEET_ITEMS);
   if (!sh) throw new Error('找不到報價單品項分頁');
   var need = 17;

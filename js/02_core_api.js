@@ -80,7 +80,9 @@ async function doLogin(){
   const btn = document.getElementById('login-btn');
   errEl.textContent = '';
   if(!pin){ errEl.textContent = '請輸入 PIN 碼'; return; }
-  btn.disabled = true; btn.textContent = '登入中…';
+  // 後端登入時會順便整理今天的待辦（v38），所以這一趟比單純驗 PIN 久一點，
+  // 文字寫清楚在做什麼，才不會覺得卡住。
+  btn.disabled = true; btn.textContent = '登入中…正在整理今天的待辦';
   try {
     const data = await apiCall({ action:'login', pin });
     if(data.ok && data.token){

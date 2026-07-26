@@ -604,7 +604,7 @@ out.push('addConsignMovement(deposit_refund): ok=' + refundMove.ok + ' deposit_p
   out.push('deleteConsignDiscount: ok=' + delDiscResp.ok + ' 已還原標準折=' + (revertedPrice.discount === 0.75));
 
   // 清掉測試寫入的資料（change_log 依慣例永不清除）
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = ssApp_();
   const ledgerRows = v2ReadAll_(SHEET_CONSIGN_LEDGER, CONSIGN_LEDGER_HEADERS);
   const ledgerSh = ss.getSheetByName(SHEET_CONSIGN_LEDGER);
   for (let i = ledgerRows.length - 1; i >= 0; i--) {
