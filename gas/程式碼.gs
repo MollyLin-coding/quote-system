@@ -56,7 +56,13 @@ const MAIN_COLS = {
   serviceTime: 28,          // AB 供酒時間
   exitTime: 29,             // AC 撤場時間
   svcMode: 30,              // AD 調酒師服務費模式
-  svcAmount: 31             // AE 調酒師服務費金額
+  svcAmount: 31,            // AE 調酒師服務費金額
+  invoiceTitle: 32,         // AF 發票抬頭（正式公司名，選填；客戶名稱欄放品牌名）
+  shipContact: 33,          // AG 出貨聯絡人（v2.4，選填；空＝與聯絡人/地址相同）
+  shipPhone: 34,            // AH 出貨電話（v2.4，選填）
+  shipAddress: 35,           // AI 出貨地址（v2.4，選填；有值才視為與發票地址不同）
+  expectedShipDate: 36, // AJ expected ship date (v2.5)
+  showShipDate: 37       // AK show ship date Y/N (v2.5)
 };
 
 const ITEM_COLS = {
@@ -71,7 +77,12 @@ const ITEM_COLS = {
   qty: 9,          // I 數量
   unit: 10,         // J 單位
   subtotal: 11,     // K 小計
-  flavorList: 12    // L 品名清單
+  flavorList: 12, // L 品名清單
+  isOem: 13, // M OEM 標記
+  isLabel: 14, // N 貼牌標記
+  listPrice: 15, // O 原價（自有品牌）
+  discount: 16, // P 折數（自有品牌）
+  noCharge: 17 // Q 不計價/贈品
 };
 
 const MAIN_HEADERS = [
@@ -79,18 +90,29 @@ const MAIN_HEADERS = [
   '報價日期','有效日期','處理人員','品項合計','稅額','額外費用合計','總計',
   '價格模式','稅率','付款條件類型','付款條件詳情','備註','圖片連結','狀態',
   '建立時間','最後修改時間','PDF連結','Word連結',
-  '佈置地點','進場時間','供酒時間','撤場時間','調酒師服務費模式','調酒師服務費金額'
+  '佈置地點','進場時間','供酒時間','撤場時間','調酒師服務費模式','調酒師服務費金額',
+  '發票抬頭','出貨聯絡人','出貨電話','出貨地址','預計出貨日','顯示出貨日'
 ];
 
 const ITEM_HEADERS = [
   '報價單號','品項類型','品名','批次','容量ml','單價','標費扣除','LOGO印刷費',
-  '數量','單位','小計','品名清單'
+  '數量','單位','小計','品名清單','OEM','貼牌','原價','折數','不計價'
 ];
 
 // ===================================================================
 // 初始化：建立分頁結構（手動執行一次）
 // ===================================================================
+/**
+ * ⚠⚠ 破壞性：這支會把「報價單主表」與「報價單品項」整個清空重建。
+ * 2026-07-25 有人在編輯器誤按執行、清掉了全部報價單（靠試算表版本記錄還原）。
+ * 從此加上防呆鎖：要跑之前必須先到 專案設定 ▸ Script Properties
+ * 新增 ALLOW_SETUP_DATABASE = YES，跑完請把它刪掉。
+ */
 function setupDatabase() {
+  const guard = PropertiesService.getScriptProperties().getProperty('ALLOW_SETUP_DATABASE');
+  if (String(guard) !== 'YES') {
+    throw new Error('setupDatabase 已上鎖：這支會清空「報價單主表」與「報價單品項」。若真的要重建，請先在 Script Properties 設定 ALLOW_SETUP_DATABASE 為 YES。');
+  }
   const ss = SpreadsheetApp.openById(SHEET_ID);
 
   // 建立或取得「報價單主表」
@@ -133,6 +155,42 @@ function setupDatabase() {
 // ===================================================================
 // PIN 驗證（簡單 token 機制，給內部單人使用）
 // ===================================================================
+function tpeNow_() {
+  return Utilities.formatDate(new Date(), 'Asia/Taipei', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+}
+
+
+// === #16 動態欄位對應：依線上標題列重寫 MAIN_COLS/ITEM_COLS，容忍搬欄/插欄 ===
+var _COLS_RESOLVED_ = false;
+function effW_(sh, headers) {
+  var w = 0;
+  try { w = sh.getLastColumn(); } catch (e) { w = 0; }
+  return Math.max(headers.length, w || 0);
+}
+function resolveOneColMap_(sh, headers, colsObj) {
+  if (!sh) return;
+  var w = sh.getLastColumn();
+  if (w < 1) return;
+  var live = sh.getRange(1, 1, 1, w).getValues()[0];
+  for (var i = 0; i < live.length; i++) live[i] = String(live[i]).trim();
+  Object.keys(colsObj).forEach(function (key) {
+    var canon = colsObj[key];
+    var text = headers[canon - 1];
+    if (text == null) return;
+    var idx = live.indexOf(String(text).trim());
+    if (idx !== -1) colsObj[key] = idx + 1;
+  });
+}
+function resolveColMaps_() {
+  if (_COLS_RESOLVED_) return;
+  try {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    resolveOneColMap_(ss.getSheetByName(SHEET_MAIN), MAIN_HEADERS, MAIN_COLS);
+    resolveOneColMap_(ss.getSheetByName(SHEET_ITEMS), ITEM_HEADERS, ITEM_COLS);
+    _COLS_RESOLVED_ = true;
+  } catch (e) {}
+}
+
 function checkPin_(pin) {
   const props = PropertiesService.getScriptProperties();
   const correctPin = props.getProperty('PIN_CODE');
@@ -143,12 +201,24 @@ function checkPin_(pin) {
 }
 
 function generateToken_() {
-  // 簡單 token：時間戳 + 隨機碼，存入 Script Properties 並設定過期時間（8小時）
   const token = Utilities.getUuid();
   const props = PropertiesService.getScriptProperties();
-  const expiry = new Date().getTime() + 8 * 60 * 60 * 1000; // 8小時
+  const expiry = new Date().getTime() + 8 * 60 * 60 * 1000;
+  try { sweepExpiredTokens_(props); } catch (e) {}
   props.setProperty('TOKEN_' + token, String(expiry));
   return token;
+}
+
+function sweepExpiredTokens_(props) {
+  props = props || PropertiesService.getScriptProperties();
+  const nowMs = new Date().getTime();
+  const all = props.getProperties();
+  Object.keys(all).forEach(function (k) {
+    if (k.indexOf('TOKEN_') === 0) {
+      var exp = parseInt(all[k], 10);
+      if (!exp || nowMs > exp) props.deleteProperty(k);
+    }
+  });
 }
 
 function validateToken_(token) {
@@ -192,6 +262,10 @@ function generateQuoteNo_(dateStr) {
 // 主要 entry points
 // ===================================================================
 function doGet(e) {
+  resolveColMaps_();
+  if (e && e.parameter && e.parameter.page === 'verify') {
+    return renderVerifyPage_(e.parameter);
+  }
   return handleRequest_(e);
 }
 
@@ -200,6 +274,7 @@ function doPost(e) {
 }
 
 function handleRequest_(e) {
+  resolveColMaps_();
   let params;
   try {
     if (e.postData && e.postData.contents) {
@@ -215,31 +290,188 @@ function handleRequest_(e) {
 
   try {
     switch (action) {
+      case 'verifyHeaders':
+        return jsonResponse_(verifyHeadersReport_());
+      case 'setupItemHeaders':
+        return jsonResponse_({ ok: true, result: setupItemPricingColumns() });
       case 'login':
         return jsonResponse_(handleLogin_(params));
-      case 'createQuote':
+      case 'createQuote': {
         requireAuth_(params);
-        return jsonResponse_(handleCreateQuote_(params));
+        const rCreate = handleCreateQuote_(params);
+        if (rCreate && rCreate.ok) {
+          logChange_('createQuote', rCreate.quoteNo, params.quote || {});
+          try { upsertShipCalendar_(rCreate.quoteNo, (params.quote||{}).clientName, (params.quote||{}).expectedShipDate); } catch (e) {}
+          try { seedOrderShipDate_(rCreate.quoteNo, (params.quote||{}).expectedShipDate); } catch (e) {}
+        }
+        return jsonResponse_(rCreate);
+      }
       case 'getQuotes':
         requireAuth_(params);
         return jsonResponse_(handleGetQuotes_(params));
       case 'getQuoteById':
         requireAuth_(params);
         return jsonResponse_(handleGetQuoteById_(params));
-      case 'updateQuote':
+      case 'updateQuote': {
         requireAuth_(params);
-        return jsonResponse_(handleUpdateQuote_(params));
-      case 'deleteQuote':
+        const rUpdate = handleUpdateQuote_(params);
+        if (rUpdate && rUpdate.ok) {
+          logChange_('updateQuote', params.quoteNo, params.quote || {});
+          try { if (params.quote && params.quote.expectedShipDate !== undefined) upsertShipCalendar_(params.quoteNo, params.quote.clientName, params.quote.expectedShipDate); } catch (e) {}
+          try { if (params.quote && params.quote.expectedShipDate) seedOrderShipDate_(params.quoteNo, params.quote.expectedShipDate); } catch (e) {}
+        }
+        return jsonResponse_(rUpdate);
+      }
+      case 'deleteQuote': {
         requireAuth_(params);
-        return jsonResponse_(handleDeleteQuote_(params));
-      case 'generateQuoteDocument':
+        const snapDelete = getQuoteWithItems_(params.quoteNo);
+        const rDelete = handleDeleteQuote_(params);
+        if (rDelete && rDelete.ok) {
+          logChange_('deleteQuote', params.quoteNo, snapDelete || {});
+          try { upsertShipCalendar_(params.quoteNo, '', ''); } catch (e) {}
+        }
+        return jsonResponse_(rDelete);
+      }
+      case 'generateQuoteDocument': {
         requireAuth_(params);
-        return jsonResponse_(handleGenerateQuoteDocument_(params));
+        const rGen = handleGenerateQuoteDocument_(params);
+        if (rGen && rGen.ok) logChange_('generateQuoteDocument', params.quoteNo, { pdfUrl: rGen.pdfUrl, docUrl: rGen.docUrl });
+        return jsonResponse_(rGen);
+      }
+      // ===== v2 新增 action（實作在 v2_extensions.gs；寫入類的 change_log 在各 handler 內）=====
+      case 'getCompanyData':
+        requireAuth_(params);
+        return jsonResponse_(handleGetCompanyData_(params));
+      case 'getOrderStatusList':
+        requireAuth_(params);
+        return jsonResponse_(handleGetOrderStatusList_(params));
+      case 'updateOrderStatus':
+        requireAuth_(params);
+        return jsonResponse_(handleUpdateOrderStatus_(params));
+      case 'listQuotePdfs':
+        requireAuth_(params);
+        return jsonResponse_(handleListQuotePdfs_(params));
+      case 'saveInvoicePhotos':
+        requireAuth_(params);
+        return jsonResponse_(handleSaveInvoicePhotos_(params));
+      case 'addShipment':
+        requireAuth_(params);
+        return jsonResponse_(handleAddShipment_(params));
+      case 'listShipments':
+        requireAuth_(params);
+        return jsonResponse_(handleListShipments_(params));
+      case 'updateShipment':
+        requireAuth_(params);
+        return jsonResponse_(handleUpdateShipment_(params));
+      case 'saveCustomQuote':
+        requireAuth_(params);
+        return jsonResponse_(handleSaveCustomQuote_(params));
+      case 'listCustomQuotes':
+        requireAuth_(params);
+        return jsonResponse_(handleListCustomQuotes_(params));
+      case 'listCalendarItems':
+        requireAuth_(params);
+        return jsonResponse_(handleListCalendarItems_(params));
+      case 'saveCalendarItem':
+        requireAuth_(params);
+        return jsonResponse_(handleSaveCalendarItem_(params));
+      case 'deleteCalendarItem':
+        requireAuth_(params);
+        return jsonResponse_(handleDeleteCalendarItem_(params));
+      case 'getChangeLog':
+        requireAuth_(params);
+        return jsonResponse_(handleGetChangeLog_(params));
+      case 'syncCalendarNow':
+        requireAuth_(params);
+        return jsonResponse_(handleSyncCalendarNow_(params));
+      // ===== v3.0 新增 action（實作在 v3_ownbrand.gs；寫入類的 change_log 在各 handler 內）=====
+      case 'getOwnbrandProducts':
+        requireAuth_(params);
+        return jsonResponse_(handleGetOwnbrandProducts_(params));
+      case 'getOwnbrandTiers':
+        requireAuth_(params);
+        return jsonResponse_(handleGetOwnbrandTiers_(params));
+      case 'syncOwnbrandProducts':
+        requireAuth_(params);
+        return jsonResponse_(handleSyncOwnbrandProducts_(params));
+      case 'syncCustomerProducts':
+        requireAuth_(params);
+        return jsonResponse_(handleSyncCustomerProducts_(params));
+      case 'syncAllCustomerProducts':
+        requireAuth_(params);
+        return jsonResponse_(handleSyncAllCustomerProducts_(params));
+      case 'getConsignCustomers':
+        requireAuth_(params);
+        return jsonResponse_(handleGetConsignCustomers_(params));
+      case 'saveConsignCustomer':
+        requireAuth_(params);
+        return jsonResponse_(handleSaveConsignCustomer_(params));
+      case 'saveConsignDiscount':
+        requireAuth_(params);
+        return jsonResponse_(handleSaveConsignDiscount_(params));
+      case 'deleteConsignDiscount':
+        requireAuth_(params);
+        return jsonResponse_(handleDeleteConsignDiscount_(params));
+      case 'addConsignMovement':
+        requireAuth_(params);
+        return jsonResponse_(handleAddConsignMovement_(params));
+      case 'getConsignInventory':
+        requireAuth_(params);
+        return jsonResponse_(handleGetConsignInventory_(params));
+      case 'getConsignLedger':
+        requireAuth_(params);
+        return jsonResponse_(handleGetConsignLedger_(params));
+      case 'getConsignMonthly':
+        requireAuth_(params);
+        return jsonResponse_(handleGetConsignMonthly_(params));
+      case 'submitVerification':
+        return jsonResponse_(handleSubmitVerification_(params));
+      case 'getVerifications':
+        requireAuth_(params);
+        return jsonResponse_(handleGetVerifications_(params));
+      case 'updateVerificationStatus':
+        requireAuth_(params);
+        return jsonResponse_(handleUpdateVerificationStatus_(params));
+      case 'addVerification':
+        requireAuth_(params);
+        return jsonResponse_(handleAddVerification_(params));
+
+      case 'saveVerifyForm':
+        requireAuth_(params);
+        return jsonResponse_(handleSaveVerifyForm_(params));
+      case 'listVerifyForms':
+        requireAuth_(params);
+        return jsonResponse_(handleListVerifyForms_(params));
+      case 'setupWeeklyBackup':
+        requireAuth_(params);
+        return jsonResponse_(handleSetupWeeklyBackup_(params));
+      case 'runBackupNow':
+        requireAuth_(params);
+        return jsonResponse_(handleRunBackupNow_(params));
+      case 'protectHeaders':
+        requireAuth_(params);
+        return jsonResponse_(handleProtectHeaders_(params));
+      case 'deleteVerification':
+        requireAuth_(params);
+        return jsonResponse_(handleDeleteVerification_(params));
+      case 'deleteVerifyForm':
+        requireAuth_(params);
+        return jsonResponse_(handleDeleteVerifyForm_(params));
+      case 'deleteShipment':
+        requireAuth_(params);
+        return jsonResponse_(handleDeleteShipment_(params));
+      case 'getTodayDigest':
+        requireAuth_(params);
+        return jsonResponse_(handleGetTodayDigest_(params));
       default:
         return jsonResponse_({ ok: false, error: 'Unknown action: ' + action });
     }
   } catch (err) {
     return jsonResponse_({ ok: false, error: err.message });
+  } finally {
+    try {
+      if (CD_CACHE_BUSTERS_.indexOf(action) >= 0) cdCacheClear_();
+    } catch (e2) {}
   }
 }
 
@@ -257,10 +489,59 @@ function jsonResponse_(obj) {
 // ===================================================================
 // Action handlers
 // ===================================================================
-function handleLogin_(params) {
-  if (!checkPin_(params.pin)) {
-    return { ok: false, error: 'PIN 錯誤' };
+/* ---- PIN 登入防暴力嘗試（v33）：連錯 5 次鎖 15 分鐘 ---- */
+var PIN_FAIL_LIMIT_ = 5;
+var PIN_LOCK_MIN_ = 15;
+
+function pinLockState_() {
+  var props = PropertiesService.getScriptProperties();
+  var fails = parseInt(props.getProperty('PIN_FAIL_COUNT') || '0', 10) || 0;
+  var lastMs = parseInt(props.getProperty('PIN_FAIL_LAST') || '0', 10) || 0;
+  var lockMs = PIN_LOCK_MIN_ * 60 * 1000;
+  var now = new Date().getTime();
+  if (fails >= PIN_FAIL_LIMIT_ && (now - lastMs) < lockMs) {
+    return { locked: true, retryMin: Math.max(1, Math.ceil((lockMs - (now - lastMs)) / 60000)) };
   }
+  if (fails >= PIN_FAIL_LIMIT_) { pinFailClear_(); }
+  return { locked: false, retryMin: 0 };
+}
+
+function pinFailRecord_() {
+  var props = PropertiesService.getScriptProperties();
+  var fails = (parseInt(props.getProperty('PIN_FAIL_COUNT') || '0', 10) || 0) + 1;
+  props.setProperty('PIN_FAIL_COUNT', String(fails));
+  props.setProperty('PIN_FAIL_LAST', String(new Date().getTime()));
+  return fails;
+}
+
+function pinFailClear_() {
+  var props = PropertiesService.getScriptProperties();
+  props.deleteProperty('PIN_FAIL_COUNT');
+  props.deleteProperty('PIN_FAIL_LAST');
+}
+
+/** 被鎖住時，在編輯器選這支函式按「執行」即可立刻解鎖 */
+function resetPinLockNow() {
+  pinFailClear_();
+  Logger.log('PIN 鎖定已解除，可以重新登入了');
+}
+
+function handleLogin_(params) {
+  var lock = pinLockState_();
+  if (lock.locked) {
+    return { ok: false, locked: true, retry_after_min: lock.retryMin,
+             error: '錯誤次數過多，請 ' + lock.retryMin + ' 分鐘後再試' };
+  }
+  if (!checkPin_(params.pin)) {
+    var fails = pinFailRecord_();
+    var left = PIN_FAIL_LIMIT_ - fails;
+    if (left <= 0) {
+      return { ok: false, locked: true, retry_after_min: PIN_LOCK_MIN_,
+               error: '錯誤次數過多，請 ' + PIN_LOCK_MIN_ + ' 分鐘後再試' };
+    }
+    return { ok: false, error: 'PIN 錯誤（再錯 ' + left + ' 次會鎖 ' + PIN_LOCK_MIN_ + ' 分鐘）' };
+  }
+  pinFailClear_();
   const token = generateToken_();
   return { ok: true, token: token };
 }
@@ -273,10 +554,13 @@ function handleCreateQuote_(params) {
   const mainSheet = ss.getSheetByName(SHEET_MAIN);
   const itemSheet = ss.getSheetByName(SHEET_ITEMS);
 
-  const quoteNo = quote.quoteNo || generateQuoteNo_(quote.quoteDate);
-  const now = new Date().toISOString();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  verifyHeaders_(ss);
+  const quoteNo = generateQuoteNo_(quote.quoteDate);
+  const now = tpeNow_();
 
-  const row = new Array(31).fill('');
+  const row = new Array(effW_(mainSheet, MAIN_HEADERS)).fill('');
   row[MAIN_COLS.quoteNo - 1] = quoteNo;
   row[MAIN_COLS.quoteType - 1] = quote.quoteType || '';
   row[MAIN_COLS.clientName - 1] = quote.clientName || '';
@@ -292,11 +576,11 @@ function handleCreateQuote_(params) {
   row[MAIN_COLS.extrasTotal - 1] = quote.extrasTotal || 0;
   row[MAIN_COLS.grandTotal - 1] = quote.grandTotal || 0;
   row[MAIN_COLS.priceMode - 1] = quote.priceMode || 'inc';
-  row[MAIN_COLS.taxRate - 1] = quote.taxRate || 5;
+  row[MAIN_COLS.taxRate - 1] = (quote.taxRate === undefined || quote.taxRate === null || quote.taxRate === '') ? 5 : quote.taxRate;
   row[MAIN_COLS.paymentType - 1] = quote.paymentType || '';
   row[MAIN_COLS.paymentDetail - 1] = quote.paymentDetail || '';
   row[MAIN_COLS.remark - 1] = quote.remark || '';
-  row[MAIN_COLS.imageLinks - 1] = quote.imageLinks || '';
+  row[MAIN_COLS.imageLinks - 1] = Array.isArray(quote.images) ? saveQuoteImages_(quoteNo, quote.images) : (quote.imageLinks || '');
   row[MAIN_COLS.status - 1] = quote.status || '草稿';
   row[MAIN_COLS.createdAt - 1] = now;
   row[MAIN_COLS.updatedAt - 1] = now;
@@ -308,26 +592,40 @@ function handleCreateQuote_(params) {
   row[MAIN_COLS.exitTime - 1] = quote.exitTime || '';
   row[MAIN_COLS.svcMode - 1] = quote.svcMode || '';
   row[MAIN_COLS.svcAmount - 1] = quote.svcAmount || 0;
+  row[MAIN_COLS.invoiceTitle - 1] = quote.invoiceTitle || '';
+  row[MAIN_COLS.shipContact - 1] = quote.shipContact || '';
+  row[MAIN_COLS.shipPhone - 1] = quote.shipPhone || '';
+  row[MAIN_COLS.shipAddress - 1] = quote.shipAddress || '';
+  row[MAIN_COLS.expectedShipDate - 1] = quote.expectedShipDate || '';
+  row[MAIN_COLS.showShipDate - 1] = quote.showShipDate || '';
 
   mainSheet.appendRow(row);
+  lock.releaseLock();
 
   // 寫入品項
   if (quote.items && quote.items.length > 0) {
-    const itemRows = quote.items.map(item => [
-      quoteNo,
-      item.itemType || '',
-      item.name || '',
-      item.lot || '',
-      item.volume || '',
-      item.unitPrice || 0,
-      item.deduction || 0,
-      item.logoFee || 0,
-      item.qty || 0,
-      item.unit || '',
-      item.subtotal || 0,
-      item.flavorList || ''
-    ]);
-    itemSheet.getRange(itemSheet.getLastRow() + 1, 1, itemRows.length, ITEM_HEADERS.length)
+    const itemRows = quote.items.map(function (item) {
+      var r = new Array(effW_(itemSheet, ITEM_HEADERS)).fill('');
+      r[ITEM_COLS.quoteNo - 1] = quoteNo;
+      r[ITEM_COLS.itemType - 1] = item.itemType || '';
+      r[ITEM_COLS.name - 1] = item.name || '';
+      r[ITEM_COLS.lot - 1] = item.lot || '';
+      r[ITEM_COLS.volume - 1] = item.volume || '';
+      r[ITEM_COLS.unitPrice - 1] = item.unitPrice || 0;
+      r[ITEM_COLS.deduction - 1] = item.deduction || 0;
+      r[ITEM_COLS.logoFee - 1] = item.logoFee || 0;
+      r[ITEM_COLS.qty - 1] = item.qty || 0;
+      r[ITEM_COLS.unit - 1] = item.unit || '';
+      r[ITEM_COLS.subtotal - 1] = item.subtotal || 0;
+      r[ITEM_COLS.flavorList - 1] = item.flavorList || '';
+      r[ITEM_COLS.isOem - 1] = item.is_oem || 'N';
+      r[ITEM_COLS.isLabel - 1] = item.is_label || 'N';
+      r[ITEM_COLS.listPrice - 1] = (item.listPrice != null ? item.listPrice : '');
+      r[ITEM_COLS.discount - 1] = (item.discount != null ? item.discount : '');
+      r[ITEM_COLS.noCharge - 1] = item.noCharge || 'N';
+      return r;
+    });
+    itemSheet.getRange(itemSheet.getLastRow() + 1, 1, itemRows.length, effW_(itemSheet, ITEM_HEADERS))
       .setValues(itemRows);
   }
 
@@ -338,13 +636,15 @@ function handleGetQuotes_(params) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const mainSheet = ss.getSheetByName(SHEET_MAIN);
   const lastRow = mainSheet.getLastRow();
-  if (lastRow < 2) return { ok: true, quotes: [] };
+  const filters = params.filters || {};
+  if (lastRow < 2) return { ok: true, quotes: [], total: 0, page: 1, pageSize: 0, hasMore: false };
 
-  const data = mainSheet.getRange(2, 1, lastRow - 1, MAIN_HEADERS.length).getValues();
+  const data = mainSheet.getRange(2, 1, lastRow - 1, effW_(mainSheet, MAIN_HEADERS)).getValues();
   let quotes = data.map(row => rowToQuoteObject_(row));
 
-  // 篩選
-  const filters = params.filters || {};
+  if (!filters.status && !filters.includeDeleted) {
+    quotes = quotes.filter(q => q.status !== '已刪除');
+  }
   if (filters.clientName) {
     quotes = quotes.filter(q => q.clientName && q.clientName.includes(filters.clientName));
   }
@@ -355,10 +655,80 @@ function handleGetQuotes_(params) {
     quotes = quotes.filter(q => q.quoteType === filters.quoteType);
   }
 
-  // 排序：最新建立時間在前
+  // v33 選填 since：只回某日期之後建立的（不帶＝行為完全照舊）
+  const sinceQ_ = dgYmd_((params.since !== undefined && params.since !== '') ? params.since : filters.since);
+  if (sinceQ_) {
+    quotes = quotes.filter(function (q) {
+      const dq = dgYmd_(q.createdAt || q.quoteDate);
+      return dq && dq >= sinceQ_;
+    });
+  }
+
   quotes.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
 
-  return { ok: true, quotes: quotes };
+  const total = quotes.length;
+  const psRaw = toFiniteNumber_(filters.pageSize, 0);
+  const pageSize = psRaw > 0 ? Math.floor(psRaw) : 0;
+  const pgRaw = toFiniteNumber_(filters.page, 1);
+  const page = pgRaw > 0 ? Math.floor(pgRaw) : 1;
+  let hasMore = false;
+  if (pageSize > 0) {
+    const start = (page - 1) * pageSize;
+    hasMore = start + pageSize < total;
+    quotes = quotes.slice(start, start + pageSize);
+  } else {
+    // v33 選填 limit：沒用分頁時，只回最近 N 筆
+    const limitQ_ = listOptNum_((params.limit !== undefined && params.limit !== '') ? params.limit : filters.limit);
+    if (limitQ_) {
+      hasMore = limitQ_ < total;
+      quotes = quotes.slice(0, limitQ_);
+    }
+  }
+
+  return { ok: true, quotes: quotes, total: total, page: page, pageSize: pageSize, hasMore: hasMore };
+}
+
+function verifyHeaders_(ss) {
+  ss = ss || SpreadsheetApp.openById(SHEET_ID);
+  function chk(sheetName, expected) {
+    var sh = ss.getSheetByName(sheetName);
+    if (!sh) throw new Error('缺少分頁：' + sheetName);
+    var lastCol = sh.getLastColumn();
+    if (lastCol < 1) return;
+    var actual = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (x) { return String(x).trim(); });
+    var present = {};
+    for (var j = 0; j < actual.length; j++) if (actual[j] !== '') present[actual[j]] = true;
+    for (var i = 0; i < expected.length; i++) {
+      var e = String(expected[i]).trim();
+      if (e === '') continue;
+      if (present[e]) continue;
+      var canonCell = (i < actual.length) ? actual[i] : '';
+      if (canonCell === '') continue;
+      throw new Error('欄位表頭異常（' + sheetName + '）：找不到「' + e + '」，且其原欄位被「' + canonCell + '」占用，為保護資料已中止寫入，請確認欄位是否被搬移或改名。');
+    }
+  }
+  chk(SHEET_MAIN, MAIN_HEADERS);
+  chk(SHEET_ITEMS, ITEM_HEADERS);
+}
+
+function verifyHeadersReport_() {
+  try { verifyHeaders_(); return { ok: true, message: '欄位表頭一致' }; }
+  catch (e) { return { ok: false, error: e.message }; }
+}
+
+function computeItemsSubtotal_(items) {
+  if (!Array.isArray(items)) return null;
+  var sum = 0;
+  items.forEach(function (it) {
+    var v = Number(it && it.subtotal);
+    if (isFinite(v)) sum += v;
+  });
+  return sum;
+}
+
+function toFiniteNumber_(v, dfl) {
+  var n = Number(v);
+  return isFinite(n) ? n : dfl;
 }
 
 function handleGetQuoteById_(params) {
@@ -370,7 +740,7 @@ function handleGetQuoteById_(params) {
   const lastRow = mainSheet.getLastRow();
   if (lastRow < 2) return { ok: false, error: '找不到報價單' };
 
-  const data = mainSheet.getRange(2, 1, lastRow - 1, MAIN_HEADERS.length).getValues();
+  const data = mainSheet.getRange(2, 1, lastRow - 1, effW_(mainSheet, MAIN_HEADERS)).getValues();
   const rowIndex = data.findIndex(row => row[MAIN_COLS.quoteNo - 1] === quoteNo);
   if (rowIndex === -1) return { ok: false, error: '找不到報價單：' + quoteNo };
 
@@ -381,7 +751,7 @@ function handleGetQuoteById_(params) {
   const itemLastRow = itemSheet.getLastRow();
   quote.items = [];
   if (itemLastRow >= 2) {
-    const itemData = itemSheet.getRange(2, 1, itemLastRow - 1, ITEM_HEADERS.length).getValues();
+    const itemData = itemSheet.getRange(2, 1, itemLastRow - 1, effW_(itemSheet, ITEM_HEADERS)).getValues();
     quote.items = itemData
       .filter(row => row[ITEM_COLS.quoteNo - 1] === quoteNo)
       .map(row => ({
@@ -395,11 +765,16 @@ function handleGetQuoteById_(params) {
         qty: row[ITEM_COLS.qty - 1],
         unit: row[ITEM_COLS.unit - 1],
         subtotal: row[ITEM_COLS.subtotal - 1],
-        flavorList: row[ITEM_COLS.flavorList - 1]
+        flavorList: row[ITEM_COLS.flavorList - 1],
+        is_oem: row[ITEM_COLS.isOem - 1],
+        is_label: row[ITEM_COLS.isLabel - 1],
+        listPrice: row[ITEM_COLS.listPrice - 1],
+        discount: row[ITEM_COLS.discount - 1],
+        noCharge: row[ITEM_COLS.noCharge - 1]
       }));
   }
 
-  return { ok: true, quote: quote };
+  quote.images = loadQuoteImages_(quote.imageLinks); return { ok: true, quote: quote };
 }
 
 function handleUpdateQuote_(params) {
@@ -408,88 +783,112 @@ function handleUpdateQuote_(params) {
   if (!quoteNo || !quote) throw new Error('缺少 quoteNo 或 quote 資料');
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
+  verifyHeaders_(ss);
   const mainSheet = ss.getSheetByName(SHEET_MAIN);
-  const lastRow = mainSheet.getLastRow();
-  const data = mainSheet.getRange(2, 1, lastRow - 1, MAIN_HEADERS.length).getValues();
-  const rowIndex = data.findIndex(row => row[MAIN_COLS.quoteNo - 1] === quoteNo);
-  if (rowIndex === -1) return { ok: false, error: '找不到報價單：' + quoteNo };
 
-  const sheetRow = rowIndex + 2; // +2 因為 row 1 是標題，陣列從 0 開始
-  const now = new Date().toISOString();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const lastRow = mainSheet.getLastRow();
+    if (lastRow < 2) return { ok: false, error: '找不到報價單：' + quoteNo };
+    const data = mainSheet.getRange(2, 1, lastRow - 1, effW_(mainSheet, MAIN_HEADERS)).getValues();
+    const rowIndex = data.findIndex(row => row[MAIN_COLS.quoteNo - 1] === quoteNo);
+    if (rowIndex === -1) return { ok: false, error: '找不到報價單：' + quoteNo };
 
-  // 更新所有欄位（除了 quoteNo, createdAt）
-  const updates = {
-    [MAIN_COLS.quoteType]: quote.quoteType,
-    [MAIN_COLS.clientName]: quote.clientName,
-    [MAIN_COLS.contactName]: quote.contactName,
-    [MAIN_COLS.clientTaxId]: quote.clientTaxId,
-    [MAIN_COLS.contactPhone]: quote.contactPhone,
-    [MAIN_COLS.clientAddress]: quote.clientAddress,
-    [MAIN_COLS.quoteDate]: quote.quoteDate,
-    [MAIN_COLS.expiryDate]: quote.expiryDate,
-    [MAIN_COLS.handler]: quote.handler,
-    [MAIN_COLS.itemsSubtotal]: quote.itemsSubtotal,
-    [MAIN_COLS.taxAmount]: quote.taxAmount,
-    [MAIN_COLS.extrasTotal]: quote.extrasTotal,
-    [MAIN_COLS.grandTotal]: quote.grandTotal,
-    [MAIN_COLS.priceMode]: quote.priceMode,
-    [MAIN_COLS.taxRate]: quote.taxRate,
-    [MAIN_COLS.paymentType]: quote.paymentType,
-    [MAIN_COLS.paymentDetail]: quote.paymentDetail,
-    [MAIN_COLS.remark]: quote.remark,
-    [MAIN_COLS.imageLinks]: quote.imageLinks,
-    [MAIN_COLS.status]: quote.status,
-    [MAIN_COLS.updatedAt]: now,
-    [MAIN_COLS.pdfUrl]: quote.pdfUrl,
-    [MAIN_COLS.docUrl]: quote.docUrl,
-    [MAIN_COLS.venue]: quote.venue,
-    [MAIN_COLS.entryTime]: quote.entryTime,
-    [MAIN_COLS.serviceTime]: quote.serviceTime,
-    [MAIN_COLS.exitTime]: quote.exitTime,
-    [MAIN_COLS.svcMode]: quote.svcMode,
-    [MAIN_COLS.svcAmount]: quote.svcAmount
-  };
+    const sheetRow = rowIndex + 2;
+    const now = tpeNow_();
 
-  Object.keys(updates).forEach(col => {
-    if (updates[col] !== undefined) {
-      mainSheet.getRange(sheetRow, parseInt(col, 10)).setValue(updates[col]);
-    }
-  });
+    const updates = {
+      [MAIN_COLS.quoteType]: quote.quoteType,
+      [MAIN_COLS.clientName]: quote.clientName,
+      [MAIN_COLS.contactName]: quote.contactName,
+      [MAIN_COLS.clientTaxId]: quote.clientTaxId,
+      [MAIN_COLS.contactPhone]: quote.contactPhone,
+      [MAIN_COLS.clientAddress]: quote.clientAddress,
+      [MAIN_COLS.quoteDate]: quote.quoteDate,
+      [MAIN_COLS.expiryDate]: quote.expiryDate,
+      [MAIN_COLS.handler]: quote.handler,
+      [MAIN_COLS.itemsSubtotal]: (quote.itemsSubtotal !== undefined ? toFiniteNumber_(quote.itemsSubtotal, 0) : undefined),
+      [MAIN_COLS.taxAmount]: (quote.taxAmount !== undefined ? toFiniteNumber_(quote.taxAmount, 0) : undefined),
+      [MAIN_COLS.extrasTotal]: (quote.extrasTotal !== undefined ? toFiniteNumber_(quote.extrasTotal, 0) : undefined),
+      [MAIN_COLS.grandTotal]: (quote.grandTotal !== undefined ? toFiniteNumber_(quote.grandTotal, 0) : undefined),
+      [MAIN_COLS.priceMode]: quote.priceMode,
+      [MAIN_COLS.taxRate]: (quote.taxRate === undefined ? undefined : ((quote.taxRate === null || quote.taxRate === '') ? 5 : quote.taxRate)),
+      [MAIN_COLS.paymentType]: quote.paymentType,
+      [MAIN_COLS.paymentDetail]: quote.paymentDetail,
+      [MAIN_COLS.remark]: quote.remark,
+      [MAIN_COLS.imageLinks]: Array.isArray(quote.images) ? saveQuoteImages_(quoteNo, quote.images) : undefined,
+      [MAIN_COLS.status]: quote.status,
+      [MAIN_COLS.updatedAt]: now,
+      [MAIN_COLS.pdfUrl]: quote.pdfUrl,
+      [MAIN_COLS.docUrl]: quote.docUrl,
+      [MAIN_COLS.venue]: quote.venue,
+      [MAIN_COLS.entryTime]: quote.entryTime,
+      [MAIN_COLS.serviceTime]: quote.serviceTime,
+      [MAIN_COLS.exitTime]: quote.exitTime,
+      [MAIN_COLS.svcMode]: quote.svcMode,
+      [MAIN_COLS.svcAmount]: quote.svcAmount,
+      [MAIN_COLS.invoiceTitle]: quote.invoiceTitle,
+      [MAIN_COLS.shipContact]: quote.shipContact,
+      [MAIN_COLS.shipPhone]: quote.shipPhone,
+      [MAIN_COLS.shipAddress]: quote.shipAddress,
+      [MAIN_COLS.expectedShipDate]: quote.expectedShipDate,
+      [MAIN_COLS.showShipDate]: quote.showShipDate
+    };
 
-  // 更新品項：先刪除舊的，再寫入新的
-  if (quote.items) {
-    const itemSheet = ss.getSheetByName(SHEET_ITEMS);
-    const itemLastRow = itemSheet.getLastRow();
-    if (itemLastRow >= 2) {
-      const itemData = itemSheet.getRange(2, 1, itemLastRow - 1, ITEM_HEADERS.length).getValues();
-      // 從下往上刪除符合的列，避免索引位移問題
-      for (let i = itemData.length - 1; i >= 0; i--) {
-        if (itemData[i][ITEM_COLS.quoteNo - 1] === quoteNo) {
-          itemSheet.deleteRow(i + 2);
+    const rowArr = data[rowIndex].slice();
+    Object.keys(updates).forEach(function (col) {
+      if (updates[col] !== undefined) rowArr[parseInt(col, 10) - 1] = updates[col];
+    });
+    mainSheet.getRange(sheetRow, 1, 1, effW_(mainSheet, MAIN_HEADERS)).setValues([rowArr]);
+
+    if (quote.items) {
+      const itemSheet = ss.getSheetByName(SHEET_ITEMS);
+      const itemLastRow = itemSheet.getLastRow();
+      let kept = [];
+      if (itemLastRow >= 2) {
+        const itemData = itemSheet.getRange(2, 1, itemLastRow - 1, effW_(itemSheet, ITEM_HEADERS)).getValues();
+        kept = itemData.filter(function (r) { return r[ITEM_COLS.quoteNo - 1] !== quoteNo; });
+      }
+      const newItemRows = quote.items.map(function (item) {
+        var r = new Array(effW_(itemSheet, ITEM_HEADERS)).fill('');
+        r[ITEM_COLS.quoteNo - 1] = quoteNo;
+        r[ITEM_COLS.itemType - 1] = item.itemType || '';
+        r[ITEM_COLS.name - 1] = item.name || '';
+        r[ITEM_COLS.lot - 1] = item.lot || '';
+        r[ITEM_COLS.volume - 1] = item.volume || '';
+        r[ITEM_COLS.unitPrice - 1] = item.unitPrice || 0;
+        r[ITEM_COLS.deduction - 1] = item.deduction || 0;
+        r[ITEM_COLS.logoFee - 1] = item.logoFee || 0;
+        r[ITEM_COLS.qty - 1] = item.qty || 0;
+        r[ITEM_COLS.unit - 1] = item.unit || '';
+        r[ITEM_COLS.subtotal - 1] = item.subtotal || 0;
+        r[ITEM_COLS.flavorList - 1] = item.flavorList || '';
+        r[ITEM_COLS.isOem - 1] = item.is_oem || 'N';
+        r[ITEM_COLS.isLabel - 1] = item.is_label || 'N';
+        r[ITEM_COLS.listPrice - 1] = (item.listPrice != null ? item.listPrice : '');
+        r[ITEM_COLS.discount - 1] = (item.discount != null ? item.discount : '');
+        r[ITEM_COLS.noCharge - 1] = item.noCharge || 'N';
+        return r;
+      });
+      const finalRows = kept.concat(newItemRows);
+      const oldCount = (itemLastRow >= 2) ? (itemLastRow - 1) : 0;
+      if (oldCount > 0) {
+        itemSheet.getRange(2, 1, oldCount, effW_(itemSheet, ITEM_HEADERS)).clearContent();
+      }
+      if (finalRows.length > 0) {
+        const needRows = finalRows.length + 1;
+        if (itemSheet.getMaxRows() < needRows) {
+          itemSheet.insertRowsAfter(itemSheet.getMaxRows(), needRows - itemSheet.getMaxRows());
         }
+        itemSheet.getRange(2, 1, finalRows.length, effW_(itemSheet, ITEM_HEADERS)).setValues(finalRows);
       }
     }
-    if (quote.items.length > 0) {
-      const itemRows = quote.items.map(item => [
-        quoteNo,
-        item.itemType || '',
-        item.name || '',
-        item.lot || '',
-        item.volume || '',
-        item.unitPrice || 0,
-        item.deduction || 0,
-        item.logoFee || 0,
-        item.qty || 0,
-        item.unit || '',
-        item.subtotal || 0,
-        item.flavorList || ''
-      ]);
-      itemSheet.getRange(itemSheet.getLastRow() + 1, 1, itemRows.length, ITEM_HEADERS.length)
-        .setValues(itemRows);
-    }
-  }
 
-  return { ok: true, quoteNo: quoteNo };
+    return { ok: true, quoteNo: quoteNo };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function handleDeleteQuote_(params) {
@@ -497,16 +896,18 @@ function handleDeleteQuote_(params) {
   if (!quoteNo) throw new Error('缺少 quoteNo');
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
+  verifyHeaders_(ss);
   const mainSheet = ss.getSheetByName(SHEET_MAIN);
   const lastRow = mainSheet.getLastRow();
-  const data = mainSheet.getRange(2, 1, lastRow - 1, MAIN_HEADERS.length).getValues();
+  if (lastRow < 2) return { ok: false, error: '找不到報價單：' + quoteNo };
+  const data = mainSheet.getRange(2, 1, lastRow - 1, effW_(mainSheet, MAIN_HEADERS)).getValues();
   const rowIndex = data.findIndex(row => row[MAIN_COLS.quoteNo - 1] === quoteNo);
   if (rowIndex === -1) return { ok: false, error: '找不到報價單：' + quoteNo };
 
-  // 軟刪除：標記狀態為「已刪除」，保留歷史資料
   const sheetRow = rowIndex + 2;
+  try { trashQuoteImages_(data[rowIndex][MAIN_COLS.imageLinks - 1]); } catch (e) {}
   mainSheet.getRange(sheetRow, MAIN_COLS.status).setValue('已刪除');
-  mainSheet.getRange(sheetRow, MAIN_COLS.updatedAt).setValue(new Date().toISOString());
+  mainSheet.getRange(sheetRow, MAIN_COLS.updatedAt).setValue(tpeNow_());
 
   return { ok: true };
 }
@@ -543,7 +944,13 @@ function rowToQuoteObject_(row) {
     serviceTime: row[MAIN_COLS.serviceTime - 1],
     exitTime: row[MAIN_COLS.exitTime - 1],
     svcMode: row[MAIN_COLS.svcMode - 1],
-    svcAmount: row[MAIN_COLS.svcAmount - 1]
+    svcAmount: row[MAIN_COLS.svcAmount - 1],
+    invoiceTitle: row[MAIN_COLS.invoiceTitle - 1],
+    shipContact: row[MAIN_COLS.shipContact - 1],
+    shipPhone: row[MAIN_COLS.shipPhone - 1],
+    shipAddress: row[MAIN_COLS.shipAddress - 1],
+    expectedShipDate: formatDateValue_(row[MAIN_COLS.expectedShipDate - 1]),
+    showShipDate: row[MAIN_COLS.showShipDate - 1]
   };
 }
 
@@ -577,19 +984,28 @@ function handleGenerateQuoteDocument_(params) {
   const quote = getQuoteWithItems_(quoteNo);
   if (!quote) return { ok: false, error: '找不到報價單：' + quoteNo };
 
+  try { quote.images = loadQuoteImages_(quote.imageLinks); } catch (e) { quote.images = []; }
   const built = buildQuoteDoc_(quote);
 
   // 把連結寫回主表 pdfUrl / docUrl，供之後查詢/分享
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const mainSheet = ss.getSheetByName(SHEET_MAIN);
   const lastRow = mainSheet.getLastRow();
-  const data = mainSheet.getRange(2, 1, lastRow - 1, MAIN_HEADERS.length).getValues();
+  const data = mainSheet.getRange(2, 1, lastRow - 1, effW_(mainSheet, MAIN_HEADERS)).getValues();
   const rowIndex = data.findIndex(row => row[MAIN_COLS.quoteNo - 1] === quoteNo);
   if (rowIndex !== -1) {
     const sheetRow = rowIndex + 2;
+    var _prevPdf = data[rowIndex][MAIN_COLS.pdfUrl - 1];
+    var _prevDoc = data[rowIndex][MAIN_COLS.docUrl - 1];
+    if (params.overwrite === true || params.overwrite === 'true') {
+      try { quotePdfMarkInactive_(quoteNo); } catch (e) {}
+      try { if (_prevPdf) qpTrashByUrl_(_prevPdf); } catch (e) {}
+      try { if (_prevDoc) qpTrashByUrl_(_prevDoc); } catch (e) {}
+    }
+    try { quotePdfAppend_(quoteNo, built.pdfUrl, built.docUrl, built.fileNameBase); } catch (e) {}
     mainSheet.getRange(sheetRow, MAIN_COLS.pdfUrl).setValue(built.pdfUrl);
     mainSheet.getRange(sheetRow, MAIN_COLS.docUrl).setValue(built.docUrl);
-    mainSheet.getRange(sheetRow, MAIN_COLS.updatedAt).setValue(new Date().toISOString());
+    mainSheet.getRange(sheetRow, MAIN_COLS.updatedAt).setValue(tpeNow_());
   }
 
   return {
@@ -611,7 +1027,7 @@ function getQuoteWithItems_(quoteNo) {
   const lastRow = mainSheet.getLastRow();
   if (lastRow < 2) return null;
 
-  const data = mainSheet.getRange(2, 1, lastRow - 1, MAIN_HEADERS.length).getValues();
+  const data = mainSheet.getRange(2, 1, lastRow - 1, effW_(mainSheet, MAIN_HEADERS)).getValues();
   const rowIndex = data.findIndex(row => row[MAIN_COLS.quoteNo - 1] === quoteNo);
   if (rowIndex === -1) return null;
 
@@ -621,7 +1037,7 @@ function getQuoteWithItems_(quoteNo) {
   const itemLastRow = itemSheet.getLastRow();
   quote.items = [];
   if (itemLastRow >= 2) {
-    const itemData = itemSheet.getRange(2, 1, itemLastRow - 1, ITEM_HEADERS.length).getValues();
+    const itemData = itemSheet.getRange(2, 1, itemLastRow - 1, effW_(itemSheet, ITEM_HEADERS)).getValues();
     quote.items = itemData
       .filter(row => row[ITEM_COLS.quoteNo - 1] === quoteNo)
       .map(row => ({
@@ -635,10 +1051,43 @@ function getQuoteWithItems_(quoteNo) {
         qty: row[ITEM_COLS.qty - 1],
         unit: row[ITEM_COLS.unit - 1],
         subtotal: row[ITEM_COLS.subtotal - 1],
-        flavorList: row[ITEM_COLS.flavorList - 1]
+        flavorList: row[ITEM_COLS.flavorList - 1],
+        is_oem: row[ITEM_COLS.isOem - 1],
+        is_label: row[ITEM_COLS.isLabel - 1],
+        listPrice: row[ITEM_COLS.listPrice - 1],
+        discount: row[ITEM_COLS.discount - 1],
+        noCharge: row[ITEM_COLS.noCharge - 1]
       }));
   }
   return quote;
+}
+
+function appendImages_(body, quote) {
+  var imgs = quote && quote.images;
+  if (!imgs || !imgs.length) return;
+  body.appendParagraph('附加圖片').setHeading(DocumentApp.ParagraphHeading.HEADING2);
+  var MAXW = 460;
+  for (var i = 0; i < imgs.length; i++) {
+    var im = imgs[i];
+    if (!im || !im.data) continue;
+    try {
+      var blob = Utilities.newBlob(Utilities.base64Decode(im.data), im.mime || 'image/jpeg', im.name || ('image_' + (i + 1)));
+      var inl = body.appendImage(blob);
+      var w = inl.getWidth(), h = inl.getHeight();
+      if (w && w > MAXW) { var sc = MAXW / w; inl.setWidth(Math.round(w * sc)); inl.setHeight(Math.round(h * sc)); }
+    } catch (e) {}
+  }
+}
+
+function setupItemPricingColumns() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sh = ss.getSheetByName(SHEET_ITEMS);
+  if (!sh) throw new Error('找不到報價單品項分頁');
+  var need = 17;
+  var maxCols = sh.getMaxColumns();
+  if (maxCols < need) sh.insertColumnsAfter(maxCols, need - maxCols);
+  sh.getRange(1, 15, 1, 3).setValues([['原價','折數','不計價']]);
+  return '報價單品項欄位已補至 ' + need + ' 欄 (O原價/P折數/Q不計價)';
 }
 
 function buildQuoteDoc_(quote) {
@@ -662,6 +1111,8 @@ function buildQuoteDoc_(quote) {
   appendPaymentSection_(body, quote);
   appendNotesSection_(body, quote);
 
+  appendImages_(body, quote);
+
   doc.saveAndClose();
 
   const file = DriveApp.getFileById(doc.getId());
@@ -671,7 +1122,7 @@ function buildQuoteDoc_(quote) {
 
   const pdfBlob = file.getAs('application/pdf').setName(baseName + '.pdf');
   const pdfFile = folder.createFile(pdfBlob);
-  pdfFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  pdfFile.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
 
   // Google Doc 無法用 getAs() 轉成 .docx，需透過 Drive export endpoint 取得。
   const docxExportUrl = 'https://docs.google.com/document/d/' + file.getId() +
@@ -680,9 +1131,12 @@ function buildQuoteDoc_(quote) {
     headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
     muteHttpExceptions: true
   });
+  if (docxResponse.getResponseCode() !== 200) {
+    throw new Error('Word 匯出失敗 HTTP ' + docxResponse.getResponseCode());
+  }
   const docxBlob = docxResponse.getBlob().setName(baseName + '.docx');
   const docxFile = folder.createFile(docxBlob);
-  docxFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  docxFile.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
 
   // 原始 Google Doc 僅為中繼產物，PDF/docx 都產出後即可刪除，避免 Drive 累積垃圾。
   try { file.setTrashed(true); } catch (e) { /* 忽略：不影響主要流程 */ }
@@ -769,9 +1223,10 @@ function appendClientInfo_(body, quote) {
   const fields = [
     ['客戶名稱', quote.clientName],
     ['聯絡人', quote.contactName],
-    ['統一編號', quote.clientTaxId],
     ['聯絡電話', quote.contactPhone],
-    ['地址', quote.clientAddress]
+    ['地址', quote.clientAddress],
+    ['發票抬頭', quote.invoiceTitle],
+    ['統一編號', quote.clientTaxId]
   ];
   fields.forEach(pair => {
     const label = pair[0], value = pair[1];
@@ -779,6 +1234,24 @@ function appendClientInfo_(body, quote) {
       body.appendParagraph(label + '：' + value).editAsText().setFontSize(10);
     }
   });
+
+  // v2.4：出貨地址與發票／聯絡地址不同時，才另外印一塊「出貨資訊」
+  if (quote.shipAddress) {
+    body.appendParagraph('');
+    body.appendParagraph('出貨資訊（與聯絡地址不同）').editAsText().setBold(true).setForegroundColor('#7C5E32').setFontSize(10);
+    const shipFields = [
+      ['收件人', quote.shipContact],
+      ['電話', quote.shipPhone],
+      ['地址', quote.shipAddress]
+    ];
+    shipFields.forEach(pair => {
+      const label = pair[0], value = pair[1];
+      if (value) {
+        body.appendParagraph(label + '：' + value).editAsText().setFontSize(10);
+      }
+    });
+  }
+
   body.appendParagraph('');
 }
 
