@@ -421,7 +421,8 @@ function prefetchPayloads(){
   return ordPayloads().concat([                    // 訂單追蹤／月報表／報價紀錄共用的三支
     {action:'getVerifications', token:AUTH_TOKEN, filters:{}},   // ＋驗收管理與訂單徽章共用的兩支
     {action:'listVerifyForms', token:AUTH_TOKEN, filters:{}},
-    {action:'listShipments', token:AUTH_TOKEN}                   // ＋訂單列的「分批×N」徽章
+    {action:'listShipments', token:AUTH_TOKEN},                  // ＋訂單列的「分批×N」徽章
+    {action:'getCustomers', token:AUTH_TOKEN}                    // ＋客戶主檔（客戶管理與報價單下拉共用）
   ]);
 }
 function prefetchCommon(){

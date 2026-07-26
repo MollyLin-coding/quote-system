@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260726h">
-<script src="js/00_qrcode.js?v=20260726h"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260726i">
+<script src="js/00_qrcode.js?v=20260726i"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -180,6 +180,13 @@
     <div class="card">
       <div class="ch"><i class="ti ti-user"></i><span>客戶資訊</span><span class="ch-opt">全部選填</span></div>
       <div class="cb">
+        <div class="fl" style="margin-bottom:12px">
+          <label>選既有客戶自動帶入 <span class="opt">選填；資料來自「客戶管理」的客戶主檔</span></label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <select class="fi" id="f-cuspick" style="flex:1;min-width:200px" onchange="pickQuoteCustomer()"><option value="">— 不帶入，手動填 —</option></select>
+            <button type="button" class="rec-act-btn" onclick="gotoPage('customer')"><i class="ti ti-users"></i> 管理客戶</button>
+          </div>
+        </div>
         <div class="fg fg2">
           <div class="fl"><label>客戶名稱</label><input class="fi" id="f-cli" placeholder="請輸入客戶名稱" oninput="upNo()"></div>
           <div class="fl"><label>聯絡人</label><input class="fi" id="f-con" placeholder="請輸入聯絡人姓名"></div>
@@ -652,6 +659,8 @@
           <option value="count">報價筆數多→少</option>
           <option value="name">客戶名稱</option>
         </select>
+        <button class="btn btn-gold" onclick="openCusEdit('')"><i class="ti ti-plus"></i>新增客戶</button>
+        <button class="rec-act-btn" onclick="cusSeedFromQuotes()"><i class="ti ti-download"></i> 從報價單匯入</button>
         <button class="rec-act-btn" onclick="loadCustomers(true)"><i class="ti ti-refresh"></i> 重新整理</button>
       </div>
       <div id="cus-stats"></div>
@@ -939,6 +948,47 @@
   </div>
 </div>
 
+<div class="v2ov" id="cus-edit-overlay">
+  <div class="v2box" style="max-width:640px">
+    <div class="v2h"><span id="cus-edit-title">新增客戶</span><button class="v2x" onclick="closeCusEdit()">✕</button></div>
+    <input type="hidden" id="cus-f-id">
+    <div class="fg fg2">
+      <div class="fl" style="grid-column:span 2"><label>客戶名稱 <span class="opt">必填；報價單上顯示的名字</span></label><input class="fi" id="cus-f-name" placeholder="如 滿枝枒"></div>
+      <div class="fl"><label>聯絡人 <span class="opt">選填</span></label><input class="fi" id="cus-f-contact"></div>
+      <div class="fl"><label>聯絡電話 <span class="opt">選填</span></label><input class="fi" id="cus-f-phone"></div>
+      <div class="fl"><label>Email <span class="opt">選填，寄報價單用</span></label><input class="fi" id="cus-f-email"></div>
+      <div class="fl"><label>客戶統編 <span class="opt">選填</span></label><input class="fi" id="cus-f-tax"></div>
+      <div class="fl" style="grid-column:span 2"><label>發票抬頭 <span class="opt">選填，與客戶名稱不同時填</span></label><input class="fi" id="cus-f-inv"></div>
+      <div class="fl" style="grid-column:span 2"><label>聯絡地址（發票／帳單） <span class="opt">選填</span></label><input class="fi" id="cus-f-addr"></div>
+      <div class="fl"><label>出貨收件人 <span class="opt">選填</span></label><input class="fi" id="cus-f-shipcon"></div>
+      <div class="fl"><label>收件人電話 <span class="opt">選填</span></label><input class="fi" id="cus-f-shipph"></div>
+      <div class="fl" style="grid-column:span 2"><label>出貨地址 <span class="opt">選填，與聯絡地址不同時填</span></label><input class="fi" id="cus-f-shipad"></div>
+      <div class="fl"><label>付款習慣 <span class="opt">選填</span></label><input class="fi" id="cus-f-pay" placeholder="如 30/70、月結15日"></div>
+      <div class="fl"><label>標籤分類 <span class="opt">選填，逗號分隔</span></label><input class="fi" id="cus-f-tags" placeholder="如 通路,婚宴"></div>
+      <div class="fl" style="grid-column:span 2"><label>備註 <span class="opt">選填：喜好、注意事項</span></label><textarea class="fta" id="cus-f-note" rows="3" placeholder="如：不吃香菜／開發票前先確認抬頭"></textarea></div>
+      <div class="fl"><label>狀態</label><select class="fi" id="cus-f-active"><option value="Y">往來中</option><option value="N">已停用（列表不顯示）</option></select></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+      <button class="btn btn-gold" id="cus-f-save" onclick="saveCusEdit()"><i class="ti ti-device-floppy"></i>儲存</button>
+      <button class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63" onclick="closeCusEdit()">取消</button>
+      <button class="rec-act-btn del" id="cus-f-del" style="margin-left:auto;display:none" onclick="deleteCusEdit()"><i class="ti ti-trash"></i> 停用這個客戶</button>
+    </div>
+    <div style="font-size:11px;color:#A8A69C;margin-top:10px">※「停用」只是不再顯示於清單，資料留著、報價紀錄完全不受影響，可再改回往來中。</div>
+  </div>
+</div>
+
+<div class="v2ov" id="cus-sync-overlay">
+  <div class="v2box" style="max-width:520px">
+    <div class="v2h"><span>這張單的客戶資料跟主檔不一樣</span><button class="v2x" onclick="closeCusSync()">✕</button></div>
+    <div style="font-size:12.5px;color:#6B6B63;margin-bottom:10px">要把客戶主檔<b id="cus-sync-name"></b>一起更新成這張單填的內容嗎？</div>
+    <div id="cus-sync-diff"></div>
+    <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+      <button class="btn btn-gold" onclick="applyCusSync()"><i class="ti ti-check"></i>更新主檔</button>
+      <button class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63" onclick="closeCusSync()">這次不用</button>
+    </div>
+  </div>
+</div>
+
 <div class="v2ov" id="cs-cus-overlay">
   <div class="v2box" style="max-width:560px">
     <div class="v2h"><span id="cs-cus-title">新增寄售客戶</span><button class="v2x" onclick="closeConsignCustomerEdit()">✕</button></div>
@@ -1005,19 +1055,19 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260726h"></script>
-<script src="js/01_quote_form.js?v=20260726h"></script>
-<script src="js/01b_quote_preview.js?v=20260726h"></script>
-<script src="js/02_core_api.js?v=20260726h"></script>
-<script src="js/03_quote_custom.js?v=20260726h"></script>
-<script src="js/04_company.js?v=20260726h"></script>
-<script src="js/05_orders.js?v=20260726h"></script>
-<script src="js/06_verify_mgmt.js?v=20260726h"></script>
-<script src="js/07_calendar.js?v=20260726h"></script>
-<script src="js/08_ownbrand.js?v=20260726h"></script>
-<script src="js/09_verify_form.js?v=20260726h"></script>
-<script src="js/10_today.js?v=20260726h"></script>
-<script src="js/11_customers.js?v=20260726h"></script>
-<script src="js/99_boot.js?v=20260726h"></script>
+<script src="js/00_utils.js?v=20260726i"></script>
+<script src="js/01_quote_form.js?v=20260726i"></script>
+<script src="js/01b_quote_preview.js?v=20260726i"></script>
+<script src="js/02_core_api.js?v=20260726i"></script>
+<script src="js/03_quote_custom.js?v=20260726i"></script>
+<script src="js/04_company.js?v=20260726i"></script>
+<script src="js/05_orders.js?v=20260726i"></script>
+<script src="js/06_verify_mgmt.js?v=20260726i"></script>
+<script src="js/07_calendar.js?v=20260726i"></script>
+<script src="js/08_ownbrand.js?v=20260726i"></script>
+<script src="js/09_verify_form.js?v=20260726i"></script>
+<script src="js/10_today.js?v=20260726i"></script>
+<script src="js/11_customers.js?v=20260726i"></script>
+<script src="js/99_boot.js?v=20260726i"></script>
 </body>
 </html>

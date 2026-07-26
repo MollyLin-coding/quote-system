@@ -37,7 +37,7 @@ const RC_READ_ACTIONS = ['getQuotes','getQuoteById','getCompanyData','getOrderSt
   'listQuotePdfs','listShipments','listCustomQuotes','listCalendarItems','getChangeLog',
   'getOwnbrandProducts','getOwnbrandTiers','getConsignCustomers','getConsignInventory',
   'getConsignLedger','getConsignMonthly','getVerifications','listVerifyForms',
-  'getTodayDigest','verifyHeaders','batch'];
+  'getTodayDigest','getCustomers','verifyHeaders','batch'];
 const RC_STORE = {};      // key -> {at, data}
 const RC_INFLIGHT = {};   // key -> Promise（同一份資料同時被要時共用）
 const RC_RESETS = [];     // 各模組登記「快取被清掉時，我的衍生資料也要歸零」

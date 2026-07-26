@@ -171,6 +171,7 @@ function gotoPage(p){
     calcCustom();
   }
   closeMobileNav();
+  runHooks('afterGotoPage', p);   // 各模組想在換頁後補做的事（例：客戶下拉補資料）
 }
 
 /* 側邊「報價單」原地展開子選單（新增／自訂／紀錄／預覽） */
@@ -313,6 +314,7 @@ async function saveQuote(){
       editingQuoteNo=data.quoteNo;
       FORM_DIRTY=false;
       toast('已儲存：'+data.quoteNo,'ok');
+      runHooks('afterSaveQuote', quote);   // 客戶主檔比對提醒登記在 11_customers.js
     } else {
       toast(data.error||'儲存失敗','err');
     }

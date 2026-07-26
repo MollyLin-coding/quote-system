@@ -25,6 +25,7 @@ function respond(action){
     case 'getOwnbrandProducts':return { ok:true, products:[] };
     case 'getOwnbrandTiers':   return { ok:true, tiers:[], terms:{} };
     case 'getTodayDigest':     return DIGEST;
+    case 'getCustomers':       return { ok:true, customers:[] };
     case 'getQuoteById':       return { ok:true, quote:QUOTES[0], items:[] };
     default:                   return { ok:true };
   }
@@ -205,7 +206,7 @@ function respond(action){
   check('登入當下不會馬上狂打（只有今日待辦與公司檔）', countOf('getQuotes')===0);
   await p11.waitForTimeout(3200);
   check('2.5 秒後背景預抓：合併成「一個」HTTP 請求', countOf('batch')===1 && countOf('getQuotes')===0);
-  check('預抓一次拿到六份資料', ['getQuotes','listCustomQuotes','getOrderStatusList','getVerifications','listVerifyForms','listShipments'].every(a => SUB.includes(a)));
+  check('預抓一次拿到七份資料', ['getQuotes','listCustomQuotes','getOrderStatusList','getVerifications','listVerifyForms','listShipments','getCustomers'].every(a => SUB.includes(a)));
   reset();
   await p11.evaluate(async () => { gotoPage('orders'); await loadOrders(); });
   await p11.waitForTimeout(200);
@@ -220,7 +221,7 @@ function respond(action){
   await p13.evaluate(async () => { rcClear(); await readCallMany(prefetchPayloads()); });
   await p13.waitForTimeout(300);
   check('後端不認得 batch：改用平行、五份資料照樣拿到', countOf('batch')===1 && gotData('getQuotes')===1 && gotData('getVerifications')===1);
-  check('後端不認得 batch：資料有進快取', await p13.evaluate(() => Object.keys(RC_STORE).length===6));
+  check('後端不認得 batch：資料有進快取', await p13.evaluate(() => Object.keys(RC_STORE).length===7));
   reset();
   await p13.evaluate(async () => { rcClear(); await readCallMany(prefetchPayloads()); });
   await p13.waitForTimeout(300);
