@@ -48,24 +48,37 @@ function vmClientOf(no){
 }
 function vmToday(){ const t=new Date(),p=n=>String(n).padStart(2,'0'); return t.getFullYear()+'-'+p(t.getMonth()+1)+'-'+p(t.getDate()); }
 
+/* 驗收管理
+   舊做法是「先等訂單追蹤載完（2.5秒）、再去要驗收資料（又 2.5秒）」＝ 5 秒。
+   改成兩邊同時要，並且都走讀取快取；訂單那份晚到就補畫一次客戶名稱。 */
+function vmBuild(gv, lf){
+  return {
+    reports:(gv&&gv.records)||[], repSum:(gv&&gv.summary)||{},
+    forms:(lf&&lf.records)||[], formSum:(lf&&lf.summary)||{},
+    gvErr:(gv&&gv.ok===false)?gv.error:null, lfErr:(lf&&lf.ok===false)?lf.error:null
+  };
+}
 async function loadVerifyMgmt(force){
   const body=document.getElementById('vm-body');
-  if(body && (force||!VM_DATA)) body.innerHTML=sklBlock(4);
+  const P1={action:'getVerifications', token:AUTH_TOKEN, filters:{}};
+  const P2={action:'listVerifyForms', token:AUTH_TOKEN, filters:{}};
+  const h1=rcPeek(P1), h2=rcPeek(P2);
+  if(!force && h1 && h2){ VM_DATA=vmBuild(h1.data, h2.data); fillVmNoList(); renderVerifyMgmt(); }
+  else if(body) body.innerHTML=sklBlock(4);
+  // 訂單資料同時要（不 await，不擋自己的資料）
+  const pOrders = loadOrders(force).then(()=>{ if(VM_DATA) renderVerifyMgmt(); }).catch(()=>{});
+  if(!force && rcFresh(P1) && rcFresh(P2)) return pOrders;   // 90 秒內剛抓過就不重打
   try{
-    if(!ORDERS_CACHE){ try{ await loadOrders(); }catch(_){} }
     const [gv, lf] = await Promise.all([
-      apiCall({action:'getVerifications', token:AUTH_TOKEN, filters:{}}).catch(e=>({ok:false,error:e.message})),
-      apiCall({action:'listVerifyForms', token:AUTH_TOKEN, filters:{}}).catch(e=>({ok:false,error:e.message}))
+      readCall(P1, force).catch(e=>({ok:false,error:e.message})),
+      readCall(P2, force).catch(e=>({ok:false,error:e.message}))
     ]);
-    VM_DATA={
-      reports:(gv&&gv.records)||[], repSum:(gv&&gv.summary)||{},
-      forms:(lf&&lf.records)||[], formSum:(lf&&lf.summary)||{},
-      gvErr:(gv&&gv.ok===false)?gv.error:null, lfErr:(lf&&lf.ok===false)?lf.error:null
-    };
+    VM_DATA=vmBuild(gv, lf);
     fillVmNoList();
     renderVerifyMgmt();
-  }catch(e){ if(body) body.innerHTML=`<div class="rec-empty">${escHtml(e.message||'載入失敗')}</div>`; }
+  }catch(e){ if(body && !VM_DATA) body.innerHTML=`<div class="rec-empty">${escHtml(e.message||'載入失敗')}</div>`; }
 }
+onCacheClear(function(){ VM_DATA=null; });
 function setVmTab(t){ VM_TAB=t; renderVerifyMgmt(); }
 function vmNoReportList(){
   if(!VM_DATA) return [];

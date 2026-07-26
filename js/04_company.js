@@ -58,7 +58,7 @@ let _rulesBusy = false;
    ============================================================ */
 async function loadCompanyData(force){
   if(COMPANY_DATA && !force) return COMPANY_DATA;
-  const d = await apiCall({ action:'getCompanyData', token:AUTH_TOKEN });
+  const d = await readCall({ action:'getCompanyData', token:AUTH_TOKEN }, force);
   if(!d.ok) throw new Error(d.error||'載入公司報價檔失敗');
   COMPANY_DATA = { companies:d.companies||[], products:d.products||[], rules:d.rules||[] };
   populateCompanySelects();
@@ -342,3 +342,6 @@ function quickAddProductCustom(){
   addCustomRow({ name:p.name+spec, qty:1, unit:p.unit||'', price:p.unit_price, note:p.note||'' });
 }
 
+
+/* 寫入類動作清掉讀取快取時，公司報價檔也一併歸零（下次要用會自己重抓） */
+onCacheClear(function(){ COMPANY_DATA=null; });

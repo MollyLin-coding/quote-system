@@ -1,16 +1,23 @@
 /* ============================================================
    四、工作行事曆
    ============================================================ */
+/* 行事曆：訂單日程與備忘同時要（以前是一個等一個），兩邊都走讀取快取 */
 async function loadCalendar(force){
-  try{
-    if(!ORDERS_CACHE || force) await loadOrders(force);
-  }catch(e){ /* orders 失敗仍可顯示備忘 */ }
-  try{
-    const d=await apiCall({ action:'listCalendarItems', token:AUTH_TOKEN });
-    CAL_ITEMS = d.ok ? (d.items||[]) : [];
-  }catch(e){ CAL_ITEMS=[]; toast(e.message||'行事曆載入失敗','err'); }
+  const P={ action:'listCalendarItems', token:AUTH_TOKEN };
+  const hit=rcPeek(P);
+  if(!force && hit && hit.data){ CAL_ITEMS = hit.data.ok ? (hit.data.items||[]) : []; renderCalendar(); }
+  const pOrders = loadOrders(force).then(()=>renderCalendar()).catch(()=>{ /* orders 失敗仍可顯示備忘 */ });
+  if(force || !rcFresh(P)){
+    try{
+      const d=await readCall(P, force);
+      CAL_ITEMS = d.ok ? (d.items||[]) : [];
+    }catch(e){ if(!hit) CAL_ITEMS=[]; toast(e.message||'行事曆載入失敗','err'); }
+  }
+  renderCalendar();
+  await pOrders;
   renderCalendar();
 }
+onCacheClear(function(){ CAL_ITEMS=[]; });
 /* 產生某日的全部事件 */
 function eventsOn(dstr){
   const evs=[];

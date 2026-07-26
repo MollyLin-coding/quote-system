@@ -34,37 +34,56 @@ function orderTimelineHtml(o){
     </div>`).join('')+`</div>`;
 }
 
+/* 訂單追蹤：三份資料（報價單／自訂單／進度）都走讀取快取。
+   有快取先秒開舊的、背景再更新；90 秒內重複進出完全不打後端。
+   快取被寫入動作清掉時，這裡的衍生資料也要歸零（見檔尾 onCacheClear）。 */
+function ordPayloads(){
+  return [ withLimit({action:'getQuotes', token:AUTH_TOKEN, filters:{}}),
+           {action:'listCustomQuotes', token:AUTH_TOKEN},
+           {action:'getOrderStatusList', token:AUTH_TOKEN} ];
+}
+function buildOrders(qs, cq, os){
+  const stMap={}; ((os&&os.orders)||[]).forEach(o=>{ stMap[o.quote_no]=o; });
+  const list=[];
+  ((qs&&qs.quotes)||[]).filter(q=>q.status!=='已刪除').forEach(q=>{
+    list.push({ no:q.quoteNo, client:q.clientName||'—', type:q.quoteType==='banquet'?'宴會':'瓶裝',
+      typeKey:q.quoteType, total:q.grandTotal||0, quoteDate:q.quoteDate||'', expiry:q.expiryDate||'',
+      st: stMap[q.quoteNo]||null, src:'std' });
+  });
+  ((cq&&cq.quotes)||[]).forEach(q=>{
+    const tot=parseJsonSafe(q.totals_json,{}).total||0;
+    list.push({ no:q.quote_no, client:(q.client||'—')+(q.tag?('｜'+q.tag):''), type:'自訂', typeKey:'custom',
+      total:tot, quoteDate:q.quote_date||'', expiry:q.expiry||'', st:stMap[q.quote_no]||null, src:'custom', raw:q });
+  });
+  list.sort((a,b)=> (b.quoteDate||'').localeCompare(a.quoteDate||'') || (b.no||'').localeCompare(a.no||''));
+  return list;
+}
 async function loadOrders(force){
   const body=document.getElementById('ord-body');
-  if(body) body.innerHTML=sklTableRows(6,5);
-  try{
-    const [qs, cq, os] = await Promise.all([
-      apiCall(withLimit({action:'getQuotes', token:AUTH_TOKEN, filters:{}})),
-      apiCall({action:'listCustomQuotes', token:AUTH_TOKEN}),
-      apiCall({action:'getOrderStatusList', token:AUTH_TOKEN})
-    ]);
-    const stMap={}; (os.orders||[]).forEach(o=>{ stMap[o.quote_no]=o; });
-    const list=[];
-    (qs.quotes||[]).filter(q=>q.status!=='已刪除').forEach(q=>{
-      list.push({ no:q.quoteNo, client:q.clientName||'—', type:q.quoteType==='banquet'?'宴會':'瓶裝',
-        typeKey:q.quoteType, total:q.grandTotal||0, quoteDate:q.quoteDate||'', expiry:q.expiryDate||'',
-        st: stMap[q.quoteNo]||null, src:'std' });
-    });
-    (cq.quotes||[]).forEach(q=>{
-      const tot=parseJsonSafe(q.totals_json,{}).total||0;
-      list.push({ no:q.quote_no, client:(q.client||'—')+(q.tag?('｜'+q.tag):''), type:'自訂', typeKey:'custom',
-        total:tot, quoteDate:q.quote_date||'', expiry:q.expiry||'', st:stMap[q.quote_no]||null, src:'custom', raw:q });
-    });
-    list.sort((a,b)=> (b.quoteDate||'').localeCompare(a.quoteDate||'') || (b.no||'').localeCompare(a.no||''));
-    ORDERS_CACHE=list;
+  const P=ordPayloads();
+  const hits=P.map(p=>rcPeek(p));
+  if(!force && hits.every(h=>h&&h.data)){
+    ORDERS_CACHE=buildOrders(hits[0].data, hits[1].data, hits[2].data);
     renderOrders();
-    loadOrderVerifyBadges();   // 非同步補上驗收單／客訴徽章，不擋列表
-    loadShipmentBadges();      // 非同步補上「分批×N」徽章（後端不支援全量查詢就略過）
-    return list;
+    if(currentPage==='report' && typeof renderReport==='function') renderReport();
+    if(P.every(p=>rcFresh(p))){ ordSideBadges(); return ORDERS_CACHE; }   // 夠新就不重打
+  }else if(body){ body.innerHTML=sklTableRows(6,5); }
+  try{
+    const [qs, cq, os] = await Promise.all(P.map(p=>readCall(p, force)));
+    ORDERS_CACHE=buildOrders(qs, cq, os);
+    renderOrders();
+    if(currentPage==='report' && typeof renderReport==='function') renderReport();
+    ordSideBadges(force);
+    return ORDERS_CACHE;
   }catch(e){
-    if(body) body.innerHTML=`<tr><td colspan="6" class="rec-empty">${e.message||'載入失敗'}</td></tr>`;
+    if(body && !ORDERS_CACHE) body.innerHTML=`<tr><td colspan="6" class="rec-empty">${e.message||'載入失敗'}</td></tr>`;
     throw e;
   }
+}
+/* 徽章（驗收單／客訴／分批出貨）非同步補，不擋列表；也走快取所以不會重複打 */
+function ordSideBadges(force){
+  loadOrderVerifyBadges(force);
+  loadShipmentBadges(force);
 }
 function orderBadges(o){
   const s=o.st?.status||'quoted';
@@ -89,12 +108,12 @@ function orderBadges(o){
 }
 /* 訂單列的驗收單／客訴徽章（資料來自 ORDER_VSUM，非同步載入後重繪） */
 let ORDER_VSUM=null;
-async function loadOrderVerifyBadges(){
+async function loadOrderVerifyBadges(force){
   try{
     if(!AUTH_TOKEN) return;
     const [lf,gv]=await Promise.all([
-      apiCall({action:'listVerifyForms', token:AUTH_TOKEN, filters:{}}).catch(()=>({})),
-      apiCall({action:'getVerifications', token:AUTH_TOKEN, filters:{}}).catch(()=>({}))
+      readCall({action:'listVerifyForms', token:AUTH_TOKEN, filters:{}}, force).catch(()=>({})),
+      readCall({action:'getVerifications', token:AUTH_TOKEN, filters:{}}, force).catch(()=>({}))
     ]);
     ORDER_VSUM={ forms:(lf&&lf.summary)||{}, reps:(gv&&gv.summary)||{}, repList:(gv&&gv.records)||[] };
     renderOrders();
@@ -365,10 +384,10 @@ async function shpDelRow(btn){
   finally{ btn.disabled=false; btn.textContent='刪除'; _busy.shpDel=false; }
 }
 /* 訂單列「分批×N」徽章：試打不帶 quote_no 的 listShipments，後端若回全部就能顯示；不支援就靜默略過 */
-async function loadShipmentBadges(){
+async function loadShipmentBadges(force){
   try{
     if(!AUTH_TOKEN) return;
-    const d=await apiCall({ action:'listShipments', token:AUTH_TOKEN }).catch(()=>null);
+    const d=await readCall({ action:'listShipments', token:AUTH_TOKEN }, force).catch(()=>null);
     if(!d||!d.ok) return;
     const arr=d.shipments||d.list||[];
     if(!Array.isArray(arr)) return;
@@ -549,3 +568,6 @@ function exportReport(){
   setTimeout(()=>URL.revokeObjectURL(a.href),3000);
 }
 
+/* 寫入類動作清掉讀取快取時，訂單頁的衍生資料也一併歸零，
+   免得下一次進來先畫出「存檔前」的舊列表。 */
+onCacheClear(function(){ ORDERS_CACHE=null; ORDER_VSUM=null; SHP_SUM=null; });

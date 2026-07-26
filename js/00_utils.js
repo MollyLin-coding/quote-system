@@ -21,6 +21,69 @@ function runHooks(name, arg){
   }
 }
 
+/* ---- 讀取快取（頁面之間切換秒開）--------------------------------
+   實測（2026-07-26）：後端每被叫一次固定要 2.5 秒起跳，連「什麼都不做」的
+   空請求也一樣，冷啟動更要 12 秒。也就是說慢的不是資料量，是「叫了幾次」。
+   這裡把「純讀取」的回應在記憶體裡放 90 秒：
+     ・切回同一頁 → 直接用記憶體那份，0 秒。
+     ・兩個頁面要同一份資料（訂單追蹤與驗收管理都要驗收資料）→ 只打一次。
+     ・同一份同時被要兩次（預抓撞上點擊）→ 共用同一個請求，不會打兩次。
+     ・任何「寫入類」動作（存單／改進度／刪除…）一律整包清掉，不會看到舊資料。
+   ⚠ 只放在記憶體（重新整理瀏覽器就沒了），且絕不存 token。
+   ---------------------------------------------------------------- */
+const RC_TTL_MS = 90000;
+/* 白名單：只有這些 action 算「純讀取」。沒列到的一律當成寫入（寧可多清一次快取）。 */
+const RC_READ_ACTIONS = ['getQuotes','getQuoteById','getCompanyData','getOrderStatusList',
+  'listQuotePdfs','listShipments','listCustomQuotes','listCalendarItems','getChangeLog',
+  'getOwnbrandProducts','getOwnbrandTiers','getConsignCustomers','getConsignInventory',
+  'getConsignLedger','getConsignMonthly','getVerifications','listVerifyForms',
+  'getTodayDigest','verifyHeaders'];
+const RC_STORE = {};      // key -> {at, data}
+const RC_INFLIGHT = {};   // key -> Promise（同一份資料同時被要時共用）
+const RC_RESETS = [];     // 各模組登記「快取被清掉時，我的衍生資料也要歸零」
+function rcIsRead(action){ return RC_READ_ACTIONS.indexOf(String(action||'')) >= 0; }
+function rcKey(payload){
+  const q = {};
+  Object.keys(payload||{}).sort().forEach(k=>{ if(k!=='token') q[k] = payload[k]; });
+  return JSON.stringify(q);
+}
+function rcPeek(payload){ return RC_STORE[rcKey(payload)] || null; }        // 不管多舊，有就給
+function rcFresh(payload, ttl){
+  const e = rcPeek(payload);
+  return !!e && (Date.now() - e.at) < (ttl == null ? RC_TTL_MS : ttl);
+}
+function onCacheClear(fn){ RC_RESETS.push(fn); }
+function rcClear(){
+  Object.keys(RC_STORE).forEach(k => delete RC_STORE[k]);
+  for(let i=0;i<RC_RESETS.length;i++){
+    try{ RC_RESETS[i](); }catch(e){ console.error('[cache] reset 失敗：', e); }
+  }
+}
+/* 讀取用的 apiCall 包裝：90 秒內同一份資料直接給快取，force=true 一定重打 */
+async function readCall(payload, force){
+  const k = rcKey(payload);
+  if(!force){
+    const e = RC_STORE[k];
+    if(e && (Date.now() - e.at) < RC_TTL_MS) return e.data;
+    if(RC_INFLIGHT[k]) return RC_INFLIGHT[k];
+  }
+  const p = apiCall(payload).then(d => {
+    delete RC_INFLIGHT[k];
+    if(d && d.ok !== false) RC_STORE[k] = { at: Date.now(), data: d };   // 只快取成功的
+    return d;
+  }, e => { delete RC_INFLIGHT[k]; throw e; });
+  RC_INFLIGHT[k] = p;
+  return p;
+}
+/* 「幾分鐘前」小標（給頁面顯示資料新舊用） */
+function rcAgeText(at){
+  if(!at) return '';
+  const m = Math.floor((Date.now() - at) / 60000);
+  if(m < 1) return '剛剛更新';
+  if(m < 60) return m + ' 分鐘前的資料';
+  return Math.floor(m/60) + ' 小時前的資料';
+}
+
 /* ---- 清單分頁 ------------------------------------------------
    後端 v34 起 list 類 action 吃選填的 limit（只回最近 N 筆）。
    預設只抓最近 LIST_LIMIT 筆，單量變大時才不會愈開愈慢；

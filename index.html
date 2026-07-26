@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260726d">
-<script src="js/00_qrcode.js?v=20260726d"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260726e">
+<script src="js/00_qrcode.js?v=20260726e"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -577,8 +577,8 @@
   <div class="page" id="page-records">
     <div class="rec-wrap">
       <div class="rec-toolbar">
-        <input class="rec-search" id="rec-search" placeholder="搜尋客戶名稱或單號…" onkeydown="if(event.key==='Enter')loadRecords()">
-        <select class="rec-filter" id="rec-type-filter" onchange="loadRecords()">
+        <input class="rec-search" id="rec-search" placeholder="搜尋客戶名稱或單號…" oninput="renderRecords()" onkeydown="if(event.key==='Enter')renderRecords()">
+        <select class="rec-filter" id="rec-type-filter" onchange="renderRecords()">
           <option value="">全部類型</option>
           <option value="bottle">瓶裝酒代工</option>
           <option value="banquet">宴會酒水服務</option>
@@ -586,7 +586,8 @@
           <option value="ownlabel">公版酒客製標</option>
           <option value="consign">寄售月結</option>
         </select>
-        <button class="btn btn-dk" onclick="loadRecords()"><i class="ti ti-search"></i>查詢</button>
+        <button class="btn btn-dk" onclick="renderRecords()"><i class="ti ti-search"></i>查詢</button>
+        <button class="rec-act-btn" onclick="loadRecords(true)"><i class="ti ti-refresh"></i> 重新整理</button>
       </div>
       <div class="tbl-scroll">
       <table class="rec-table mcard">
@@ -603,7 +604,10 @@
 
   <div class="page" id="page-orders">
     <div class="rec-wrap">
-      <div id="ord-filters" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center">
+        <div id="ord-filters" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+        <button class="rec-act-btn" onclick="loadOrders(true)"><i class="ti ti-refresh"></i> 重新整理</button>
+      </div>
       <div class="tbl-scroll">
       <table class="rec-table mcard">
         <thead><tr><th>單號 / 客戶</th><th>進度</th><th style="text-align:right">總計</th><th style="text-align:center">出貨日</th><th>提醒</th><th>操作</th></tr></thead>
@@ -652,6 +656,7 @@
           <button class="fchip" data-v="week" onclick="setCalView('week')">週</button>
           <button class="fchip" data-v="list" onclick="setCalView('list')">清單</button>
         </span>
+        <button class="rec-act-btn" onclick="loadCalendar(true)"><i class="ti ti-refresh"></i> 重新整理</button>
         <span style="width:8px"></span>
         <button class="fchip" id="gcal-sync-btn" onclick="syncGCal()" title="把訂單日程與備忘推送到 Google 日曆「南坡萬」">⟳ 同步 Google 日曆</button>
         <span id="cal-filters" style="display:inline-flex;gap:6px;flex-wrap:wrap">
@@ -970,18 +975,18 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260726d"></script>
-<script src="js/01_quote_form.js?v=20260726d"></script>
-<script src="js/01b_quote_preview.js?v=20260726d"></script>
-<script src="js/02_core_api.js?v=20260726d"></script>
-<script src="js/03_quote_custom.js?v=20260726d"></script>
-<script src="js/04_company.js?v=20260726d"></script>
-<script src="js/05_orders.js?v=20260726d"></script>
-<script src="js/06_verify_mgmt.js?v=20260726d"></script>
-<script src="js/07_calendar.js?v=20260726d"></script>
-<script src="js/08_ownbrand.js?v=20260726d"></script>
-<script src="js/09_verify_form.js?v=20260726d"></script>
-<script src="js/10_today.js?v=20260726d"></script>
-<script src="js/99_boot.js?v=20260726d"></script>
+<script src="js/00_utils.js?v=20260726e"></script>
+<script src="js/01_quote_form.js?v=20260726e"></script>
+<script src="js/01b_quote_preview.js?v=20260726e"></script>
+<script src="js/02_core_api.js?v=20260726e"></script>
+<script src="js/03_quote_custom.js?v=20260726e"></script>
+<script src="js/04_company.js?v=20260726e"></script>
+<script src="js/05_orders.js?v=20260726e"></script>
+<script src="js/06_verify_mgmt.js?v=20260726e"></script>
+<script src="js/07_calendar.js?v=20260726e"></script>
+<script src="js/08_ownbrand.js?v=20260726e"></script>
+<script src="js/09_verify_form.js?v=20260726e"></script>
+<script src="js/10_today.js?v=20260726e"></script>
+<script src="js/99_boot.js?v=20260726e"></script>
 </body>
 </html>

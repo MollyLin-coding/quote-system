@@ -18,6 +18,14 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
         { item_id: 'c3', kind: 'memo', date: '2026-07-28', title: '舊資料自訂', category: '報稅季', all_day: 'Y', done: 'N' },
         { item_id: 'c4', kind: 'recur', recur_json: '{"freq":"weekly","weekday":2}', title: '每週盤點', category: '出貨物流', all_day: 'Y', done: 'N' },
       ]};
+      // 行事曆現在會與訂單資料平行載入（不再是「有 ORDERS_CACHE 就不抓」），
+      // 所以這裡要回傳等價的訂單資料，讓 ORDERS_CACHE 重建後仍是同一張出貨單。
+      if (p.action === 'getQuotes') return { ok: true, quotes: [
+        { quoteNo:'O1', quoteType:'bottle', clientName:'客戶A', quoteDate:'2026-07-01', grandTotal:1, status:'', expiryDate:'' }
+      ]};
+      if (p.action === 'getOrderStatusList') return { ok: true, orders: [
+        { quote_no:'O1', status:'deposit', ship_date_est:'2026-07-28' }
+      ]};
       return { ok: true, quotes: [], orders: [] };
     };
     ORDERS_CACHE = [{ no: 'O1', client: '客戶A', typeKey: 'bottle', total: 1, quoteDate: '2026-07-01',

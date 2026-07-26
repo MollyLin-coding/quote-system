@@ -34,9 +34,13 @@ async function apiCall(payload){
     AUTH_TOKEN = null;
     sessionStorage.removeItem('quote_token');
     if(typeof tdCacheClear==='function') tdCacheClear();   // 今日待辦的離線快取一併清掉，別讓下一個人看到上一個人的資料
+    rcClear();                                             // 讀取快取也整包清掉，同理
     showLogin();
     throw new Error('登入已過期，請重新登入');
   }
+  // 只要不是「純讀取」（存單／改進度／刪除／登入…），一律把讀取快取清掉，
+  // 下一次進任何頁面都會拿到最新資料，不會出現「明明存好了卻還顯示舊的」。
+  if(!rcIsRead(payload && payload.action)) rcClear();
   return data;
 }
 
@@ -114,7 +118,11 @@ function gotoPage(p){
   if(p==='today'){ document.getElementById('nav-today').classList.add('on'); loadToday().catch(()=>{}); }
   if(p==='records'){ document.getElementById('nav-records').classList.add('on'); loadRecords(); }
   if(p==='orders'){ document.getElementById('nav-orders').classList.add('on'); loadOrders().catch(()=>{}); }
-  if(p==='report'){ document.getElementById('nav-report').classList.add('on'); loadOrders().then(renderReport).catch(()=>{}); }
+  if(p==='report'){
+    document.getElementById('nav-report').classList.add('on');
+    if(ORDERS_CACHE) renderReport();                       // 有現成資料就先畫，不用等後端
+    loadOrders().then(renderReport).catch(()=>{});
+  }
   if(p==='verify'){ document.getElementById('nav-verify').classList.add('on'); loadVerifyMgmt().catch(()=>{}); }
   if(p==='cal'){ document.getElementById('nav-cal').classList.add('on'); loadCalendar().catch(()=>{}); }
   if(p==='consign'){ document.getElementById('nav-consign').classList.add('on'); initConsignPage().catch(()=>{}); }
@@ -352,20 +360,41 @@ function downloadBase64_(base64, mime, filename){
   setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
 }
 /* ---- 載入報價記錄列表 ---- */
-async function loadRecords(){
+/* 報價紀錄
+   ・清單只跟後端要「全部類型」一次（快取共用給訂單追蹤／今日待辦），
+     類型與關鍵字都改成前端篩，所以打字搜尋、換類型都是 0 秒。
+   ・有快取先秒開舊資料，背景再更新（loadRecords(true)＝強制重抓）。 */
+let REC_QUOTES = null;
+function recPayload(){ return withLimit({ action:'getQuotes', token:AUTH_TOKEN, filters:{} }); }
+async function loadRecords(force){
   const body=document.getElementById('rec-body');
-  body.innerHTML=sklTableRows(6,5);
+  const P=recPayload();
+  const hit=rcPeek(P);
+  if(hit && hit.data && !force){ REC_QUOTES=hit.data.quotes||[]; renderRecords(); }
+  else body.innerHTML=sklTableRows(6,5);
+  if(!force && rcFresh(P)) return;                        // 90 秒內剛抓過就不重打
   try {
-    const filters={};
-    const kw=document.getElementById('rec-search').value.trim();
-    const tf=document.getElementById('rec-type-filter').value;
-    if(tf) filters.quoteType=tf;
-    // 關鍵字改前端比對，讓「單號」也能搜到（後端只以報價單類型過濾）
-    const data=await apiCall(withLimit({ action:'getQuotes', token:AUTH_TOKEN, filters }));
-    if(!data.ok){ body.innerHTML=`<tr><td colspan="6" class="rec-empty">${data.error||'載入失敗'}</td></tr>`; return; }
-    let quotes=(data.quotes||[]).filter(q=>q.status!=='已刪除');
+    const data=await readCall(P, force);
+    if(!data.ok){
+      if(!hit) body.innerHTML=`<tr><td colspan="6" class="rec-empty">${data.error||'載入失敗'}</td></tr>`;
+      return;
+    }
+    REC_QUOTES=data.quotes||[];
+    renderRecords();
+  } catch(e){
+    if(!hit) body.innerHTML=`<tr><td colspan="6" class="rec-empty">${e.message||'載入失敗'}</td></tr>`;
+  }
+}
+function renderRecords(){
+  const body=document.getElementById('rec-body');
+  if(!body || REC_QUOTES==null) return;
+  {
+    const kwEl=document.getElementById('rec-search'), tfEl=document.getElementById('rec-type-filter');
+    const kw=kwEl?kwEl.value.trim():''; const tf=tfEl?tfEl.value:'';
+    let quotes=REC_QUOTES.filter(q=>q.status!=='已刪除');
+    if(tf) quotes=quotes.filter(q=>q.quoteType===tf);
     if(kw){ const k=kw.toLowerCase(); quotes=quotes.filter(q=> String(q.clientName||'').toLowerCase().includes(k) || String(q.quoteNo||'').toLowerCase().includes(k)); }
-    if(quotes.length===0){ body.innerHTML='<tr><td colspan="6" class="rec-empty">尚無報價單記錄</td></tr>'; return; }
+    if(quotes.length===0){ body.innerHTML='<tr><td colspan="6" class="rec-empty">'+(REC_QUOTES.length?'沒有符合條件的報價單':'尚無報價單記錄')+'</td></tr>'; return; }
     body.innerHTML=quotes.map(q=>{
       const typeBadge=q.quoteType==='bottle'
         ? '<span class="rec-badge bottle">瓶裝酒代工</span>'
@@ -389,9 +418,7 @@ async function loadRecords(){
           <button class="rec-act-btn del" onclick="deleteRecord('${q.quoteNo}','${(q.clientName||'').replace(/'/g,'')}')">刪除</button>
         </td>
       </tr>`;
-    }).join('') + (listMaybeMore((data.quotes||[]).length) ? moreRowHtml(6) : '');
-  } catch(e){
-    body.innerHTML=`<tr><td colspan="6" class="rec-empty">${e.message||'載入失敗'}</td></tr>`;
+    }).join('') + (listMaybeMore(REC_QUOTES.length) ? moreRowHtml(6) : '');
   }
 }
 

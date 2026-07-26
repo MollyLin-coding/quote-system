@@ -7,8 +7,8 @@ async function loadOwnbrandData(force){
   if(OWNBRAND_PRODUCTS && OWNBRAND_TIERS && !force) return;
   if(!AUTH_TOKEN) throw new Error('尚未登入');
   const [p,t]=await Promise.all([
-    apiCall({action:'getOwnbrandProducts', token:AUTH_TOKEN}),
-    apiCall({action:'getOwnbrandTiers', token:AUTH_TOKEN})
+    readCall({action:'getOwnbrandProducts', token:AUTH_TOKEN}, force),
+    readCall({action:'getOwnbrandTiers', token:AUTH_TOKEN}, force)
   ]);
   if(!p.ok) throw new Error(p.error||'載入公版酒失敗');
   OWNBRAND_PRODUCTS=(p.products||[]).filter(x=>String(x.active||'Y').toUpperCase()!=='N');
@@ -104,14 +104,17 @@ function applyOwnbrandTiers(){
 let CS_CUSTOMERS=[], CS_DISCOUNTS=[], CS_CUR='', CS_INV=[], CS_MONTHLY=null;
 const CS_TYPE_LABEL={in:'鋪貨/補貨',out:'銷售',return:'退貨',adjust:'盤點調整',deposit_refund:'退保證金'};
 
-async function initConsignPage(){
-  try{ await loadOwnbrandData(); }catch(e){}
-  await loadConsignCustomers();
+async function initConsignPage(force){
+  // 公版酒資料與寄售客戶同時要（以前是一個等一個，等於兩倍時間）
+  await Promise.all([
+    loadOwnbrandData(force).catch(()=>{}),
+    loadConsignCustomers(force)
+  ]);
 }
 async function loadConsignCustomers(force){
   const sel=document.getElementById('cs-customer'); if(!sel) return;
   try{
-    const d=await apiCall({action:'getConsignCustomers', token:AUTH_TOKEN});
+    const d=await readCall({action:'getConsignCustomers', token:AUTH_TOKEN}, force);
     if(!d.ok) throw new Error(d.error||'載入寄售客戶失敗');
     CS_CUSTOMERS=d.customers||[]; CS_DISCOUNTS=d.discounts||[];
   }catch(e){ toast(e.message||'載入寄售客戶失敗','err'); return; }
@@ -404,8 +407,31 @@ function consignMonthlyToQuote(){
 
 async function initV2(){
   gotoPage('today');   // 登入後預設落地頁＝「今日待辦」（原本的行事曆保留，只是不再是預設）
+  prefetchCommon();    // 你在看今日待辦時，背景先把其他頁的資料偷偷抓好
   try{ await loadCompanyData(); }catch(e){ /* 靜默：未登入或後端未就緒不擋主流程 */ }
 }
+
+/* ---- 登入後背景預抓 --------------------------------------------
+   後端每叫一次都要 2.5 秒，所以與其等你點進去才抓，不如趁你在看今日待辦時先抓好。
+   只放進讀取快取、完全不動畫面；等你點過去時資料已經在手上，是 0 秒。
+   刻意錯開時間分兩批：同時打太多支反而會被 Google 排隊拖慢。
+   ---------------------------------------------------------------- */
+let PREFETCH_DONE = false;
+function prefetchCommon(){
+  if(PREFETCH_DONE || !AUTH_TOKEN) return;
+  PREFETCH_DONE = true;
+  const warm = p => { if(!rcPeek(p)) readCall(p).catch(()=>{}); };
+  setTimeout(()=>{                       // 第一批：訂單追蹤／月報表／報價紀錄共用的三支
+    if(!AUTH_TOKEN) return;
+    ordPayloads().forEach(warm);
+  }, 2500);
+  setTimeout(()=>{                       // 第二批：驗收管理與訂單徽章共用的兩支
+    if(!AUTH_TOKEN) return;
+    warm({action:'getVerifications', token:AUTH_TOKEN, filters:{}});
+    warm({action:'listVerifyForms', token:AUTH_TOKEN, filters:{}});
+  }, 6000);
+}
+onCacheClear(function(){ OWNBRAND_PRODUCTS=null; OWNBRAND_TIERS=null; CONSIGN_TERMS=null; });
 
 /* resetAll 後同步清掉公司選擇與發票抬頭 */
 onHook('afterReset', function(){
