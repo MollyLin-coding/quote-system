@@ -460,3 +460,25 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
   .td-amt{margin-left:0}
   .td-alldone{padding:36px 14px}
 }
+
+/* ---- 客戶管理（2026-07-26 新增）---- */
+.cus-bar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+#cus-stats .rpt-stats{grid-template-columns:repeat(4,1fr)}
+.cus-detail{margin-top:14px;border-color:#DCCBAA}
+.cus-detail .ch-opt{font-style:normal;display:flex;gap:6px;flex-wrap:wrap}
+.cus-sec{font-size:12px;font-weight:700;color:var(--ink);letter-spacing:.5px;margin:20px 0 8px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.cus-sec:first-of-type{margin-top:16px}
+.cus-hint{font-size:10.5px;color:var(--hint);font-weight:400}
+.cus-kvs{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 18px}
+.cus-kv{border-bottom:1px dashed #E8E5DD;padding:6px 0;display:flex;gap:10px;align-items:baseline}
+.cus-kv .k{flex:0 0 84px;font-size:11px;color:#A8A69C}
+.cus-kv .v{font-size:12.5px;color:var(--ink);flex:1;word-break:break-all;display:flex;gap:6px;align-items:baseline}
+.cus-copy{background:none;border:none;color:#C4C2B8;cursor:pointer;padding:0 2px;font-size:12px;line-height:1}
+.cus-copy:hover{color:var(--gold)}
+.rec-table tr.cus-on{background:var(--gold-pale)}
+@media (max-width:860px){
+  #cus-stats .rpt-stats{grid-template-columns:1fr 1fr}
+  .cus-kvs{grid-template-columns:1fr}
+  .cus-detail .ch{flex-wrap:wrap}
+  .cus-detail .ch-opt{margin-left:0;width:100%}
+}

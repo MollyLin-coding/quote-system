@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260726g">
-<script src="js/00_qrcode.js?v=20260726g"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260726h">
+<script src="js/00_qrcode.js?v=20260726h"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -57,7 +57,6 @@
     <button class="nb" id="nav-cal" onclick="gotoPage('cal')"><i class="ti ti-calendar"></i>工作行事曆</button>
     <button class="nb" id="nav-orders" onclick="gotoPage('orders')"><i class="ti ti-truck-delivery"></i>訂單追蹤</button>
     <button class="nb" id="nav-report" onclick="gotoPage('report')"><i class="ti ti-report-money"></i>月報表</button>
-    <button class="nb" id="nav-verify" onclick="gotoPage('verify')"><i class="ti ti-clipboard-check"></i>出貨驗收</button>
     <button class="nb" id="nav-consign" onclick="gotoPage('consign')"><i class="ti ti-building-warehouse"></i>寄售管理</button>
     <button class="nb parent-active" id="nav-quote" onclick="toggleQuoteMenu()"><i class="ti ti-file-text"></i>報價單<i class="ti ti-chevron-down qm-chev rot" id="qm-chev"></i></button>
     <div class="qm-sub open" id="qm-sub">
@@ -66,6 +65,8 @@
       <button class="nb nb-sub" id="nav-records" onclick="gotoPage('records')"><i class="ti ti-files"></i>報價紀錄</button>
       <button class="nb nb-sub" onclick="previewCurrent()"><i class="ti ti-eye"></i>預覽報價單</button>
     </div>
+    <button class="nb" id="nav-verify" onclick="gotoPage('verify')"><i class="ti ti-clipboard-check"></i>出貨驗收</button>
+    <button class="nb" id="nav-customer" onclick="gotoPage('customer')"><i class="ti ti-users"></i>客戶管理</button>
   </div>
   <div class="sb-foot">
     <button class="nb" onclick="doLogout()" style="margin-bottom:12px"><i class="ti ti-logout"></i>登出</button>
@@ -640,6 +641,31 @@
     </div>
   </div>
 
+  <div class="page" id="page-customer">
+    <div class="rec-wrap">
+      <div class="cus-bar">
+        <input class="rec-search" id="cus-search" placeholder="搜尋客戶名稱／聯絡人／電話／統編…" oninput="cusOnSearch()">
+        <select class="rec-filter" id="cus-sort" onchange="cusOnSort()">
+          <option value="last">最後往來日新→舊</option>
+          <option value="amount">成交金額高→低</option>
+          <option value="unpaid">未收尾款高→低</option>
+          <option value="count">報價筆數多→少</option>
+          <option value="name">客戶名稱</option>
+        </select>
+        <button class="rec-act-btn" onclick="loadCustomers(true)"><i class="ti ti-refresh"></i> 重新整理</button>
+      </div>
+      <div id="cus-stats"></div>
+      <div id="cus-detail"></div>
+      <div class="tbl-scroll" style="margin-top:12px">
+      <table class="rec-table mcard">
+        <thead><tr><th>客戶</th><th>聯絡人 / 電話</th><th style="text-align:center">報價</th><th style="text-align:right">成交金額</th><th style="text-align:right">未收尾款</th><th style="text-align:center">最後往來</th><th>操作</th></tr></thead>
+        <tbody id="cus-body"></tbody>
+      </table>
+      </div>
+      <div style="font-size:11px;color:#A8A69C;margin-top:8px">※ 客戶資料自動從既有報價單彙整（以客戶名稱歸戶）；聯絡資訊取最近一張單的內容。</div>
+    </div>
+  </div>
+
   <div class="page" id="page-today">
     <div class="rec-wrap">
       <div class="td-bar">
@@ -979,18 +1005,19 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260726g"></script>
-<script src="js/01_quote_form.js?v=20260726g"></script>
-<script src="js/01b_quote_preview.js?v=20260726g"></script>
-<script src="js/02_core_api.js?v=20260726g"></script>
-<script src="js/03_quote_custom.js?v=20260726g"></script>
-<script src="js/04_company.js?v=20260726g"></script>
-<script src="js/05_orders.js?v=20260726g"></script>
-<script src="js/06_verify_mgmt.js?v=20260726g"></script>
-<script src="js/07_calendar.js?v=20260726g"></script>
-<script src="js/08_ownbrand.js?v=20260726g"></script>
-<script src="js/09_verify_form.js?v=20260726g"></script>
-<script src="js/10_today.js?v=20260726g"></script>
-<script src="js/99_boot.js?v=20260726g"></script>
+<script src="js/00_utils.js?v=20260726h"></script>
+<script src="js/01_quote_form.js?v=20260726h"></script>
+<script src="js/01b_quote_preview.js?v=20260726h"></script>
+<script src="js/02_core_api.js?v=20260726h"></script>
+<script src="js/03_quote_custom.js?v=20260726h"></script>
+<script src="js/04_company.js?v=20260726h"></script>
+<script src="js/05_orders.js?v=20260726h"></script>
+<script src="js/06_verify_mgmt.js?v=20260726h"></script>
+<script src="js/07_calendar.js?v=20260726h"></script>
+<script src="js/08_ownbrand.js?v=20260726h"></script>
+<script src="js/09_verify_form.js?v=20260726h"></script>
+<script src="js/10_today.js?v=20260726h"></script>
+<script src="js/11_customers.js?v=20260726h"></script>
+<script src="js/99_boot.js?v=20260726h"></script>
 </body>
 </html>
