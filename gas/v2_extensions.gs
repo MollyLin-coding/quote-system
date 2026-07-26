@@ -1333,3 +1333,47 @@ function seedOrderShipDate_(quoteNo, shipDate) {
   handleUpdateOrderStatus_({ quote_no: no, fields: { status: 'quoted', ship_date_est: ymd } });
   return { ok: true, mode: 'created', ship_date_est: ymd };
 }
+
+
+/* ============================================================
+   v37：batch —— 一次請求跑完多個「讀取類」action
+   實測 2026-07-26：這支 Web App 每被呼叫一次，光往返固定就要 2.5 秒
+   （連什麼都不做的空請求也一樣），所以前端一頁要三～六份資料時，
+   真正的成本是「打了幾次」。合併成一次可以省掉重複的往返。
+   ・只接受白名單內的讀取 action（不含 batch 自己，避免遞迴）。
+   ・每個子呼叫照樣各自驗 token，權限不會因為合併而變鬆。
+   ・任何一個子呼叫出錯只會讓那一格回 ok:false，不影響其他格。
+   ・回傳 { ok:true, results:[...] }，順序與送進來的 calls 完全相同。
+   ============================================================ */
+var BATCH_MAX_ = 8;
+var BATCH_ALLOWED_ = ['verifyHeaders', 'getQuotes', 'getQuoteById', 'getCompanyData',
+  'getOrderStatusList', 'listQuotePdfs', 'listShipments', 'listCustomQuotes',
+  'listCalendarItems', 'getChangeLog', 'getOwnbrandProducts', 'getOwnbrandTiers',
+  'getConsignCustomers', 'getConsignInventory', 'getConsignLedger', 'getConsignMonthly',
+  'getVerifications', 'listVerifyForms', 'getTodayDigest'];
+
+function handleBatch_(params) {
+  var calls = (params && params.calls) || [];
+  if (!calls.length) return { ok: true, results: [] };
+  if (calls.length > BATCH_MAX_) return { ok: false, error: 'batch 一次最多 ' + BATCH_MAX_ + ' 個' };
+  var results = [];
+  for (var i = 0; i < calls.length; i++) {
+    var c = calls[i] || {};
+    var act = String(c.action || '');
+    if (BATCH_ALLOWED_.indexOf(act) < 0) {
+      results.push({ ok: false, error: 'batch 不接受這個 action：' + act });
+      continue;
+    }
+    var sub = {};
+    for (var k in c) { if (Object.prototype.hasOwnProperty.call(c, k)) sub[k] = c[k]; }
+    if (sub.token === undefined) sub.token = params.token;
+    try {
+      var out = handleRequest_({ postData: { contents: JSON.stringify(sub) } });
+      var txt = (out && typeof out.getContent === 'function') ? out.getContent() : String(out);
+      results.push(JSON.parse(txt));
+    } catch (err) {
+      results.push({ ok: false, error: String((err && err.message) || err) });
+    }
+  }
+  return { ok: true, results: results };
+}

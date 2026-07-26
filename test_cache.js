@@ -37,9 +37,12 @@ function respond(action){
   const check = (name, cond) => results.push([cond ? 'PASS' : 'FAIL', name]);
   const isNoise = t => /Failed to load resource|ERR_TUNNEL|ERR_NAME_NOT_RESOLVED|favicon/i.test(t);
 
-  let LOG = [];                                     // [{action, at}]
+  let LOG = [];                                     // [{action, at}]  一筆＝一個 HTTP 請求
+  let SUB = [];                                     // batch 裡面的子 action
+  let BATCH_BROKEN = false;                         // 模擬「後端還是舊版、不認得 batch」
   const countOf = a => LOG.filter(x => x.action === a).length;
-  const reset = () => { LOG = []; };
+  const gotData = a => LOG.filter(x => x.action === a).length + SUB.filter(x => x === a).length;
+  const reset = () => { LOG = []; SUB = []; };
 
   const newPage = async () => {
     const p = await browser.newPage();
@@ -50,11 +53,19 @@ function respond(action){
       try { body = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
       LOG.push({ action: body.action, at: Date.now() });
       await new Promise(r => setTimeout(r, 30));    // 假裝後端要一點時間
+      let payload;
+      if (body.action === 'batch') {
+        if (BATCH_BROKEN) payload = { ok:false, error:'unknown action: batch' };
+        else {
+          (body.calls || []).forEach(c => SUB.push(c.action));
+          payload = { ok:true, results:(body.calls||[]).map(c => respond(c.action)) };
+        }
+      } else payload = respond(body.action);
       await route.fulfill({
         status: 200,
         headers: { 'Access-Control-Allow-Origin': '*' },
         contentType: 'application/json',
-        body: JSON.stringify(respond(body.action))
+        body: JSON.stringify(payload)
       });
     });
     await p.goto('http://localhost:8899/index.html');
@@ -177,7 +188,12 @@ function respond(action){
   await p11.route('**/script.google.com/**', async route => {
     let body={}; try{ body=JSON.parse(route.request().postData()||'{}'); }catch(e){}
     LOG.push({action:body.action, at:Date.now()});
-    await route.fulfill({status:200, headers:{'Access-Control-Allow-Origin':'*'}, contentType:'application/json', body:JSON.stringify(respond(body.action))});
+    let payload;
+    if (body.action === 'batch') {
+      if (BATCH_BROKEN) payload = { ok:false, error:'unknown action: batch' };
+      else { (body.calls||[]).forEach(c => SUB.push(c.action)); payload = { ok:true, results:(body.calls||[]).map(c => respond(c.action)) }; }
+    } else payload = respond(body.action);
+    await route.fulfill({status:200, headers:{'Access-Control-Allow-Origin':'*'}, contentType:'application/json', body:JSON.stringify(payload)});
   });
   await p11.goto('http://localhost:8899/index.html');
   reset();
@@ -188,12 +204,28 @@ function respond(action){
   });
   check('登入當下不會馬上狂打（只有今日待辦與公司檔）', countOf('getQuotes')===0);
   await p11.waitForTimeout(3200);
-  check('2.5 秒後背景預抓三支主資料', countOf('getQuotes')===1 && countOf('listCustomQuotes')===1 && countOf('getOrderStatusList')===1);
+  check('2.5 秒後背景預抓：合併成「一個」HTTP 請求', countOf('batch')===1 && countOf('getQuotes')===0);
+  check('預抓一次拿到六份資料', ['getQuotes','listCustomQuotes','getOrderStatusList','getVerifications','listVerifyForms','listShipments'].every(a => SUB.includes(a)));
   reset();
   await p11.evaluate(async () => { gotoPage('orders'); await loadOrders(); });
   await p11.waitForTimeout(200);
-  check('預抓過後點進訂單追蹤：0 個新請求（秒開）', countOf('getQuotes')===0 && countOf('getOrderStatusList')===0);
+  check('預抓過後點進訂單追蹤：0 個新請求（秒開）', LOG.length===0);
   check('預抓過後訂單列表直接有資料', await p11.evaluate(() => ORDERS_CACHE && ORDERS_CACHE.length===3));
+  check('預抓過後進驗收管理也不用再打', await (async()=>{ reset(); await p11.evaluate(async()=>{ gotoPage('verify'); await loadVerifyMgmt(); }); await p11.waitForTimeout(200); return LOG.length===0; })());
+
+  /* ---------- 13. 後端沒有 batch 時自動退回平行 ---------- */
+  const p13 = await newPage();
+  BATCH_BROKEN = true;
+  reset();
+  await p13.evaluate(async () => { rcClear(); await readCallMany(prefetchPayloads()); });
+  await p13.waitForTimeout(300);
+  check('後端不認得 batch：改用平行、五份資料照樣拿到', countOf('batch')===1 && gotData('getQuotes')===1 && gotData('getVerifications')===1);
+  check('後端不認得 batch：資料有進快取', await p13.evaluate(() => Object.keys(RC_STORE).length===6));
+  reset();
+  await p13.evaluate(async () => { rcClear(); await readCallMany(prefetchPayloads()); });
+  await p13.waitForTimeout(300);
+  check('試過一次失敗後就不再送 batch', countOf('batch')===0 && gotData('getQuotes')===1);
+  BATCH_BROKEN = false;
 
   /* ---------- 12. 快取不存 token ---------- */
   check('快取內容不含 token', await page.evaluate(() => JSON.stringify(RC_STORE).indexOf('test-token') < 0));

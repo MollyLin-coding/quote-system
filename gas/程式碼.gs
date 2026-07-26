@@ -292,6 +292,8 @@ function handleRequest_(e) {
     switch (action) {
       case 'verifyHeaders':
         return jsonResponse_(verifyHeadersReport_());
+      case 'batch':
+        return jsonResponse_(handleBatch_(params));
       case 'setupItemHeaders':
         return jsonResponse_({ ok: true, result: setupItemPricingColumns() });
       case 'login':

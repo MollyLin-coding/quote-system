@@ -37,7 +37,7 @@ const RC_READ_ACTIONS = ['getQuotes','getQuoteById','getCompanyData','getOrderSt
   'listQuotePdfs','listShipments','listCustomQuotes','listCalendarItems','getChangeLog',
   'getOwnbrandProducts','getOwnbrandTiers','getConsignCustomers','getConsignInventory',
   'getConsignLedger','getConsignMonthly','getVerifications','listVerifyForms',
-  'getTodayDigest','verifyHeaders'];
+  'getTodayDigest','verifyHeaders','batch'];
 const RC_STORE = {};      // key -> {at, data}
 const RC_INFLIGHT = {};   // key -> Promise（同一份資料同時被要時共用）
 const RC_RESETS = [];     // 各模組登記「快取被清掉時，我的衍生資料也要歸零」
@@ -75,6 +75,48 @@ async function readCall(payload, force){
   RC_INFLIGHT[k] = p;
   return p;
 }
+/* ---- 一次要好幾份資料：合併成一個 batch 請求（後端 v37）----------
+   實測（2026-07-26，各測 4 輪）同時要 5 份資料：
+     平行 5 支：2.9 / 3.1 / 5.4 / 12.2 秒 —— 平均 5.9 秒，偶爾會卡到 12 秒
+     合併 1 支：3.8 / 4.1 / 4.3 / 4.9 秒 —— 平均 4.3 秒，且很穩
+   3 支以下兩者差不多（batch 2.9 / 平行 3.2），所以只有「同時要 4 份以上」
+   才值得合併；畫面正在等的那幾支仍走平行（先畫出來比較重要）。
+   後端若還沒有 batch（舊版部署）→ 自動關掉、之後一律走平行，不會壞。
+   ---------------------------------------------------------------- */
+const RC_BATCH_MIN = 4;
+let BATCH_OK = true;
+async function readCallMany(payloads, force){
+  const keys = payloads.map(rcKey);
+  const isFresh = i => { const e=RC_STORE[keys[i]]; return !force && e && (Date.now()-e.at) < RC_TTL_MS; };
+  // 已經有快取的不用要；別人正在要的就等別人那一份，別重複打
+  const fresh = payloads.map((p,i)=>i).filter(i => !isFresh(i) && (force || !RC_INFLIGHT[keys[i]]));
+  if(!BATCH_OK || fresh.length < RC_BATCH_MIN) return Promise.all(payloads.map(p => readCall(p, force)));
+
+  const calls = fresh.map(i => { const c = Object.assign({}, payloads[i]); delete c.token; return c; });
+  const bp = apiCall({ action:'batch', token:AUTH_TOKEN, calls });
+  fresh.forEach((idx, n) => {                       // 這幾份「正在路上」，讓同時要的人搭同一班車
+    const one = bp.then(r => {
+      const d = (r && r.ok && r.results) ? r.results[n] : null;
+      if(!d) throw new Error('batch 沒有回這一格');
+      return d;
+    });
+    one.catch(()=>{});
+    RC_INFLIGHT[keys[idx]] = one;
+  });
+  let r = null;
+  try{ r = await bp; }catch(e){ r = null; }
+  fresh.forEach(idx => { delete RC_INFLIGHT[keys[idx]]; });
+  if(!r || !r.ok || !Array.isArray(r.results) || r.results.length !== calls.length){
+    BATCH_OK = false;                               // 後端不支援就別再試了
+    return Promise.all(payloads.map(p => readCall(p, force)));
+  }
+  fresh.forEach((idx, n) => {
+    const d = r.results[n];
+    if(d && d.ok !== false) RC_STORE[keys[idx]] = { at: Date.now(), data: d };
+  });
+  return Promise.all(payloads.map(p => readCall(p, false)));   // 這時候全在快取裡，等於直接取出
+}
+
 /* 「幾分鐘前」小標（給頁面顯示資料新舊用） */
 function rcAgeText(at){
   if(!at) return '';

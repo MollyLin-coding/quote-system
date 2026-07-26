@@ -417,19 +417,22 @@ async function initV2(){
    刻意錯開時間分兩批：同時打太多支反而會被 Google 排隊拖慢。
    ---------------------------------------------------------------- */
 let PREFETCH_DONE = false;
+function prefetchPayloads(){
+  return ordPayloads().concat([                    // 訂單追蹤／月報表／報價紀錄共用的三支
+    {action:'getVerifications', token:AUTH_TOKEN, filters:{}},   // ＋驗收管理與訂單徽章共用的兩支
+    {action:'listVerifyForms', token:AUTH_TOKEN, filters:{}},
+    {action:'listShipments', token:AUTH_TOKEN}                   // ＋訂單列的「分批×N」徽章
+  ]);
+}
 function prefetchCommon(){
   if(PREFETCH_DONE || !AUTH_TOKEN) return;
   PREFETCH_DONE = true;
-  const warm = p => { if(!rcPeek(p)) readCall(p).catch(()=>{}); };
-  setTimeout(()=>{                       // 第一批：訂單追蹤／月報表／報價紀錄共用的三支
+  setTimeout(()=>{
     if(!AUTH_TOKEN) return;
-    ordPayloads().forEach(warm);
+    // 五份一起要 → 走後端 v37 的 batch 合併成一個請求：平均比平行快，
+    // 更重要的是不會偶爾卡到十幾秒，也不會跟你當下在看的畫面搶連線。
+    readCallMany(prefetchPayloads()).catch(()=>{});
   }, 2500);
-  setTimeout(()=>{                       // 第二批：驗收管理與訂單徽章共用的兩支
-    if(!AUTH_TOKEN) return;
-    warm({action:'getVerifications', token:AUTH_TOKEN, filters:{}});
-    warm({action:'listVerifyForms', token:AUTH_TOKEN, filters:{}});
-  }, 6000);
 }
 onCacheClear(function(){ OWNBRAND_PRODUCTS=null; OWNBRAND_TIERS=null; CONSIGN_TERMS=null; });
 
