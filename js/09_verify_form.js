@@ -46,12 +46,12 @@ async function openVerifyForm(no){
     if(!q){ toast('查無此單','err'); return; }
     const items=(q.items||[]).filter(it=>it.itemType==='bottle');
     if(!items.length){ toast('這張單沒有瓶裝品項，無法產生驗收單','err'); return; }
-    let hdrLot='';
-    for(const it of items){ const m=String(it.lot||'').match(/(\d+)/); if(m){ hdrLot=m[1]; break; } }
+    /* 抬頭這欄是「客戶批號」（客戶自己的批號／貨號），跟我們自己的 LOT 是兩套編號，
+       系統裡沒有客戶批號資料，不從我方 it.lot 帶入，一律留空給人工填 */
     VERIFY_DATA={ no:q.quoteNo, client:q.clientName||'',
       rows:items.map(it=>({ name:it.name||'', lot:it.lot||'', vol:it.volume||'',
         ordered:parseFloat(it.qty)||0, mfg:'', thisShip:(parseFloat(it.qty)||0), shipped:0 })) };
-    buildVerifyModal(hdrLot);
+    buildVerifyModal('');
     document.getElementById('vf-overlay').style.display='flex';
   }catch(e){ toast(e.message||'讀取失敗','err'); }
 }
@@ -74,14 +74,14 @@ function buildVerifyModal(hdrLot){
   document.getElementById('vf-body').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
       <div class="fl"><label>客戶</label><input class="fi ro" value="${escHtml(d.client)}" readonly></div>
-      <div class="fl"><label>抬頭 Lot 號</label><input class="fi" id="vf-lot" value="${escHtml(hdrLot||'')}" placeholder="如 31"></div>
+      <div class="fl"><label>客戶批號</label><input class="fi" id="vf-lot" value="${escHtml(hdrLot||'')}" placeholder="客戶自己的批號／貨號（選填）"></div>
       <div class="fl"><label>單號</label><input class="fi ro" value="${escHtml(d.no)}" readonly></div>
       <div class="fl"><label>配送日期</label><input class="fi" type="date" id="vf-shipdate" value="${today}"></div>
       <div class="fl"><label>專案經理 PM</label><input class="fi" id="vf-shipper" placeholder="PM 姓名"></div>
       <div class="fl"><label>此次配送總箱數</label><input class="fi" type="number" min="0" id="vf-boxes" placeholder="箱數"></div>
     </div>
     <label style="display:inline-flex;align-items:center;gap:6px;margin-top:12px;font-size:12px;color:var(--fg);cursor:pointer">
-      <input type="checkbox" id="vf-showlot" onchange="toggleLotCol()"> 各品項不同批號時，顯示批號欄（預設隱藏，抬頭 Lot 仍會印）
+      <input type="checkbox" id="vf-showlot" onchange="toggleLotCol()"> 各品項不同批號時，顯示批號欄（預設隱藏，客戶批號仍會印）
     </label>
     <div style="overflow-x:auto;margin-top:12px">
       <table style="width:100%;border-collapse:collapse;font-size:12px">
@@ -270,7 +270,7 @@ table.vt tbody tr.sum td.l{color:#5f5e54;letter-spacing:2px;font-weight:700}
     <div class="hl"><img src="${VERIFY_LOGO}" alt="凱文南坡萬實業社"></div>
     <div class="hr">
       <div class="ttl">客戶驗收單${tag}</div>
-      <div class="nos">單號 <b>${escHtml(d.no)}</b><span class="sp"></span>LOT <b>${d.lot?escHtml(d.lot):'—'}</b></div>
+      <div class="nos">單號 <b>${escHtml(d.no)}</b><span class="sp"></span>客戶批號 <b>${d.lot?escHtml(d.lot):'—'}</b></div>
     </div>
   </div>
   <div class="meta">
