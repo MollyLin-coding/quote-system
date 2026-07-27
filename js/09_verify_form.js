@@ -287,10 +287,6 @@ table.vt tbody tr.sum td.l{color:#5f5e54;letter-spacing:2px;font-weight:700}
   <table class="vt"><thead><tr>${theadCols}</tr></thead><tbody>${body}${sumRow}</tbody></table>
   <div class="ft">
     <div class="fl2">
-      <div class="sign">
-        <div class="sg"><div class="lb">驗收日期</div><div class="u"></div></div>
-        <div class="sg" style="flex:1"><div class="lb">驗收人簽名</div><div class="u" style="min-width:200px"></div></div>
-      </div>
       <div class="notes">
         <div class="nh">驗收與品質說明</div>
         <div class="nb"><b>驗收回報</b>　為保障您的權益，請於收到商品後 <b>7 日內</b>掃描右側 QR Code 完成線上驗收。若逾期未填寫，將視同驗收合格。如商品有任何問題，請隨時回報，我們將第一時間為您處理。</div>
