@@ -133,7 +133,6 @@ function generateVerifyPdf(mode){
   recalcVerify();
   const d=VERIFY_DATA; if(!d) return;
   d.mode=(mode==='partial')?'partial':'full';
-  d.showLot=!!(document.getElementById('vf-showlot')&&document.getElementById('vf-showlot').checked);
   const gvl=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
   d.lot=gvl('vf-lot'); d.shipDate=gvl('vf-shipdate'); d.shipper=gvl('vf-shipper'); d.boxes=gvl('vf-boxes');
   const w=window.open('','_blank');
@@ -155,7 +154,9 @@ function saveVerifyFormRecord(d){
 function buildVerifyDocHtml(d){
   const mode=(d.mode==='partial')?'partial':'full';
   const isPartial=mode==='partial';
-  const showLot=!!d.showLot;
+  /* LOT／製造日期兩欄都是「有輸入才顯示欄位（含抬頭）」，沒人填就整欄不印 */
+  const hasLot=d.rows.some(r=>String(r.lot||'').trim()!=='');
+  const hasMfg=d.rows.some(r=>String(r.mfg||'').trim()!=='');
   const qrSvg=verifyQrSvg(verifyQrUrl(d.no,d.lot),4);
   const volMl=v=>{ if(!v) return 0; const s=String(v).toLowerCase(); let m=s.match(/([\d.]+)\s*ml/); if(m) return parseFloat(m[1])||0; m=s.match(/([\d.]+)\s*l/); if(m) return (parseFloat(m[1])||0)*1000; m=s.match(/([\d.]+)/); return m?(parseFloat(m[1])||0):0; };
   const unitOf=r=>volMl(r.vol)>=4000?'桶':'瓶';
@@ -165,17 +166,20 @@ function buildVerifyDocHtml(d){
   const tRemain=tOrd-tShip-tThis;
   const units=Array.from(new Set(d.rows.map(unitOf)));
   const tw=(units.length===1)?(' '+units[0]):'';
-  const lotTh=showLot?`<th>批號</th>`:'';
-  const lotTd=r=>showLot?`<td>${escHtml(r.lot)}</td>`:'';
-  const lotEmpty=showLot?'<td></td>':'';
+  const lotTh=hasLot?`<th style="width:10%">LOT</th>`:'';
+  const lotTd=r=>hasLot?`<td class="mut">${escHtml(r.lot)||'—'}</td>`:'';
+  const lotEmpty=hasLot?'<td></td>':'';
+  const mfgTh=hasMfg?`<th style="width:16%">製造日期</th>`:'';
+  const mfgTd=r=>hasMfg?`<td class="mut">${vfDate(r.mfg)||'—'}</td>`:'';
+  const mfgEmpty=hasMfg?'<td></td>':'';
   let body=d.rows.map(r=>{
     const u=unitOf(r);
     const remain=(parseFloat(r.ordered)||0)-(parseFloat(r.shipped)||0)-(parseFloat(r.thisShip)||0);
     if(isPartial){
       return `<tr>
       <td class="l">${escHtml(r.name)}</td>
-      <td class="mut">${vfDate(r.mfg)||'—'}</td>
       ${lotTd(r)}
+      ${mfgTd(r)}
       <td class="mut">${escHtml(r.vol)}</td>
       <td>${qty(r.thisShip,u)}</td>
       <td class="mut">${qty(r.shipped,u)}</td>
@@ -185,22 +189,22 @@ function buildVerifyDocHtml(d){
     }
     return `<tr>
       <td class="l">${escHtml(r.name)}</td>
-      <td class="mut">${vfDate(r.mfg)||'—'}</td>
       ${lotTd(r)}
+      ${mfgTd(r)}
       <td class="mut">${escHtml(r.vol)}</td>
       <td>${qty(r.thisShip,u)}</td>
     </tr>`;
   }).join('');
-  const colCount=(isPartial?7:4)+(showLot?1:0);
+  const colCount=(isPartial?6:3)+(hasLot?1:0)+(hasMfg?1:0);
   const pad=Math.max(0,VERIFY_MIN_ROWS-d.rows.length);
   const emptyCells='<td class="l">&nbsp;</td>'+'<td></td>'.repeat(colCount-1);
   for(let k=0;k<pad;k++) body+=`<tr>${emptyCells}</tr>`;
   const sumRow=isPartial
-    ? `<tr class="sum"><td class="l">合計</td><td></td>${lotEmpty}<td></td><td>${tThis}${tw}</td><td>${tShip}${tw}</td><td>${tOrd}${tw}</td><td>${tRemain>0?(tRemain+tw):0}</td></tr>`
-    : `<tr class="sum"><td class="l">合計</td><td></td>${lotEmpty}<td></td><td>${tThis}${tw}</td></tr>`;
+    ? `<tr class="sum"><td class="l">合計</td>${lotEmpty}${mfgEmpty}<td></td><td>${tThis}${tw}</td><td>${tShip}${tw}</td><td>${tOrd}${tw}</td><td>${tRemain>0?(tRemain+tw):0}</td></tr>`
+    : `<tr class="sum"><td class="l">合計</td>${lotEmpty}${mfgEmpty}<td></td><td>${tThis}${tw}</td></tr>`;
   const theadCols=isPartial
-    ? `<th class="l" style="width:24%">品項</th><th style="width:13%">製造日期</th>${lotTh}<th style="width:9%">容量</th><th>本次出貨</th><th>已出貨</th><th>訂購總數</th><th>待出貨</th>`
-    : `<th class="l" style="width:40%">品項</th><th style="width:18%">製造日期</th>${lotTh}<th style="width:14%">容量</th><th>出貨數量</th>`;
+    ? `<th class="l" style="width:24%">品項</th>${lotTh}${mfgTh}<th style="width:9%">容量</th><th>本次出貨</th><th>已出貨</th><th>訂購總數</th><th>待出貨</th>`
+    : `<th class="l" style="width:40%">品項</th>${lotTh}${mfgTh}<th style="width:14%">容量</th><th>出貨數量</th>`;
   const tag=(isPartial)?`<span class="tag">分批出貨</span>`:'';
   return `<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8"><title>驗收單_${escHtml(d.no)}</title>
 <style>
