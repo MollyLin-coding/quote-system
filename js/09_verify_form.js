@@ -29,6 +29,7 @@ function ensureVerifyOverlay(){
     <div id="vf-body"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
       <button class="btn btn-g" onclick="closeVerifyForm()">取消</button>
+      <button class="btn btn-g" onclick="previewVerifyPdf()"><i class="ti ti-eye"></i>預覽</button>
       <button class="btn btn-g" onclick="generateVerifyPdf('partial')">產生分批驗收單</button>
       <button class="btn btn-gold" onclick="generateVerifyPdf('full')"><i class="ti ti-file-download"></i>產生整批驗收單</button>
     </div>
@@ -141,6 +142,17 @@ function generateVerifyPdf(mode){
   saveVerifyFormRecord(d);
   toast('已開啟驗收單，於列印視窗選「另存為 PDF」','ok');
 }
+/* 純預覽：只是給人看排版對不對，不留底、不自動跳出列印視窗（跟「產生」的差別） */
+function previewVerifyPdf(){
+  recalcVerify();
+  const d=VERIFY_DATA; if(!d) return;
+  const gvl=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
+  const preview={ ...d, mode:'full', lot:gvl('vf-lot'), shipDate:gvl('vf-shipdate'), shipper:gvl('vf-shipper'), boxes:gvl('vf-boxes') };
+  const w=window.open('','_blank');
+  if(!w){ toast('請允許彈出視窗，才能預覽','err'); return; }
+  w.document.open(); w.document.write(buildVerifyDocHtml(preview,{preview:true})); w.document.close();
+  toast('這只是預覽，不會留底；要正式送出請按下方「產生」按鈕','ok');
+}
 /* 產生驗收單時，把這次的出貨紀錄留底到後台（fire-and-forget，失敗不擋前端） */
 function saveVerifyFormRecord(d){
   try{
@@ -151,7 +163,8 @@ function saveVerifyFormRecord(d){
   }catch(_){}
 }
 
-function buildVerifyDocHtml(d){
+function buildVerifyDocHtml(d,opts){
+  const isPreview=!!(opts&&opts.preview);
   const mode=(d.mode==='partial')?'partial':'full';
   const isPartial=mode==='partial';
   /* LOT／製造日期兩欄都是「有輸入才顯示欄位（含抬頭）」，沒人填就整欄不印 */
@@ -260,10 +273,11 @@ table.vt tbody tr.sum td.l{color:#5f5e54;letter-spacing:2px;font-weight:700}
 .qr .cap2{font-size:8px;color:#9a9689;margin-top:2px;letter-spacing:.3px}
 .pgft{margin-top:12px;padding-top:6px;border-top:.8px solid #efe7d8;display:flex;justify-content:space-between;font-size:8px;color:#b4ac9a;letter-spacing:1px}
 @media print{.noprint{display:none}}
-.noprint{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:9}
+.noprint{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:10px}
 .noprint button{background:#2b4a37;color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.noprint .pvtag{background:#9a7b33;color:#fff;font-size:11px;font-weight:700;letter-spacing:1px;padding:5px 10px;border-radius:20px}
 </style></head><body>
-<div class="noprint"><button onclick="window.print()">列印 / 另存 PDF</button></div>
+<div class="noprint">${isPreview?'<span class="pvtag">預覽・尚未留底</span>':''}<button onclick="window.print()">列印 / 另存 PDF</button></div>
 <table class="page">
 <thead><tr><td>
   <div class="hd">
@@ -297,7 +311,7 @@ table.vt tbody tr.sum td.l{color:#5f5e54;letter-spacing:2px;font-weight:700}
   </div>
 </td></tr></tbody>
 </table>
-<script>window.onload=function(){setTimeout(function(){try{window.print()}catch(e){}},350)}<\/script>
+${isPreview?'':'<script>window.onload=function(){setTimeout(function(){try{window.print()}catch(e){}},350)}<\/script>'}
 </body></html>`;
 }
 
