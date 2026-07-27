@@ -89,6 +89,7 @@ function buildVerifyModal(hdrLot){
       <div class="fl"><label>配送日期</label><input class="fi" type="date" id="vf-shipdate" value="${today}"></div>
       <div class="fl"><label>專案經理 PM</label><input class="fi" id="vf-shipper" placeholder="PM 姓名"></div>
       <div class="fl"><label>此次配送總箱數</label><input class="fi" type="number" min="0" id="vf-boxes" placeholder="箱數"></div>
+      <div class="fl"><label>第幾次出貨（分批用）</label><input class="fi" type="number" min="1" id="vf-shipseq" value="${(d.priorCount||0)+1}"></div>
     </div>
     <label style="display:inline-flex;align-items:center;gap:6px;margin-top:12px;font-size:12px;color:var(--fg);cursor:pointer">
       <input type="checkbox" id="vf-showlot" onchange="toggleLotCol()"> 各品項不同批號時，顯示批號欄（預設隱藏，客戶批號仍會印）
@@ -145,11 +146,12 @@ function generateVerifyPdf(mode){
   d.mode=(mode==='partial')?'partial':'full';
   const gvl=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
   d.lot=gvl('vf-lot'); d.shipDate=gvl('vf-shipdate'); d.shipper=gvl('vf-shipper'); d.boxes=gvl('vf-boxes');
+  d.shipSeq=parseInt(gvl('vf-shipseq'),10)||1; // 「第幾次出貨」改成人工填，不再自動算
   const w=window.open('','_blank');
   if(!w){ toast('請允許彈出視窗，才能列印／存成 PDF','err'); return; }
   w.document.open(); w.document.write(buildVerifyDocHtml(d)); w.document.close();
   saveVerifyFormRecord(d);
-  d.priorCount=(d.priorCount||0)+1; // 這次也算一次出貨，下一次再產生時序號要往下算
+  const seqEl=document.getElementById('vf-shipseq'); if(seqEl) seqEl.value=d.shipSeq+1; // 方便下一次接著填
   toast('已開啟驗收單，於列印視窗選「另存為 PDF」','ok');
 }
 /* 純預覽：只是給人看排版對不對，不留底、不自動跳出列印視窗（跟「產生」的差別） */
@@ -157,7 +159,7 @@ function previewVerifyPdf(){
   recalcVerify();
   const d=VERIFY_DATA; if(!d) return;
   const gvl=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
-  const preview={ ...d, mode:'full', lot:gvl('vf-lot'), shipDate:gvl('vf-shipdate'), shipper:gvl('vf-shipper'), boxes:gvl('vf-boxes') };
+  const preview={ ...d, mode:'full', lot:gvl('vf-lot'), shipDate:gvl('vf-shipdate'), shipper:gvl('vf-shipper'), boxes:gvl('vf-boxes'), shipSeq:parseInt(gvl('vf-shipseq'),10)||1 };
   const w=window.open('','_blank');
   if(!w){ toast('請允許彈出視窗，才能預覽','err'); return; }
   w.document.open(); w.document.write(buildVerifyDocHtml(preview,{preview:true})); w.document.close();
@@ -334,7 +336,7 @@ function buildVerifyDocHtml(d,opts){
   const theadCols=isPartial
     ? `<th class="l" style="width:24%">品項</th>${lotTh}${mfgTh}<th style="width:9%">容量</th><th>本次出貨</th><th>已出貨</th><th>訂購總數</th><th>待出貨</th>`
     : `<th class="l" style="width:40%">品項</th>${lotTh}${mfgTh}<th style="width:14%">容量</th><th>出貨數量</th>`;
-  const shipSeq=(d.priorCount||0)+1;
+  const shipSeq=parseInt(d.shipSeq,10)||1; // 人工填的「第幾次出貨」，不再自動算
   const tag=(isPartial)?`<span class="tag">分批出貨・第 ${shipSeq} 次</span>`:'';
 
   const headerBlockHtml=`

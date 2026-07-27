@@ -54,24 +54,45 @@ function respond(action, params){
     PREFETCH_DONE = true;
   });
 
-  /* ---- 測試1：小單（分批模式），檢查 0瓶→橫線、第幾次出貨序號 ---- */
+  /* ---- 測試1：小單（分批模式），檢查 0瓶→橫線、第幾次出貨改成人工輸入 ---- */
   await page.evaluate(() => openVerifyForm('20260724-02'));
   await page.waitForTimeout(400);
   const priorCount = await page.evaluate(() => VERIFY_DATA.priorCount);
   check('priorCount 從 listVerifyForms 正確帶入 (=2)', priorCount === 2);
 
+  const shipseqDefault = await page.evaluate(() => document.getElementById('vf-shipseq') && document.getElementById('vf-shipseq').value);
+  check('「第幾次出貨」欄位存在，且預設值＝priorCount+1(=3)，但可人工修改', shipseqDefault === '3');
+
+  // 人工把「第幾次出貨」改成 9，驗證輸出會照人工填的值走，而不是自動算
+  await page.evaluate(() => { document.getElementById('vf-shipseq').value = '9'; });
   const smallHtml = await page.evaluate(() => {
+    recalcVerify();
     const d = JSON.parse(JSON.stringify(VERIFY_DATA));
     d.mode = 'partial';
     d.rows.forEach(r=>{ r.thisShip = r.ordered; });
+    d.shipSeq = parseInt(document.getElementById('vf-shipseq').value, 10);
     return buildVerifyDocHtml(d);
   });
-  check('分批模式標籤顯示「第 3 次」(priorCount 2 + 1)', smallHtml.includes('分批出貨・第 3 次'));
+  check('分批模式標籤顯示人工填的「第 9 次」（不是自動算的第 3 次）', smallHtml.includes('分批出貨・第 9 次') && !smallHtml.includes('第 3 次'));
   check('0瓶品項顯示橫線(—)而不是「0 瓶」', !/[^0-9]0 瓶/.test(smallHtml) && smallHtml.includes('—'));
   check('.ttl 標題字體與內文相同 (Noto Sans TC，非標楷體)', /\.ttl\{font-family:'Noto Sans TC'/.test(smallHtml) && !smallHtml.includes('標楷體'));
   check('品項欄位字體加大到 12.83px', smallHtml.includes('font-size:12.83px'));
   check('只有一頁（品項少）', (smallHtml.match(/class="vpage"/g)||[]).length === 1);
   check('有頁碼文字「第 1 頁，共 1 頁」', smallHtml.includes('第 1 頁，共 1 頁'));
+
+  /* ---- 測試1b：走真正的「產生分批驗收單」按鈕，確認人工填的序號真的有生效，
+     且產生後欄位自動+1（方便下一次接著填，但仍可再手動改） ---- */
+  const [popup] = await Promise.all([
+    context.waitForEvent('page'),
+    page.evaluate(() => generateVerifyPdf('partial')),
+  ]);
+  await popup.waitForLoadState('domcontentloaded');
+  await popup.waitForTimeout(200);
+  const popupHtml = await popup.content();
+  check('按「產生分批驗收單」時，實際輸出文件用的是人工填的第 9 次', popupHtml.includes('分批出貨・第 9 次'));
+  const shipseqAfterGen = await page.evaluate(() => document.getElementById('vf-shipseq').value);
+  check('產生後欄位自動+1變成 10（方便下次接著填，非強制）', shipseqAfterGen === '10');
+  await popup.close();
 
   /* ---- 測試2：大單（40 個品項），逼分頁，檢查頁碼、footer 只在最後一頁 ---- */
   await page.evaluate(() => openVerifyForm('20260724-03'));
