@@ -271,7 +271,6 @@ table.vt tbody tr.sum td.l{color:#5f5e54;letter-spacing:2px;font-weight:700}
 .qr svg{width:92px;height:92px;display:block;margin:0 auto}
 .qr .cap{font-size:9px;color:#5a4a28;margin-top:5px;font-weight:700;letter-spacing:.5px}
 .qr .cap2{font-size:8px;color:#9a9689;margin-top:2px;letter-spacing:.3px}
-.pgft{margin-top:12px;padding-top:6px;border-top:.8px solid #efe7d8;display:flex;justify-content:space-between;font-size:8px;color:#b4ac9a;letter-spacing:1px}
 @media print{.noprint{display:none}}
 .noprint{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:10px}
 .noprint button{background:#2b4a37;color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25)}
@@ -294,9 +293,6 @@ table.vt tbody tr.sum td.l{color:#5f5e54;letter-spacing:2px;font-weight:700}
     <div><span>配送總箱數</span><b>${escHtml(d.boxes||'')?escHtml(d.boxes)+' 箱':'—'}</b></div>
   </div>
 </td></tr></thead>
-<tfoot><tr><td>
-  <div class="pgft"><span>凱文南坡萬實業社</span><span>批次代工 · 客製標籤 · SGS 檢驗</span></div>
-</td></tr></tfoot>
 <tbody><tr><td>
   <table class="vt"><thead><tr>${theadCols}</tr></thead><tbody>${body}${sumRow}</tbody></table>
   <div class="ft">
