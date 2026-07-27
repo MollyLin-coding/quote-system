@@ -455,6 +455,7 @@ function renderRecords(){
         <td data-l="總計" style="font-weight:600">${total}</td>
         <td class="rec-actions" data-l="操作" onclick="event.stopPropagation()">
           <button class="rec-act-btn" onclick="openRecord('${q.quoteNo}')">開啟</button>
+          <button class="rec-act-btn" onclick="previewRecordQuote('${q.quoteNo}')">預覽</button>
           ${['bottle','ownbrand','ownlabel','consign'].includes(q.quoteType)?`<button class="rec-act-btn" onclick="openVerifyForm('${q.quoteNo}')">驗收單</button>`:''}
           <button class="rec-act-btn del" onclick="deleteRecord('${q.quoteNo}','${(q.clientName||'').replace(/'/g,'')}')">刪除</button>
         </td>
@@ -472,6 +473,19 @@ async function openRecord(quoteNo){
     loadQuoteIntoForm(data.quote);
     gotoPage('new');
     toast('已載入 '+quoteNo,'ok');
+  } catch(e){ toast(e.message||'讀取失敗','err'); }
+}
+
+/* ---- 預覽既有報價單（載入到表單後直接開預覽視窗，不用再手動點側邊「預覽報價單」）---- */
+async function previewRecordQuote(quoteNo){
+  if(isFormDirty() && !confirm('目前表單尚有未儲存的資料，預覽這張單會覆蓋目前內容，確定繼續？')) return;
+  try {
+    toast('讀取訂單資料…','ok');
+    const data=await apiCall({ action:'getQuoteById', token:AUTH_TOKEN, quoteNo });
+    if(!data.ok){ toast(data.error||'讀取失敗','err'); return; }
+    loadQuoteIntoForm(data.quote);
+    gotoPage('new');
+    openPreview();
   } catch(e){ toast(e.message||'讀取失敗','err'); }
 }
 
