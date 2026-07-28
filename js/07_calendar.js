@@ -188,6 +188,7 @@ function openCalAdd(dstr, kind){
   document.getElementById('ce-priority').checked=false;
   document.getElementById('ce-allday').checked=true;
   document.getElementById('ce-time').value='';
+  document.getElementById('ce-time-end').value='';
   document.getElementById('ce-freq').value='weekly';
   document.getElementById('ce-weekday').value='1';
   document.getElementById('ce-mday').value='5';
@@ -210,7 +211,10 @@ function openCalEdit(id){
   document.getElementById('ce-priority').checked=it.priority==='high';
   // 全天／時間：舊資料沒有 all_day 欄位時，視為全天（維持原本沒有時間的行為）
   document.getElementById('ce-allday').checked=(it.all_day!=='N');
-  document.getElementById('ce-time').value=it.time||'';
+  // time 欄可能是 "14:00" 或 "14:00-15:30"（幾點到幾點）
+  const tparts=String(it.time||'').split('-');
+  document.getElementById('ce-time').value=(tparts[0]||'').trim();
+  document.getElementById('ce-time-end').value=(tparts[1]||'').trim();
   const r=parseJsonSafe(it.recur_json,{});
   document.getElementById('ce-freq').value=r.freq||'weekly';
   document.getElementById('ce-weekday').value=String(r.weekday??1);
@@ -238,9 +242,17 @@ function onCalKindChange(){
 }
 function onAllDayChange(){
   const ad=document.getElementById('ce-allday').checked;
-  const t=document.getElementById('ce-time');
-  t.style.display = ad ? 'none' : 'block';
-  if(ad) t.value='';
+  const row=document.getElementById('ce-time-row');
+  if(row) row.style.display = ad ? 'none' : 'flex';
+  if(ad){ document.getElementById('ce-time').value=''; document.getElementById('ce-time-end').value=''; }
+}
+/* 時間吸附到 5 分鐘（14:03→14:05）；空值原樣回傳 */
+function calSnap5(v){
+  const m=String(v||'').match(/^(\d{1,2}):(\d{2})/);
+  if(!m) return '';
+  let h=parseInt(m[1],10), mi=Math.round(parseInt(m[2],10)/5)*5;
+  if(mi===60){ mi=0; h=(h+1)%24; }
+  return String(h).padStart(2,'0')+':'+String(mi).padStart(2,'0');
 }
 function onCalCategoryChange(){
   const cat=document.getElementById('ce-category').value;
@@ -286,6 +298,15 @@ async function saveCalItem(){
   const existing = CAL_EDIT_ID ? CAL_ITEMS.find(x=>String(x.item_id)===String(CAL_EDIT_ID)) : null;
   const hasTime = (k==='memo'||k==='recur');
   const allDay = hasTime ? document.getElementById('ce-allday').checked : true;
+  // 指定時間＝幾點到幾點：吸附 5 分鐘；結束可留空（只記開始）；存成 "14:00" 或 "14:00-15:30"
+  let calTimeStr='';
+  if(hasTime && !allDay){
+    const t1=calSnap5(document.getElementById('ce-time').value);
+    const t2=calSnap5(document.getElementById('ce-time-end').value);
+    if(t2 && !t1){ toast('請先填開始時間','err'); _busy.calSave=false; return; }
+    if(t1 && t2 && t2<=t1){ toast('結束時間要晚於開始時間','err'); _busy.calSave=false; return; }
+    calTimeStr = t1 ? (t1+(t2?'-'+t2:'')) : '';
+  }
   const item={
     item_id: CAL_EDIT_ID || ('ci-'+Date.now()+'-'+Math.floor(Math.random()*1000)),
     kind:k, date:k==='memo'?document.getElementById('ce-date').value:'',
@@ -293,7 +314,7 @@ async function saveCalItem(){
     category:document.getElementById('ce-category').value,
     priority:(k==='todo'&&document.getElementById('ce-priority').checked)?'high':'normal',
     all_day: hasTime ? (allDay?'Y':'N') : 'Y',
-    time: (hasTime && !allDay) ? document.getElementById('ce-time').value : '',
+    time: calTimeStr,
     done: existing?existing.done:'N', done_date: existing?existing.done_date:''
   };
   try{

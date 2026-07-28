@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260728d">
-<script src="js/00_qrcode.js?v=20260728d"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260728e">
+<script src="js/00_qrcode.js?v=20260728e"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -907,7 +907,12 @@
         <input type="checkbox" id="ce-allday" onchange="onAllDayChange()" style="width:14px;height:14px">
         全天（不指定時間）
       </label>
-      <input class="fi" type="time" id="ce-time" style="max-width:160px">
+      <div id="ce-time-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input class="fi" type="time" id="ce-time" step="300" style="max-width:140px">
+        <span style="color:#6B6B63;font-size:12px">到</span>
+        <input class="fi" type="time" id="ce-time-end" step="300" style="max-width:140px">
+        <span style="font-size:11px;color:var(--hint)">（5 分鐘為單位；結束時間可留空）</span>
+      </div>
     </div>
     <div id="ce-recur-wrap" style="margin-top:8px;display:none">
       <label style="font-size:11px;color:#6B6B63;display:block;margin-bottom:4px">重複方式</label>
@@ -1054,19 +1059,19 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260728d"></script>
-<script src="js/01_quote_form.js?v=20260728d"></script>
-<script src="js/01b_quote_preview.js?v=20260728d"></script>
-<script src="js/02_core_api.js?v=20260728d"></script>
-<script src="js/03_quote_custom.js?v=20260728d"></script>
-<script src="js/04_company.js?v=20260728d"></script>
-<script src="js/05_orders.js?v=20260728d"></script>
-<script src="js/06_verify_mgmt.js?v=20260728d"></script>
-<script src="js/07_calendar.js?v=20260728d"></script>
-<script src="js/08_ownbrand.js?v=20260728d"></script>
-<script src="js/09_verify_form.js?v=20260728d"></script>
-<script src="js/10_today.js?v=20260728d"></script>
-<script src="js/11_customers.js?v=20260728d"></script>
-<script src="js/99_boot.js?v=20260728d"></script>
+<script src="js/00_utils.js?v=20260728e"></script>
+<script src="js/01_quote_form.js?v=20260728e"></script>
+<script src="js/01b_quote_preview.js?v=20260728e"></script>
+<script src="js/02_core_api.js?v=20260728e"></script>
+<script src="js/03_quote_custom.js?v=20260728e"></script>
+<script src="js/04_company.js?v=20260728e"></script>
+<script src="js/05_orders.js?v=20260728e"></script>
+<script src="js/06_verify_mgmt.js?v=20260728e"></script>
+<script src="js/07_calendar.js?v=20260728e"></script>
+<script src="js/08_ownbrand.js?v=20260728e"></script>
+<script src="js/09_verify_form.js?v=20260728e"></script>
+<script src="js/10_today.js?v=20260728e"></script>
+<script src="js/11_customers.js?v=20260728e"></script>
+<script src="js/99_boot.js?v=20260728e"></script>
 </body>
 </html>
