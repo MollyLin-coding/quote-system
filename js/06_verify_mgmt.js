@@ -180,7 +180,7 @@ function vmRenderForms(){
       <td data-l="PM" style="text-align:center">${escHtml(f.pm||'')||'—'}</td>
       <td data-l="箱數" style="text-align:center">${(f.boxes!=null&&f.boxes!=='')?escHtml(f.boxes)+' 箱':'—'}</td>
       <td data-l="品項" style="font-size:11.5px;color:#6B6B63">${escHtml(names)||'—'}</td>
-      <td class="rec-actions" data-l="操作"><button class="rec-act-btn del" onclick="vmDelForm('${escAttr(f.id)}','${escAttr(f.no||'')}')">刪除</button></td>
+      <td class="rec-actions" data-l="操作"><button class="rec-act-btn" onclick="vmEditForm('${escAttr(f.id)}')">編輯／重印</button><button class="rec-act-btn del" onclick="vmDelForm('${escAttr(f.id)}','${escAttr(f.no||'')}')">刪除</button></td>
     </tr>`;
   }).join('');
   return `<div class="tbl-scroll"><table class="rec-table mcard">
@@ -209,6 +209,30 @@ async function vmDelForm(id, no){
     toast('已刪除這筆驗收單留底','ok'); await loadVerifyMgmt(true);
   }catch(e){ toast(e.message||'刪除失敗','err'); }
   finally{ _busy.vmDelForm=false; }
+}
+/* 編輯／重印驗收單留底：把那筆紀錄帶回「產生驗收單」視窗（buildVerifyModal 在 09_verify_form.js）。
+   看完不動＝純檢視；要重印就按「產生」；改過再按「產生」＝存新留底並刪舊的（取代，見 saveVerifyFormRecord）。 */
+function vmEditForm(id){
+  const f=((VM_DATA&&VM_DATA.forms)||[]).find(x=>String(x.id)===String(id));
+  if(!f){ toast('查無此留底紀錄，請先按重新整理','err'); return; }
+  const items=Array.isArray(f.items)?f.items:parseJsonSafe(f.items_json,[]);
+  if(!Array.isArray(items)||!items.length){ toast('這筆留底沒有品項明細，無法編輯','err'); return; }
+  const noStr=String(f.no||'').trim();
+  // 「第幾次出貨」推估＝同單號、比這筆更早的留底數＋1（欄位仍可手改）
+  const earlier=((VM_DATA&&VM_DATA.forms)||[]).filter(x=>String(x.no||'').trim()===noStr && String(x.created_at||'')<String(f.created_at||'')).length;
+  VERIFY_DATA={ no:noStr, client:vmClientOf(noStr)||'', priorCount:earlier,
+    rows:items.map(it=>({ name:it.name||'', lot:it.lot||'', vol:it.vol||'',
+      mfg:vmLocalYmd(it.mfg)||'', ordered:parseFloat(it.ordered)||0,
+      thisShip:(it.thisShip!=null&&it.thisShip!=='')?it.thisShip:0,
+      shipped:(it.shipped!=null&&it.shipped!=='')?it.shipped:0 })) };
+  VF_EDIT_ID=String(f.id);
+  buildVerifyModal(f.lot||'');
+  const set=(eid,v)=>{ const e=document.getElementById(eid); if(e&&v!=null&&v!=='') e.value=v; };
+  set('vf-shipdate', vmLocalYmd(f.ship_date));
+  set('vf-shipper', f.pm||'');
+  set('vf-boxes', (f.boxes!=null&&f.boxes!=='')?f.boxes:'');
+  document.getElementById('vf-overlay').style.display='flex';
+  toast('已帶回這筆驗收單；只看不改直接關閉即可，修改後按「產生」會以新版取代舊紀錄','ok');
 }
 function vmCopyReminder(no, shipDate){
   const d=shipDate?String(shipDate).replace(/-/g,'/'):'';
