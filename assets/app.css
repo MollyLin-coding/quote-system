@@ -347,8 +347,11 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
 .cal-day{border-bottom:1px solid var(--line,#E8E5DD);padding:8px 2px}
 .cal-day-h{font-size:12px;font-weight:700;margin-bottom:5px}
 .cal-day .cev{display:inline-block;font-size:11px;margin-right:6px;margin-top:2px}
-.focus-row{font-size:12.5px;padding:6px 2px;border-bottom:1px solid #F0EEE6;cursor:pointer}
+.focus-row{font-size:12.5px;padding:6px 2px;border-bottom:1px solid #F0EEE6;cursor:pointer;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .focus-row:last-child{border-bottom:none}
+/* 今日焦點的「完成」圈圈：只有 📌 備忘有；點了打勾＝完成，不再顯示 */
+.fdone{width:17px;height:17px;border:1.5px solid #A8A69C;border-radius:50%;flex:none;cursor:pointer;display:inline-block;background:#fff}
+.fdone:hover{border-color:var(--gold);background:var(--gold-pale);box-shadow:0 0 0 3px rgba(166,130,74,.12)}
 .todo-row{display:flex;align-items:center;gap:9px;font-size:12.5px;padding:7px 2px;border-bottom:1px solid #F0EEE6}
 .todo-row .tbox{width:17px;height:17px;border:1.5px solid #A8A69C;border-radius:4px;flex:none;cursor:pointer;text-align:center;line-height:15px;font-size:11px;color:#fff}
 .todo-row.done .tbox{background:var(--gold);border-color:var(--gold)}

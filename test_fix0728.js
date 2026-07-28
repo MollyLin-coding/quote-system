@@ -193,6 +193,54 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
   });
   check('行事曆刪除：畫面即刻拿掉', calDel === 0);
 
+  /* ---------- 5) 今日焦點「打勾完成」＋編輯視窗「已完成」 ---------- */
+  const focus = await page.evaluate(async () => {
+    rcClear();                                    // 上一段留下的快取會把 fixture 洗掉，先清
+    ORDERS_CACHE = [];
+    const today = fmtD(new Date());
+    CAL_ITEMS = [
+      { item_id: 'ci-f1', kind: 'memo', date: today, title: '圓廣印刷廠拜訪', category: '拜訪客戶', done: 'N' },
+      { item_id: 'ci-f2', kind: 'memo', date: today, title: '另一件事', category: '工作', done: 'N' }
+    ];
+    let saved = null;
+    window.apiCall = async (p) => {
+      if (p.action === 'saveCalendarItem') { saved = p.item; rcClear(); return { ok: true }; }
+      if (p.action === 'listCalendarItems') return { ok: true, items: CAL_ITEMS };
+      return { ok: true, items: [], quotes: [], orders: [], records: [] };
+    };
+    gotoPage('cal');
+    await new Promise(r => setTimeout(r, 80));
+    const before = document.getElementById('cal-focus').innerHTML;
+    calFocusDone('ci-f1');
+    await new Promise(r => setTimeout(r, 120));
+    const after = document.getElementById('cal-focus').innerHTML;
+    return { hasBox: before.includes('fdone'), before: before.includes('圓廣印刷廠拜訪'),
+      afterGone: !after.includes('圓廣印刷廠拜訪'), otherStays: after.includes('另一件事'),
+      savedDone: saved ? saved.done : '' };
+  });
+  check('焦點區備忘列有「完成」圈圈', focus.hasBox);
+  check('打勾前備忘在焦點區', focus.before);
+  check('打勾後這筆從焦點消失', focus.afterGone);
+  check('其他備忘不受影響', focus.otherStays);
+  check('後端收到 done=Y', focus.savedDone === 'Y');
+
+  const editDone = await page.evaluate(async () => {
+    CAL_ITEMS = [{ item_id: 'ci-f3', kind: 'memo', date: '2026-07-20', title: '做完的事', category: '工作', done: 'Y', done_date: '2026-07-21' }];
+    openCalEdit('ci-f3');
+    const shown = document.getElementById('ce-done-wrap').style.display !== 'none';
+    const checked = document.getElementById('ce-done').checked;
+    document.getElementById('ce-done').checked = false;      // 取消已完成 → 復原
+    let saved = null;
+    window.apiCall = async (p) => { if (p.action === 'saveCalendarItem') { saved = p.item; rcClear(); return { ok: true }; } return { ok: true, items: CAL_ITEMS, quotes: [], orders: [], records: [] }; };
+    await saveCalItem();
+    const addShown = (openCalAdd('2026-07-30'), document.getElementById('ce-done-wrap').style.display !== 'none');
+    closeCalEdit();
+    return { shown, checked, savedDone: saved ? saved.done : '', savedDate: saved ? saved.done_date : 'x', addShown };
+  });
+  check('編輯備忘：顯示「已完成」勾選且帶原狀態', editDone.shown && editDone.checked);
+  check('取消勾選存檔 → done=N、完成日清空（可復原）', editDone.savedDone === 'N' && editDone.savedDate === '');
+  check('新增事項不顯示「已完成」勾選', !editDone.addShown);
+
   results.forEach(r => console.log(r[0], r[1]));
   const fails = results.filter(r => r[0] === 'FAIL').length;
   console.log(errors.length ? 'JS ERRORS:\n' + errors.join('\n') : 'NO JS ERRORS');

@@ -135,11 +135,12 @@ function renderCalList(el, days, title){
 function renderTodayFocus(){
   const el=document.getElementById('cal-focus'); if(!el) return;
   const items=[];
-  // 逾期備忘（未完成）
+  // 逾期備忘（未完成）；左邊有個圈圈，打勾＝完成，之後不再出現在焦點
   CAL_ITEMS.filter(it=>it.kind==='memo'&&it.done!=='Y'&&it.date&&!calShipMemoDup(it)).forEach(it=>{
     const d=daysBetween(it.date);
-    if(d!=null&&d<0) items.push({o:d,h:`<span class="ob red">逾期 ${-d} 天</span> 📌 ${escHtml(it.title)}`,click:`openCalEdit('${escHtml(it.item_id)}')`});
-    else if(d!=null&&d<=7) items.push({o:d,h:`<span class="ob warn">${d===0?'今天':d+' 天後'}</span> 📌 ${escHtml(it.title)}`,click:`openCalEdit('${escHtml(it.item_id)}')`});
+    const box=`<span class="fdone" title="打勾＝標記完成，不再顯示於焦點" onclick="event.stopPropagation();calFocusDone('${escAttr(it.item_id)}')"></span>`;
+    if(d!=null&&d<0) items.push({o:d,h:`${box}<span class="ob red">逾期 ${-d} 天</span> 📌 ${escHtml(it.title)}`,click:`openCalEdit('${escHtml(it.item_id)}')`});
+    else if(d!=null&&d<=7) items.push({o:d,h:`${box}<span class="ob warn">${d===0?'今天':d+' 天後'}</span> 📌 ${escHtml(it.title)}`,click:`openCalEdit('${escHtml(it.item_id)}')`});
   });
   (ORDERS_CACHE||[]).forEach(o=>{
     const s=o.st?.status||'quoted';
@@ -157,7 +158,7 @@ function renderTodayFocus(){
     if(s==='invoiced') items.push({o:99,h:`<span class="ob warn">待收尾款</span> 💰 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）${o.st?.final_amt?'尾款 '+money(o.st.final_amt):''}`,click:`gotoPage('orders')`});
   });
   items.sort((a,b)=>a.o-b.o);
-  el.innerHTML=`<div class="ph" style="font-weight:700;font-size:13px;margin-bottom:6px">今日焦點 — ${fmtD(new Date()).slice(5)}<span style="color:#A8A69C;font-weight:400;font-size:11px">　今天＋未來 7 天；逾期自動標紅</span></div>`+
+  el.innerHTML=`<div class="ph" style="font-weight:700;font-size:13px;margin-bottom:6px">今日焦點 — ${fmtD(new Date()).slice(5)}<span style="color:#A8A69C;font-weight:400;font-size:11px">　今天＋未來 7 天；逾期自動標紅；📌 備忘做完了就點左邊圈圈打勾</span></div>`+
     (items.length?items.map(i=>`<div class="focus-row" onclick="${i.click}">${i.h}</div>`).join(''):'<div style="color:#A8A69C;font-size:12.5px">目前沒有需要注意的事項 ✓</div>');
 }
 function renderTodoList(){
@@ -177,14 +178,24 @@ async function toggleTodoDone(id){
   it.done = it.done==='Y'?'N':'Y';
   it.done_date = it.done==='Y'?fmtD(new Date()):'';
   renderCalendar();
+  const snap=CAL_ITEMS;                            // apiCall（寫入類）會清空 CAL_ITEMS，先留一份
   try{
     const d=await apiCall({ action:'saveCalendarItem', token:AUTH_TOKEN, item:it });
     if(!d.ok) throw new Error(d.error||'儲存失敗');
+    CAL_ITEMS=snap; renderCalendar();              // 畫面即刻反映（這筆已是改好的），背景再同步
+    loadCalendar().catch(()=>{});
   }
   catch(e){
+    CAL_ITEMS=snap;
     it.done=prevDone; it.done_date=prevDate; renderCalendar();   // 回復畫面，避免以為打勾了其實沒存到
     toast('同步失敗，已還原：'+e.message,'err');
   }
+}
+/* 今日焦點的「打勾＝完成」：備忘標成已完成（跟待辦清單同一套存法，可到月曆點該筆再取消） */
+function calFocusDone(id){
+  const it=CAL_ITEMS.find(x=>String(x.item_id)===String(id)); if(!it||it.done==='Y') return;
+  toggleTodoDone(id);
+  toast('已完成：'+(it.title||'')+'（要復原可在行事曆點這筆，取消「已完成」）','ok');
 }
 /* 新增／編輯事項 */
 let CAL_EDIT_ID=null;
@@ -197,6 +208,7 @@ function openCalAdd(dstr, kind){
   ['ce-title','ce-detail'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('ce-category').value='工作';
   document.getElementById('ce-priority').checked=false;
+  { const dc=document.getElementById('ce-done'); if(dc) dc.checked=false; }
   document.getElementById('ce-allday').checked=true;
   document.getElementById('ce-time').value='';
   document.getElementById('ce-time-end').value='';
@@ -220,6 +232,7 @@ function openCalEdit(id){
   document.getElementById('ce-detail').value=it.detail||'';
   document.getElementById('ce-category').value=it.category||'工作';
   document.getElementById('ce-priority').checked=it.priority==='high';
+  { const dc=document.getElementById('ce-done'); if(dc) dc.checked=(it.done==='Y'); }
   // 全天／時間：舊資料沒有 all_day 欄位時，視為全天（維持原本沒有時間的行為）
   document.getElementById('ce-allday').checked=(it.all_day!=='N');
   // time 欄可能是 "14:00" 或 "14:00-15:30"（幾點到幾點）
@@ -242,6 +255,8 @@ function onCalKindChange(){
   document.getElementById('ce-date-wrap').style.display = k==='memo'?'block':'none';
   document.getElementById('ce-recur-wrap').style.display = k==='recur'?'block':'none';
   document.getElementById('ce-pri-wrap').style.display = k==='todo'?'inline-flex':'none';
+  // 「已完成」勾選：編輯既有的備忘才顯示（新增的當然還沒完成；待辦在清單上打勾就好）
+  { const dw=document.getElementById('ce-done-wrap'); if(dw) dw.style.display = (k==='memo'&&CAL_EDIT_ID)?'inline-flex':'none'; }
   // 全天／時間：指定日期備忘、重複行程才需要（待辦不指定日期，時間沒有意義）
   document.getElementById('ce-time-wrap').style.display = (k==='memo'||k==='recur')?'block':'none';
   const f=document.getElementById('ce-freq').value;
@@ -328,6 +343,14 @@ async function saveCalItem(){
     time: calTimeStr,
     done: existing?existing.done:'N', done_date: existing?existing.done_date:''
   };
+  // 編輯備忘時可直接勾/取消「已完成」（完成的不會出現在今日焦點與今日待辦）
+  if(k==='memo' && CAL_EDIT_ID){
+    const dc=document.getElementById('ce-done');
+    if(dc){
+      const nv=dc.checked?'Y':'N';
+      if(nv!==item.done){ item.done=nv; item.done_date = nv==='Y'?fmtD(new Date()):''; }
+    }
+  }
   const snap=CAL_ITEMS;                       // apiCall（寫入類）會把 CAL_ITEMS 清空，先留一份
   const saveBtn=document.getElementById('ce-save');
   if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent='儲存中…'; }
