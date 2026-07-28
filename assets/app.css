@@ -222,7 +222,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
 .rec-filter{border:1px solid var(--bd);border-radius:8px;padding:9px 13px;font-size:13px;font-family:inherit;background:var(--wh);cursor:pointer}
 .rec-table{width:100%;border-collapse:collapse;background:var(--wh);border:1px solid var(--bd);border-radius:10px;overflow:hidden}
 .rec-table th{background:var(--bg);padding:12px 14px;text-align:left;font-size:11px;color:var(--sub);font-weight:600;letter-spacing:.4px;border-bottom:1px solid var(--bd)}
-.rec-table td{padding:13px 14px;font-size:12.5px;color:var(--ink);border-bottom:1px solid var(--bd)}
+.rec-table td{padding:13px 14px;font-size:12.5px;color:var(--ink);border-bottom:1px solid var(--bd);vertical-align:middle;font-variant-numeric:tabular-nums}
 .rec-table tr:last-child td{border-bottom:none}
 .rec-table tr.clickable:hover{background:var(--gold-pale);cursor:pointer}
 .rec-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:10.5px;font-weight:600}
@@ -231,9 +231,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
 .rec-badge.draft{background:#F0EEE8;color:#8A8870}
 .rec-badge.sent{background:#E6F0E9;color:#2E7D4F}
 .rec-empty{text-align:center;padding:50px;color:var(--hint);font-size:13px}
-.rec-actions{display:flex;gap:6px}
-.rec-act-btn{background:none;border:1px solid var(--bd);border-radius:6px;padding:5px 9px;font-size:11px;cursor:pointer;color:var(--sub)}
+/* ⚠ 操作欄不能用 display:flex 的 td：表格列高會被撐壞，按鈕看起來跟該列「錯位／切成兩半」
+   （2026-07-28 Molly 回報的訂單追蹤版面問題，root cause 就在這）。
+   改回正常的表格儲存格＋不換行的小按鈕，各表格通用。 */
+.rec-actions{white-space:nowrap}
+.rec-actions .rec-act-btn{margin:2px 5px 2px 0}
+.rec-actions .rec-act-btn:last-child{margin-right:0}
+.rec-act-btn{background:none;border:1px solid var(--bd);border-radius:6px;padding:5px 9px;font-size:11px;cursor:pointer;color:var(--sub);white-space:nowrap}
 .rec-act-btn:hover{border-color:var(--ink);color:var(--ink)}
+.rec-act-btn.primary{border-color:rgba(166,130,74,.55);color:var(--gold-deep);background:var(--gold-pale);font-weight:600}
+.rec-act-btn.primary:hover{border-color:var(--gold-deep)}
 .rec-act-btn.del:hover{border-color:#C0453F;color:#C0453F}
 .page{display:none}
 .page.on{display:block}

@@ -368,7 +368,7 @@ async function loadMyCustomQuotes(){
   const box=document.getElementById('cq-list'); if(!box) return;
   box.innerHTML=sklBlock(3);
   try{
-    const d=await apiCall({ action:'listCustomQuotes', token:AUTH_TOKEN });
+    const d=await readCall({ action:'listCustomQuotes', token:AUTH_TOKEN });
     if(!d.ok){ box.innerHTML=`<div class="rec-empty">${d.error||'載入失敗'}</div>`; return; }
     const qs=(d.quotes||[]).sort((a,b)=>(b.updated_at||'').localeCompare(a.updated_at||''));
     window._CQ_CACHE=qs;
@@ -387,7 +387,7 @@ async function loadMyCustomQuotes(){
 async function loadCustomQuoteByNo(no, asCopy){
   let q=(window._CQ_CACHE||[]).find(x=>x.quote_no===no);
   if(!q){
-    const d=await apiCall({ action:'listCustomQuotes', token:AUTH_TOKEN });
+    const d=await readCall({ action:'listCustomQuotes', token:AUTH_TOKEN });
     q=(d.quotes||[]).find(x=>x.quote_no===no);
   }
   if(!q){ toast('找不到 '+no,'err'); return; }

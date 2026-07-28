@@ -484,9 +484,30 @@ async function cusEnsureMaster(){
     if(d && d.ok){ CUS_MASTER=(d.customers||[]).slice(); cusFillPickSelect(); }
   }catch(_){}
 }
+/* 依客戶主檔找「公司報價檔」對應的公司：統編 → 名稱/品牌 → 發票抬頭 */
+function cusMatchCompany(m){
+  if(typeof COMPANY_DATA==='undefined' || !COMPANY_DATA || !Array.isArray(COMPANY_DATA.companies)) return null;
+  const key=s=>String(s||'').replace(/[\s　]+/g,'').toLowerCase();
+  const tax=String(m.tax_id||'').trim();
+  const nm=key(m.name), inv=key(m.invoice_title);
+  const cs=COMPANY_DATA.companies;
+  return (tax && cs.find(c=>String(c.tax_id||'').trim()===tax))
+      || (nm  && cs.find(c=>key(c.name)===nm || key(c.brand)===nm))
+      || (inv && cs.find(c=>key(c.name)===inv))
+      || null;
+}
 function pickQuoteCustomer(){
   const sel=document.getElementById('f-cuspick'); if(!sel) return;
   const m=cusMasterById(sel.value); if(!m) return;
+  /* 先連動「公司報價檔」：換客戶時酒款下拉一起換；
+     對不到公司就清空回「不指定」，才不會留著上一位客戶的酒款（Molly 2026-07-28 反映的 bug）。
+     順序很重要：先切公司（會帶公司檔資料），再用主檔資料蓋上去（主檔優先）。 */
+  const compSel=document.getElementById('qf-company');
+  if(compSel && typeof onSelectCompany==='function'){
+    const comp=cusMatchCompany(m);
+    const want=comp?String(comp.company_id):'';
+    if(String(compSel.value||'')!==want){ compSel.value=want; onSelectCompany(true); }
+  }
   const set=(id,v)=>{ const e=document.getElementById(id); if(e) e.value=(v==null?'':String(v)); };
   set('f-cli', m.name); set('f-con', m.contact); set('f-tax', m.tax_id);
   set('f-inv', m.invoice_title); set('f-ph', m.phone); set('f-ad', m.address);

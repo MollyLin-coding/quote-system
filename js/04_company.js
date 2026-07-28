@@ -126,13 +126,18 @@ function fillProductSelect(selId, cid){
     : '<option value="">此公司尚無品項（可直接自由輸入）</option>';
 }
 
-/* ---- 標準模式：選公司 ---- */
-function onSelectCompany(){
+/* ---- 標準模式：選公司 ----
+   quiet=true 時不跳「已帶入…」提示（給「選既有客戶」自動連動用，避免連跳兩個提示） */
+function onSelectCompany(quiet){
   const cid=document.getElementById('qf-company').value;
   SELECTED_COMPANY = cid ? companyById(cid) : null;
   RULE_SUPPRESS = {};
   const box=document.getElementById('qf-detail');
-  if(!SELECTED_COMPANY){ box.style.display='none'; clearAutoRuleExtras(); renderExt(); calc(); return; }
+  if(!SELECTED_COMPANY){
+    // 清回「不指定」：酒款下拉也要清空，不能殘留上一家公司的品項
+    { const s=document.getElementById('qf-product'); if(s) s.innerHTML='<option value="">先選公司才能帶入品項…</option>'; }
+    box.style.display='none'; clearAutoRuleExtras(); renderExt(); calc(); return;
+  }
   const c=SELECTED_COMPANY;
   // 換公司時先清空「快速帶入」的欄位，避免上一家公司留下的舊值跟這家公司的新值混在一起
   // （例如上一家有填聯絡人、這家沒填，若不清空畫面會誤顯示上一家的聯絡人）
@@ -172,9 +177,10 @@ function onSelectCompany(){
     const nb=document.getElementById('qf-syncnote'); if(nb) nb.innerHTML='';
   }
   fillProductSelect('qf-product', c.company_id);
+  { const qp=document.getElementById('qf-product'); if(qp) qp.selectedIndex=0; }   // 換公司時酒款選擇歸零，避免殘留上一家的選項
   renderRuleChips();
   applyAutoRules(); renderExt(); calc();
-  toast('已帶入 '+companyLabel(c)+' 的客戶資料與報價邏輯','ok');
+  if(quiet!==true) toast('已帶入 '+companyLabel(c)+' 的客戶資料與報價邏輯','ok');
 }
 /* 客戶酒譜同步：呼叫後端 syncCustomerProducts，更新該公司 products 的品名/容量/售價 */
 async function syncCustomerRecipe(){

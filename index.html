@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260728e">
-<script src="js/00_qrcode.js?v=20260728e"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260728f">
+<script src="js/00_qrcode.js?v=20260728f"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -832,7 +832,7 @@
     </div>
     <div class="fl" style="margin-top:10px"><label>備註／注意事項（該批次要注意或需準備的事，可多行）</label><textarea class="fi" id="oe-track_note" rows="3" style="resize:vertical"></textarea></div>
     <div style="display:flex;gap:10px;margin-top:14px">
-      <button class="btn btn-gold" onclick="saveOrdEdit()">儲存進度</button>
+      <button class="btn btn-gold" id="oe-save" onclick="saveOrdEdit()">儲存進度</button>
       <button class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63" onclick="closeOrdEdit()">取消</button>
     </div>
   </div>
@@ -945,7 +945,7 @@
       <label id="ce-pri-wrap" style="display:none;align-items:center;gap:6px;font-size:12.5px;padding-bottom:9px"><input type="checkbox" id="ce-priority">標記優先</label>
     </div>
     <div style="display:flex;gap:10px;margin-top:14px">
-      <button class="btn btn-gold" onclick="saveCalItem()">儲存</button>
+      <button class="btn btn-gold" id="ce-save" onclick="saveCalItem()">儲存</button>
       <button class="btn" id="ce-del" style="display:none;border:1px solid #E8C7C2;background:#fff;color:#B03A2E" onclick="deleteCalItem()">刪除</button>
       <button class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63" onclick="closeCalEdit()">取消</button>
     </div>
@@ -1059,19 +1059,19 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260728e"></script>
-<script src="js/01_quote_form.js?v=20260728e"></script>
-<script src="js/01b_quote_preview.js?v=20260728e"></script>
-<script src="js/02_core_api.js?v=20260728e"></script>
-<script src="js/03_quote_custom.js?v=20260728e"></script>
-<script src="js/04_company.js?v=20260728e"></script>
-<script src="js/05_orders.js?v=20260728e"></script>
-<script src="js/06_verify_mgmt.js?v=20260728e"></script>
-<script src="js/07_calendar.js?v=20260728e"></script>
-<script src="js/08_ownbrand.js?v=20260728e"></script>
-<script src="js/09_verify_form.js?v=20260728e"></script>
-<script src="js/10_today.js?v=20260728e"></script>
-<script src="js/11_customers.js?v=20260728e"></script>
-<script src="js/99_boot.js?v=20260728e"></script>
+<script src="js/00_utils.js?v=20260728f"></script>
+<script src="js/01_quote_form.js?v=20260728f"></script>
+<script src="js/01b_quote_preview.js?v=20260728f"></script>
+<script src="js/02_core_api.js?v=20260728f"></script>
+<script src="js/03_quote_custom.js?v=20260728f"></script>
+<script src="js/04_company.js?v=20260728f"></script>
+<script src="js/05_orders.js?v=20260728f"></script>
+<script src="js/06_verify_mgmt.js?v=20260728f"></script>
+<script src="js/07_calendar.js?v=20260728f"></script>
+<script src="js/08_ownbrand.js?v=20260728f"></script>
+<script src="js/09_verify_form.js?v=20260728f"></script>
+<script src="js/10_today.js?v=20260728f"></script>
+<script src="js/11_customers.js?v=20260728f"></script>
+<script src="js/99_boot.js?v=20260728f"></script>
 </body>
 </html>

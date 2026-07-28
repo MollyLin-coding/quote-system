@@ -18,6 +18,17 @@ async function loadCalendar(force){
   renderCalendar();
 }
 onCacheClear(function(){ CAL_ITEMS=[]; });
+/* 「出貨：XXX」備忘＝舊版「存單自動寫進行事曆」留下的（item_id 為 ship-單號、source_quote_no 有值）。
+   現在訂單追蹤那邊會自動長出 🚚 出貨事件（同一天會出現兩筆），
+   所以只要訂單那邊有這張單的出貨日，這種備忘就不再顯示，以訂單追蹤為準。 */
+function calShipMemoDup(it){
+  const sq=String(it.source_quote_no||'').trim();
+  const isShip=sq || /^ship-/.test(String(it.item_id||''));
+  if(!isShip) return false;
+  const no=sq || String(it.item_id||'').replace(/^ship-/,'');
+  const o=(ORDERS_CACHE||[]).find(x=>String(x.no)===String(no));
+  return !!(o && o.st && (o.st.ship_date_est||o.st.ship_date_actual));
+}
 /* 產生某日的全部事件 */
 function eventsOn(dstr){
   const evs=[];
@@ -33,7 +44,7 @@ function eventsOn(dstr){
   }
   CAL_ITEMS.forEach(it=>{
     const timeTxt = (it.all_day!=='Y' && it.time) ? it.time+' ' : '';
-    if(it.kind==='memo' && CAL_KINDS.memo && calCatOn(it.category)){
+    if(it.kind==='memo' && CAL_KINDS.memo && calCatOn(it.category) && !calShipMemoDup(it)){
       if(it.date===dstr) evs.push({t:'memo', txt:'📌 '+timeTxt+it.title, item:it, done:it.done==='Y', time:timeTxt?it.time:''});
     }
     if(it.kind==='recur' && CAL_KINDS.recur && calCatOn(it.category)){
@@ -125,7 +136,7 @@ function renderTodayFocus(){
   const el=document.getElementById('cal-focus'); if(!el) return;
   const items=[];
   // 逾期備忘（未完成）
-  CAL_ITEMS.filter(it=>it.kind==='memo'&&it.done!=='Y'&&it.date).forEach(it=>{
+  CAL_ITEMS.filter(it=>it.kind==='memo'&&it.done!=='Y'&&it.date&&!calShipMemoDup(it)).forEach(it=>{
     const d=daysBetween(it.date);
     if(d!=null&&d<0) items.push({o:d,h:`<span class="ob red">逾期 ${-d} 天</span> 📌 ${escHtml(it.title)}`,click:`openCalEdit('${escHtml(it.item_id)}')`});
     else if(d!=null&&d<=7) items.push({o:d,h:`<span class="ob warn">${d===0?'今天':d+' 天後'}</span> 📌 ${escHtml(it.title)}`,click:`openCalEdit('${escHtml(it.item_id)}')`});
@@ -317,22 +328,31 @@ async function saveCalItem(){
     time: calTimeStr,
     done: existing?existing.done:'N', done_date: existing?existing.done_date:''
   };
+  const snap=CAL_ITEMS;                       // apiCall（寫入類）會把 CAL_ITEMS 清空，先留一份
+  const saveBtn=document.getElementById('ce-save');
+  if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent='儲存中…'; }
   try{
     const d=await apiCall({ action:'saveCalendarItem', token:AUTH_TOKEN, item });
     if(!d.ok){ toast(d.error||'儲存失敗','err'); return; }
+    // 先把存好的這筆直接放進畫面（0 秒），背景再跟後端要最新的
+    CAL_ITEMS=(snap||[]).filter(x=>String(x.item_id)!==String(item.item_id)).concat([item]);
     closeCalEdit(); toast('已儲存','ok');
-    await loadCalendar();
+    renderCalendar();
+    loadCalendar().catch(()=>{});
   }catch(e){ toast(e.message||'儲存失敗','err'); }
-  finally{ _busy.calSave=false; }
+  finally{ _busy.calSave=false; if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='儲存'; } }
 }
 async function deleteCalItem(){
   if(!CAL_EDIT_ID) return;
   if(!confirm('確定刪除這個事項？')) return;
+  const delId=CAL_EDIT_ID, snap=CAL_ITEMS;   // apiCall（寫入類）會把 CAL_ITEMS 清空，先留一份
   try{
-    const d=await apiCall({ action:'deleteCalendarItem', token:AUTH_TOKEN, item_id:CAL_EDIT_ID });
+    const d=await apiCall({ action:'deleteCalendarItem', token:AUTH_TOKEN, item_id:delId });
     if(!d.ok){ toast(d.error||'刪除失敗','err'); return; }
+    CAL_ITEMS=(snap||[]).filter(x=>String(x.item_id)!==String(delId));   // 畫面即刻拿掉，背景再更新
     closeCalEdit(); toast('已刪除','ok');
-    await loadCalendar();
+    renderCalendar();
+    loadCalendar().catch(()=>{});
   }catch(e){ toast(e.message||'刪除失敗','err'); }
 }
 async function syncGCal(){

@@ -447,17 +447,17 @@ function renderRecords(){
         ? '<span class="rec-badge consign">寄售月結</span>'
         : '<span class="rec-badge banquet">宴會酒水</span>';
       const total='$'+Math.round(q.grandTotal||0).toLocaleString();
-      return `<tr class="clickable" onclick="openRecord('${q.quoteNo}')">
-        <td class="mc-main" style="font-weight:600">${q.quoteNo||'—'}</td>
-        <td data-l="客戶">${q.clientName||'—'}</td>
+      return `<tr class="clickable" onclick="openRecord('${escAttr(q.quoteNo)}')">
+        <td class="mc-main" style="font-weight:600">${escHtml(q.quoteNo||'—')}</td>
+        <td data-l="客戶">${escHtml(q.clientName||'—')}</td>
         <td data-l="類型">${typeBadge}</td>
-        <td data-l="報價日">${q.quoteDate||'—'}</td>
+        <td data-l="報價日">${escHtml(q.quoteDate||'—')}</td>
         <td data-l="總計" style="font-weight:600">${total}</td>
         <td class="rec-actions" data-l="操作" onclick="event.stopPropagation()">
-          <button class="rec-act-btn" onclick="openRecord('${q.quoteNo}')">開啟</button>
-          <button class="rec-act-btn" onclick="previewRecordQuote('${q.quoteNo}')">預覽</button>
-          ${['bottle','ownbrand','ownlabel','consign'].includes(q.quoteType)?`<button class="rec-act-btn" onclick="openVerifyForm('${q.quoteNo}')">驗收單</button>`:''}
-          <button class="rec-act-btn del" onclick="deleteRecord('${q.quoteNo}','${(q.clientName||'').replace(/'/g,'')}')">刪除</button>
+          <button class="rec-act-btn primary" onclick="openRecord('${escAttr(q.quoteNo)}')">開啟</button>
+          <button class="rec-act-btn" onclick="previewRecordQuote('${escAttr(q.quoteNo)}')">預覽</button>
+          ${['bottle','ownbrand','ownlabel','consign'].includes(q.quoteType)?`<button class="rec-act-btn" onclick="openVerifyForm('${escAttr(q.quoteNo)}')">驗收單</button>`:''}
+          <button class="rec-act-btn del" onclick="deleteRecord('${escAttr(q.quoteNo)}','${escAttr((q.clientName||'').replace(/'/g,''))}')">刪除</button>
         </td>
       </tr>`;
     }).join('') + (listMaybeMore(REC_QUOTES.length) ? moreRowHtml(6) : '');
@@ -468,7 +468,7 @@ function renderRecords(){
 async function openRecord(quoteNo){
   if(isFormDirty() && !confirm('目前表單尚有未儲存的資料，開啟這張單會覆蓋目前內容，確定放棄？')) return;
   try {
-    const data=await apiCall({ action:'getQuoteById', token:AUTH_TOKEN, quoteNo });
+    const data=await readCall({ action:'getQuoteById', token:AUTH_TOKEN, quoteNo });
     if(!data.ok){ toast(data.error||'讀取失敗','err'); return; }
     loadQuoteIntoForm(data.quote);
     gotoPage('new');
@@ -481,7 +481,7 @@ async function previewRecordQuote(quoteNo){
   if(isFormDirty() && !confirm('目前表單尚有未儲存的資料，預覽這張單會覆蓋目前內容，確定繼續？')) return;
   try {
     toast('讀取訂單資料…','ok');
-    const data=await apiCall({ action:'getQuoteById', token:AUTH_TOKEN, quoteNo });
+    const data=await readCall({ action:'getQuoteById', token:AUTH_TOKEN, quoteNo });
     if(!data.ok){ toast(data.error||'讀取失敗','err'); return; }
     loadQuoteIntoForm(data.quote);
     gotoPage('new');
@@ -630,7 +630,8 @@ async function autoNextSerial(){
   if(!AUTH_TOKEN) return;
   try{
     const today=todayStr().replace(/-/g,'');
-    const lst=await apiCall({ action:'getQuotes', token:AUTH_TOKEN, filters:{} });
+    // 改用讀取快取（登入後預抓早就抓好了）：開新單不用再等一趟後端
+    const lst=await readCall(withLimit({ action:'getQuotes', token:AUTH_TOKEN, filters:{} }));
     if(!lst.ok || !Array.isArray(lst.quotes)) return;
     let mx=0;
     lst.quotes.forEach(x=>{ const m=String(x.quoteNo||'').match(new RegExp('^'+today+'-(\\d+)$')); if(m){ const n=parseInt(m[1],10); if(n>mx) mx=n; } });

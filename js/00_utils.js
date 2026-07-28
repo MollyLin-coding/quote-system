@@ -41,6 +41,8 @@ const RC_READ_ACTIONS = ['getQuotes','getQuoteById','getCompanyData','getOrderSt
 const RC_STORE = {};      // key -> {at, data}
 const RC_INFLIGHT = {};   // key -> Promise（同一份資料同時被要時共用）
 const RC_RESETS = [];     // 各模組登記「快取被清掉時，我的衍生資料也要歸零」
+let RC_GEN = 0;           // 世代編號：rcClear 會 +1。「清快取之前就出發」的請求回來時不寫進快取，
+                          // 免得存檔後被一份「存檔前的舊資料」重新填回快取（2026-07-28 修）
 function rcIsRead(action){ return RC_READ_ACTIONS.indexOf(String(action||'')) >= 0; }
 function rcKey(payload){
   const q = {};
@@ -54,6 +56,7 @@ function rcFresh(payload, ttl){
 }
 function onCacheClear(fn){ RC_RESETS.push(fn); }
 function rcClear(){
+  RC_GEN++;
   Object.keys(RC_STORE).forEach(k => delete RC_STORE[k]);
   for(let i=0;i<RC_RESETS.length;i++){
     try{ RC_RESETS[i](); }catch(e){ console.error('[cache] reset 失敗：', e); }
@@ -67,9 +70,10 @@ async function readCall(payload, force){
     if(e && (Date.now() - e.at) < RC_TTL_MS) return e.data;
     if(RC_INFLIGHT[k]) return RC_INFLIGHT[k];
   }
+  const gen = RC_GEN;
   const p = apiCall(payload).then(d => {
     delete RC_INFLIGHT[k];
-    if(d && d.ok !== false) RC_STORE[k] = { at: Date.now(), data: d };   // 只快取成功的
+    if(d && d.ok !== false && gen === RC_GEN) RC_STORE[k] = { at: Date.now(), data: d };   // 只快取成功的；出發後快取被清過就不寫回（那是舊資料）
     return d;
   }, e => { delete RC_INFLIGHT[k]; throw e; });
   RC_INFLIGHT[k] = p;
@@ -93,6 +97,7 @@ async function readCallMany(payloads, force){
   if(!BATCH_OK || fresh.length < RC_BATCH_MIN) return Promise.all(payloads.map(p => readCall(p, force)));
 
   const calls = fresh.map(i => { const c = Object.assign({}, payloads[i]); delete c.token; return c; });
+  const gen = RC_GEN;
   const bp = apiCall({ action:'batch', token:AUTH_TOKEN, calls });
   fresh.forEach((idx, n) => {                       // 這幾份「正在路上」，讓同時要的人搭同一班車
     const one = bp.then(r => {
@@ -112,7 +117,7 @@ async function readCallMany(payloads, force){
   }
   fresh.forEach((idx, n) => {
     const d = r.results[n];
-    if(d && d.ok !== false) RC_STORE[keys[idx]] = { at: Date.now(), data: d };
+    if(d && d.ok !== false && gen === RC_GEN) RC_STORE[keys[idx]] = { at: Date.now(), data: d };   // 出發後快取被清過就不寫回
   });
   return Promise.all(payloads.map(p => readCall(p, false)));   // 這時候全在快取裡，等於直接取出
 }

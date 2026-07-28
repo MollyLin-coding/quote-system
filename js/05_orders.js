@@ -67,7 +67,7 @@ async function loadOrders(force){
     renderOrders();
     if(currentPage==='report' && typeof renderReport==='function') renderReport();
     if(P.every(p=>rcFresh(p))){ ordSideBadges(); return ORDERS_CACHE; }   // 夠新就不重打
-  }else if(body){ body.innerHTML=sklTableRows(6,5); }
+  }else if(body && !ORDERS_CACHE){ body.innerHTML=sklTableRows(6,5); }   // 畫面上已有列表就別鋪骨架屏蓋掉（存檔後的背景更新）
   try{
     const [qs, cq, os] = await Promise.all(P.map(p=>readCall(p, force)));
     ORDERS_CACHE=buildOrders(qs, cq, os);
@@ -180,11 +180,11 @@ function renderOrders(){
       <td data-l="出貨日" style="text-align:center">${shipD}</td>
       <td data-l="提醒">${orderBadges(o)}${orderVerifyBadge(o)}</td>
       <td class="rec-actions" data-l="操作">
-        <button class="rec-act-btn" onclick="openOrdEdit('${escHtml(o.no)}')">編輯進度</button>
-        <button class="rec-act-btn" onclick="copyOrder('${escHtml(o.no)}','${o.src}')">複製</button>
-        <button class="rec-act-btn" onclick="openChangeLog('${escHtml(o.no)}')">修改紀錄</button>
-        ${['bottle','ownbrand','ownlabel','consign'].includes(o.typeKey)?`<button class="rec-act-btn" onclick="openVerifyForm('${escHtml(o.no)}')">驗收單</button>`:''}
-        ${o.src==='custom'?`<button class="rec-act-btn" onclick="loadCustomFromOrders('${escHtml(o.no)}')">載入編輯</button>`:''}
+        <button class="rec-act-btn primary" onclick="openOrdEdit('${escAttr(o.no)}')">編輯進度</button>
+        <button class="rec-act-btn" onclick="copyOrder('${escAttr(o.no)}','${o.src}')">複製</button>
+        <button class="rec-act-btn" onclick="openChangeLog('${escAttr(o.no)}')">修改紀錄</button>
+        ${['bottle','ownbrand','ownlabel','consign'].includes(o.typeKey)?`<button class="rec-act-btn" onclick="openVerifyForm('${escAttr(o.no)}')">驗收單</button>`:''}
+        ${o.src==='custom'?`<button class="rec-act-btn" onclick="loadCustomFromOrders('${escAttr(o.no)}')">載入編輯</button>`:''}
       </td>
     </tr>`;
   }).join('') + (listMaybeMore(ORDERS_CACHE.length) ? moreRowHtml(6) : '');
@@ -266,13 +266,24 @@ async function saveOrdEdit(){
   ['grand_total','deposit_amt','deposit_date','ship_date_est','ship_date_actual','invoice_no','invoice_date',
    'invoice_last5','invoice_detail','invoice_photos','final_amt','final_date_est','final_date','track_note']
     .forEach(k=>{ fields[k]=document.getElementById('oe-'+k).value; });
+  const no=ORD_EDITING, snap=ORDERS_CACHE;   // apiCall（寫入類）會把 ORDERS_CACHE 清空，先留一份
+  const btn=document.getElementById('oe-save');
+  if(btn){ btn.disabled=true; btn.textContent='儲存中…'; }
   try{
-    const d=await apiCall({ action:'updateOrderStatus', token:AUTH_TOKEN, quote_no:ORD_EDITING, fields });
+    const d=await apiCall({ action:'updateOrderStatus', token:AUTH_TOKEN, quote_no:no, fields });
     if(!d.ok){ toast(d.error||'儲存失敗','err'); return; }
+    // 先把改好的值直接更新到畫面（0 秒），背景再跟後端要最新的
+    if(snap){
+      ORDERS_CACHE=snap;
+      const o=ORDERS_CACHE.find(x=>x.no===no);
+      if(o) o.st=Object.assign({}, o.st||{}, fields, { quote_no:no, updated_at:new Date().toISOString() });
+      renderOrders();
+      if(typeof renderReport==='function' && currentPage==='report') renderReport();
+    }
     toast('進度已儲存','ok'); closeOrdEdit();
-    await loadOrders(true);
+    loadOrders().catch(()=>{});
   }catch(e){ toast(e.message||'儲存失敗','err'); }
-  finally{ _busy.ordEdit=false; }
+  finally{ _busy.ordEdit=false; if(btn){ btn.disabled=false; btn.textContent='儲存進度'; } }
 }
 
 /* ---- v31 發票照片上傳（saveInvoicePhotos：存 Drive「發票照片/inv_單號」，資料夾連結回填 order_status.invoice_photos）---- */
@@ -437,17 +448,18 @@ async function copyOrder(no, src){
       await loadCustomQuoteByNo(no, true);
       return;
     }
-    const d=await apiCall({ action:'getQuoteById', token:AUTH_TOKEN, quoteNo:no });
+    const d=await readCall({ action:'getQuoteById', token:AUTH_TOKEN, quoteNo:no });
     if(!d.ok){ toast(d.error||'讀取失敗','err'); return; }
     loadQuoteIntoForm(d.quote);
     editingQuoteNo=null;                       // 關鍵：複製＝新單，不沿用舊單號
     const today=fmtD(new Date());
     document.getElementById('f-dt').value=today;
     // 找出今天已用過的最大流水號 +1，避免複製出來的單號與現有單撞號
+    // （改用讀取快取：正常情況 0 秒，不用每次複製都多等一趟後端）
     let nextSer=1;
     try{
       const base=today.replace(/-/g,'');
-      const lst=await apiCall({ action:'getQuotes', token:AUTH_TOKEN, filters:{} });
+      const lst=await readCall(withLimit({ action:'getQuotes', token:AUTH_TOKEN, filters:{} }));
       if(lst.ok && Array.isArray(lst.quotes)){
         lst.quotes.forEach(x=>{ const m=String(x.quoteNo||'').match(new RegExp('^'+base+'-(\\d+)$')); if(m){ const n=parseInt(m[1],10); if(n>=nextSer) nextSer=n+1; } });
       }

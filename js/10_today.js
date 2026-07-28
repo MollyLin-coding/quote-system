@@ -241,7 +241,9 @@ function renderToday(){
   const finalDue  = d.final_due  || [];
   const noScan    = d.no_scan    || [];
   const noInvoice = d.no_invoice || [];
-  const cal       = d.calendar   || [];
+  // 「出貨：XXX」備忘（item_id 為 ship-單號）是舊版存單自動寫進行事曆的，
+  // 跟上面的 🚚 出貨卡片重複，這裡不再列一次
+  const cal       = (d.calendar  || []).filter(it=>!/^ship-/.test(String(it.item_id||'')));
   const total = shipDue.length + finalDue.length + noScan.length + noInvoice.length + cal.length;
 
   // 後端某區塊讀取失敗時淡淡提示一下（該區塊會是空的，不是真的沒事）

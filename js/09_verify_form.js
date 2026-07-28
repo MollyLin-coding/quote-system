@@ -48,9 +48,10 @@ async function openVerifyForm(no){
   VF_EDIT_ID=null;
   try{
     toast('讀取訂單資料…','ok');
+    // 走讀取快取：留底那份登入後就預抓好了，通常 0 秒；報價單本身 90 秒內開過也 0 秒
     const [data, formsData] = await Promise.all([
-      apiCall({ action:'getQuoteById', token:AUTH_TOKEN, quoteNo:no }),
-      apiCall({ action:'listVerifyForms', token:AUTH_TOKEN, filters:{} }).catch(()=>null)
+      readCall({ action:'getQuoteById', token:AUTH_TOKEN, quoteNo:no }),
+      readCall({ action:'listVerifyForms', token:AUTH_TOKEN, filters:{} }).catch(()=>null)
     ]);
     const q=data.quote;
     if(!q){ toast('查無此單','err'); return; }
