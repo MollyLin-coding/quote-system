@@ -206,6 +206,17 @@ function openOrdEdit(no){
   });
   // 訂單總額：沒存過就先帶報價單總額，讓後端據此算訂金/尾款各半
   document.getElementById('oe-grand_total').value = st.grand_total || (o.total?Math.round(o.total):'') || '';
+  // 這張單從沒存過進度（新單）→ 訂金/尾款依付款規則自動帶入（預設各半；
+  // 客戶主檔「付款習慣」寫「訂金30%」就帶 30/70）。存過的單一律不動，避免蓋掉手改值。
+  if(!st.updated_at && !String(g('deposit_amt')).trim() && !String(g('final_amt')).trim()){
+    const _gt=Math.round(parseFloat(document.getElementById('oe-grand_total').value)||0);
+    if(_gt>0){
+      const _pct=ordDepositPct(o.client);
+      const _dep=Math.round(_gt*_pct/100);
+      document.getElementById('oe-deposit_amt').value=_dep;
+      document.getElementById('oe-final_amt').value=_gt-_dep;
+    }
+  }
   document.getElementById('oe-closed_at').value = g('closed_at');
   document.getElementById('oe-track_note').value=g('track_note');
   // v31 發票照片：顯示既有資料夾/照片連結
@@ -216,14 +227,36 @@ function openOrdEdit(no){
   shpReset();
   document.getElementById('oe-overlay').style.display='flex';
 }
-/* 依訂單總額帶入訂金/尾款各半（可再手改） */
+/* 訂金比例（%）：預設 50；客戶主檔「付款習慣」寫「訂金30%」之類就用那個數字。
+   用客戶名稱（或發票抬頭）比對客戶主檔；主檔還沒載入就從讀取快取拿。 */
+function ordDepositPct(clientName){
+  const nm=String(clientName||'').split('｜')[0].trim();
+  if(!nm) return 50;
+  let list=(typeof CUS_MASTER!=='undefined'&&Array.isArray(CUS_MASTER)&&CUS_MASTER.length)?CUS_MASTER:null;
+  if(!list){
+    try{
+      const hit=(typeof rcPeek==='function'&&AUTH_TOKEN)?rcPeek({action:'getCustomers', token:AUTH_TOKEN}):null;
+      if(hit&&hit.data&&Array.isArray(hit.data.customers)) list=hit.data.customers;
+    }catch(_){}
+  }
+  if(!list) return 50;
+  const key=s=>String(s||'').replace(/\s+/g,'').toLowerCase();
+  const m=list.find(c=>key(c.name)===key(nm))||list.find(c=>c.invoice_title&&key(c.invoice_title)===key(nm));
+  if(!m) return 50;
+  const mt=String(m.pay_habit||'').match(/訂金\s*(\d{1,3})\s*%/);
+  const p=mt?parseInt(mt[1],10):50;
+  return (p>0&&p<100)?p:50;
+}
+/* 依訂單總額＋付款規則帶入訂金/尾款（可再手改）；規則同上，預設各半 */
 function fillHalf(){
   const gt=Math.round(parseFloat(document.getElementById('oe-grand_total').value)||0);
   if(!gt){ toast('請先填訂單總額','err'); return; }
-  const dep=Math.round(gt/2);
+  const o=(typeof ORDERS_CACHE!=='undefined'&&ORDERS_CACHE)?ORDERS_CACHE.find(x=>x.no===ORD_EDITING):null;
+  const pct=ordDepositPct(o?o.client:'');
+  const dep=Math.round(gt*pct/100);
   document.getElementById('oe-deposit_amt').value=dep;
   document.getElementById('oe-final_amt').value=gt-dep;
-  toast(`已帶入：訂金 ${money(dep)}／尾款 ${money(gt-dep)}`,'ok');
+  toast(`已依付款規則帶入（訂金 ${pct}%）：訂金 ${money(dep)}／尾款 ${money(gt-dep)}`,'ok');
 }
 function closeOrdEdit(){ document.getElementById('oe-overlay').style.display='none'; ORD_EDITING=null; }
 async function saveOrdEdit(){

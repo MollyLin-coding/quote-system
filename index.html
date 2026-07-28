@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260728c">
-<script src="js/00_qrcode.js?v=20260728c"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260728d">
+<script src="js/00_qrcode.js?v=20260728d"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -780,10 +780,10 @@
       <div class="fl"><label>狀態（走到哪一關）</label><select class="fi" id="oe-status">
         <option value="quoted">報價中</option><option value="deposit">已收訂金</option><option value="shipped">已出貨</option>
         <option value="invoiced">已開發票</option><option value="paid">已收尾款</option><option value="closed">結案</option><option value="cancelled">取消</option></select></div>
-      <div class="fl"><label>訂單總額（訂金/尾款各半的依據）</label>
+      <div class="fl"><label>訂單總額（訂金/尾款帶入的依據）</label>
         <div style="display:flex;gap:6px;align-items:center">
           <input class="fi" type="number" id="oe-grand_total" style="flex:1">
-          <button type="button" class="rec-act-btn" style="white-space:nowrap" onclick="fillHalf()">各半帶入</button>
+          <button type="button" class="rec-act-btn" style="white-space:nowrap" onclick="fillHalf()">依規則帶入</button>
         </div></div>
 
       <div class="oe-sec">① 訂金</div>
@@ -1054,19 +1054,19 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260728c"></script>
-<script src="js/01_quote_form.js?v=20260728c"></script>
-<script src="js/01b_quote_preview.js?v=20260728c"></script>
-<script src="js/02_core_api.js?v=20260728c"></script>
-<script src="js/03_quote_custom.js?v=20260728c"></script>
-<script src="js/04_company.js?v=20260728c"></script>
-<script src="js/05_orders.js?v=20260728c"></script>
-<script src="js/06_verify_mgmt.js?v=20260728c"></script>
-<script src="js/07_calendar.js?v=20260728c"></script>
-<script src="js/08_ownbrand.js?v=20260728c"></script>
-<script src="js/09_verify_form.js?v=20260728c"></script>
-<script src="js/10_today.js?v=20260728c"></script>
-<script src="js/11_customers.js?v=20260728c"></script>
-<script src="js/99_boot.js?v=20260728c"></script>
+<script src="js/00_utils.js?v=20260728d"></script>
+<script src="js/01_quote_form.js?v=20260728d"></script>
+<script src="js/01b_quote_preview.js?v=20260728d"></script>
+<script src="js/02_core_api.js?v=20260728d"></script>
+<script src="js/03_quote_custom.js?v=20260728d"></script>
+<script src="js/04_company.js?v=20260728d"></script>
+<script src="js/05_orders.js?v=20260728d"></script>
+<script src="js/06_verify_mgmt.js?v=20260728d"></script>
+<script src="js/07_calendar.js?v=20260728d"></script>
+<script src="js/08_ownbrand.js?v=20260728d"></script>
+<script src="js/09_verify_form.js?v=20260728d"></script>
+<script src="js/10_today.js?v=20260728d"></script>
+<script src="js/11_customers.js?v=20260728d"></script>
+<script src="js/99_boot.js?v=20260728d"></script>
 </body>
 </html>
