@@ -5,6 +5,7 @@
    ============================================================ */
 let VM_TAB='pending';           // pending | all | noreport | forms
 let VM_CAT='all';               // 客訴分類篩選：all | 回報問題 | 驗收無誤 | 其他
+let VM_FORM_CLIENT='all';       // 驗收單留底的客戶篩選：all | 客戶名 | (未歸戶)
 let VM_DATA=null;
 let VM_PROC_ID=null;
 const VM_NOREPORT_DAYS=7;
@@ -164,18 +165,33 @@ function vmRenderNoReport(){
     <thead><tr><th>單號／客戶</th><th style="text-align:center">出貨日</th><th style="text-align:center">狀態</th><th>操作</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
+function setVmFormClient(v){ VM_FORM_CLIENT=v; renderVerifyMgmt(); }
 function vmRenderForms(){
   const forms=(VM_DATA.forms||[]).slice();
   forms.sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
   if(!forms.length) return `<div class="rec-empty">尚無驗收單留底（之後每次產生驗收單會自動存一筆）</div>`;
-  const rows=forms.map(f=>{
+  // 客戶名＝用單號歸戶（vmClientOf：回報紀錄→訂單快取）；歸不出來的歸在「(未歸戶)」
+  forms.forEach(f=>{ f._client=vmClientOf(String(f.no||'').trim())||''; });
+  const cnt={};
+  forms.forEach(f=>{ const k=f._client||'(未歸戶)'; cnt[k]=(cnt[k]||0)+1; });
+  const cnames=Object.keys(cnt).sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+  if(VM_FORM_CLIENT!=='all' && !cnt[VM_FORM_CLIENT]) VM_FORM_CLIENT='all';
+  const sel=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;flex-wrap:wrap">
+    <span style="color:#6B6B63">客戶</span>
+    <select class="fi" id="vm-form-client" style="width:auto;min-width:170px" onchange="setVmFormClient(this.value)">
+      <option value="all">全部客戶（${forms.length} 筆）</option>
+      ${cnames.map(n=>`<option value="${escAttr(n)}"${VM_FORM_CLIENT===n?' selected':''}>${escHtml(n)}（${cnt[n]} 筆）</option>`).join('')}
+    </select></div>`;
+  const list=(VM_FORM_CLIENT==='all')?forms:forms.filter(f=>(f._client||'(未歸戶)')===VM_FORM_CLIENT);
+  if(!list.length) return sel+`<div class="rec-empty">「${escHtml(VM_FORM_CLIENT)}」目前沒有留底紀錄</div>`;
+  const rows=list.map(f=>{
     // items 欄位後端可能回陣列（items）或 JSON 字串（items_json），兩種都容錯讀
     const items=Array.isArray(f.items)?f.items:parseJsonSafe(f.items_json,[]);
     const names=(Array.isArray(items)?items:[]).map(it=>it.name).filter(Boolean).slice(0,3).join('、')+((Array.isArray(items)&&items.length>3)?'…':'');
     const dt=String(f.created_at||'').replace('T',' ').slice(0,16);
     return `<tr>
       <td data-l="產生時間" style="white-space:nowrap;color:#6B6B63;font-size:11.5px">${escHtml(dt)||'—'}</td>
-      <td class="mc-main"><b>${escHtml(f.no||'—')}</b>${f.lot?` <span style="color:#6B6B63">Lot ${escHtml(f.lot)}</span>`:''}</td>
+      <td class="mc-main"><b>${escHtml(f.no||'—')}</b>${f.lot?` <span style="color:#6B6B63">Lot ${escHtml(f.lot)}</span>`:''}${f._client?`<br><span style="color:#6B6B63;font-size:11.5px">${escHtml(f._client)}</span>`:''}</td>
       <td data-l="配送日" style="text-align:center">${escHtml(vmLocalYmd(f.ship_date))||'—'}</td>
       <td data-l="PM" style="text-align:center">${escHtml(f.pm||'')||'—'}</td>
       <td data-l="箱數" style="text-align:center">${(f.boxes!=null&&f.boxes!=='')?escHtml(f.boxes)+' 箱':'—'}</td>
@@ -183,8 +199,8 @@ function vmRenderForms(){
       <td class="rec-actions" data-l="操作"><button class="rec-act-btn" onclick="vmEditForm('${escAttr(f.id)}')">編輯／重印</button><button class="rec-act-btn del" onclick="vmDelForm('${escAttr(f.id)}','${escAttr(f.no||'')}')">刪除</button></td>
     </tr>`;
   }).join('');
-  return `<div class="tbl-scroll"><table class="rec-table mcard">
-    <thead><tr><th>產生時間</th><th>單號</th><th style="text-align:center">配送日</th><th style="text-align:center">PM</th><th style="text-align:center">箱數</th><th>品項</th><th>操作</th></tr></thead>
+  return sel+`<div class="tbl-scroll"><table class="rec-table mcard">
+    <thead><tr><th>產生時間</th><th>單號／客戶</th><th style="text-align:center">配送日</th><th style="text-align:center">PM</th><th style="text-align:center">箱數</th><th>品項</th><th>操作</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
 /* ---- 刪除（後端 v32：deleteVerification／deleteVerifyForm／deleteShipment，皆 {id}→整列刪除、不可復原）---- */

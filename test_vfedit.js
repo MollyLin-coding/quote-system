@@ -13,6 +13,8 @@ const FORMS = [
     ] },
   { id: 'VF0', created_at: '2026-07-20T02:00:00+08:00', no: 'T1', lot: '', ship_date: '2026-07-18', pm: '小美', boxes: 1,
     items: [ { name: '蜜香紅茶荔枝琴酒', lot: '', vol: '100', mfg: '', thisShip: 10, ordered: 60, shipped: 0 } ] },
+  { id: 'VFX', created_at: '2026-07-19T02:00:00+08:00', no: 'TX', lot: '', ship_date: '2026-07-19', pm: '小美', boxes: 1,
+    items: [ { name: '辦桌', lot: '', vol: '100', mfg: '', thisShip: 5, ordered: 5, shipped: 0 } ] },
 ];
 const QUOTE = { quoteNo: 'T9', quoteType: 'bottle', clientName: '新客戶',
   items: [{ itemType: 'bottle', name: '辦桌', lot: '', volume: '100', qty: 100 }] };
@@ -60,10 +62,41 @@ const QUOTE = { quoteNo: 'T9', quoteType: 'bottle', clientName: '新客戶',
   // 頁面載入過程可能重建過 ORDERS_CACHE（stub 回空資料），這裡重設供 vmClientOf 歸戶
   await page.evaluate(() => { ORDERS_CACHE = [{ no: 'T1', client: '甲客戶', type: '瓶裝', typeKey: 'bottle', total: 10000, quoteDate: '2026-07-01', expiry: '', st: { status: 'shipped' }, src: 'std' }]; });
 
+  // 客戶名要在 render 時就查得到 → 設好快取後重畫一次
+  await page.evaluate(() => renderVerifyMgmt());
+  await page.waitForTimeout(200);
+
   check('留底列表有「編輯／重印」按鈕（每筆一顆）', await page.evaluate(() =>
-    [...document.querySelectorAll('#vm-body .rec-act-btn')].filter(b => b.textContent.includes('編輯')).length === 2));
-  check('刪除鈕仍在（.rec-act-btn.del 兩顆）', await page.evaluate(() =>
-    document.querySelectorAll('#vm-body .rec-act-btn.del').length === 2));
+    [...document.querySelectorAll('#vm-body .rec-act-btn')].filter(b => b.textContent.includes('編輯')).length === 3));
+  check('刪除鈕仍在（.rec-act-btn.del 三顆）', await page.evaluate(() =>
+    document.querySelectorAll('#vm-body .rec-act-btn.del').length === 3));
+
+  /* ---------- 客戶名稱顯示＋客戶篩選 ---------- */
+  check('單號下方顯示客戶名稱', await page.evaluate(() =>
+    [...document.querySelectorAll('#vm-body td.mc-main')].filter(td => td.textContent.includes('甲客戶')).length === 2));
+  check('表頭是「單號／客戶」', await page.evaluate(() =>
+    [...document.querySelectorAll('#vm-body thead th')].some(th => th.textContent === '單號／客戶')));
+  check('欄數維持 7（不破壞既有測試）', await page.evaluate(() =>
+    document.querySelectorAll('#vm-body thead th').length === 7));
+  check('客戶篩選下拉存在，含全部＋甲客戶＋(未歸戶)', await page.evaluate(() => {
+    const s = document.getElementById('vm-form-client'); if (!s) return false;
+    const t = [...s.options].map(o => o.textContent).join('|');
+    return t.includes('全部客戶（3 筆）') && t.includes('甲客戶（2 筆）') && t.includes('(未歸戶)（1 筆）');
+  }));
+  await page.evaluate(() => setVmFormClient('甲客戶'));
+  await page.waitForTimeout(150);
+  check('篩選甲客戶 → 只剩 2 列', await page.evaluate(() =>
+    document.querySelectorAll('#vm-body tbody tr').length === 2));
+  await page.evaluate(() => setVmFormClient('(未歸戶)'));
+  await page.waitForTimeout(150);
+  check('篩選(未歸戶) → 只剩 TX 那列', await page.evaluate(() => {
+    const trs = document.querySelectorAll('#vm-body tbody tr');
+    return trs.length === 1 && trs[0].textContent.includes('TX');
+  }));
+  await page.evaluate(() => setVmFormClient('all'));
+  await page.waitForTimeout(150);
+  check('切回全部 → 3 列', await page.evaluate(() =>
+    document.querySelectorAll('#vm-body tbody tr').length === 3));
 
   /* ---------- 點編輯：欄位帶回 ---------- */
   await page.evaluate(() => vmEditForm('VF1'));
