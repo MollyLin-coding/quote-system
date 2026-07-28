@@ -671,7 +671,7 @@ function pushExt(n,a){
 function removeExt(id){runHooks('beforeRemoveExt', id);extras=extras.filter(e=>String(e.id)!==String(id));renderExt();calc();}
 function renderExt(){
   document.getElementById('ext-list').innerHTML=extras.map(e=>
-    `<div class="etag">${e.n}：${fmtMoney(e.a)}<button onclick="removeExt('${e.id}')">✕</button></div>`
+    `<div class="etag">${e.n}${e.a?'：'+fmtMoney(e.a):''}<button onclick="removeExt('${e.id}')">✕</button></div>`
   ).join('');
 }
 

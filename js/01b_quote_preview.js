@@ -75,7 +75,7 @@ function buildStdDocParts(){
       extras.forEach(e=>{
         rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
           <td colspan="${colspan}" style="padding:9px 12px;color:#A6824A;font-style:italic;font-size:12px">${escHtml(e.n)}</td>
-          <td style="padding:9px 8px;text-align:right;color:#6B6B63">${fmtMoney(e.a)}</td>
+          <td style="padding:9px 8px;text-align:right;color:#6B6B63">${e.a?fmtMoney(e.a):''}</td>
         </tr>`);
       });
     }
