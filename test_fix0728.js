@@ -241,6 +241,51 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
   check('取消勾選存檔 → done=N、完成日清空（可復原）', editDone.savedDone === 'N' && editDone.savedDate === '');
   check('新增事項不顯示「已完成」勾選', !editDone.addShown);
 
+  /* ---------- 6) 驗收單第二次產出：自動帶前次出貨 ---------- */
+  const vf2 = await page.evaluate(async () => {
+    rcClear();
+    const quote = { ok: true, quote: { quoteNo: 'V1', clientName: '湧金啤酒廠', items: [
+      { itemType: 'bottle', name: '湧金拉格', volume: 330, qty: 100 },
+      { itemType: 'bottle', name: 'BF精釀', volume: 500, qty: 50 }
+    ] } };
+    window.apiCall = async (p) => {
+      if (p.action === 'getQuoteById') return quote;
+      if (p.action === 'listVerifyForms') return { ok: true, records: [
+        { id: 'F1', no: 'V1', created_at: '2026-07-27T10:00:00Z',
+          items: [{ name: '湧金拉格', vol: '330', thisShip: 60, ordered: 100, shipped: 0 }] },
+        { id: 'F9', no: '別張單', created_at: '2026-07-27T10:00:00Z',
+          items: [{ name: '湧金拉格', vol: '330', thisShip: 999 }] }
+      ] };
+      return { ok: true, quotes: [], orders: [], records: [], items: [] };
+    };
+    await openVerifyForm('V1');
+    const gv = (i, k) => document.querySelector('#vf-body .vfi[data-i="' + i + '"][data-k="' + k + '"]').value;
+    const r = { seq: document.getElementById('vf-shipseq').value,
+      aShipped: gv(0, 'shipped'), aThis: gv(0, 'thisShip'),
+      bShipped: gv(1, 'shipped'), bThis: gv(1, 'thisShip') };
+    closeVerifyForm();
+    return r;
+  });
+  check('驗收單第二次：第幾次出貨自動＝2', vf2.seq === '2');
+  check('驗收單第二次：已出貨帶前次的 60', vf2.aShipped === '60');
+  check('驗收單第二次：本次出貨自動＝剩餘 40', vf2.aThis === '40');
+  check('沒出過的品項：已出貨 0、本次＝全部 50', vf2.bShipped === '0' && vf2.bThis === '50');
+
+  const vf1 = await page.evaluate(async () => {
+    rcClear();
+    window.apiCall = async (p) => {
+      if (p.action === 'getQuoteById') return { ok: true, quote: { quoteNo: 'V2', clientName: 'X', items: [{ itemType: 'bottle', name: 'A酒', volume: 330, qty: 80 }] } };
+      if (p.action === 'listVerifyForms') return { ok: true, records: [] };
+      return { ok: true, quotes: [], orders: [], records: [], items: [] };
+    };
+    await openVerifyForm('V2');
+    const gv = (i, k) => document.querySelector('#vf-body .vfi[data-i="' + i + '"][data-k="' + k + '"]').value;
+    const r = { seq: document.getElementById('vf-shipseq').value, shipped: gv(0, 'shipped'), thisShip: gv(0, 'thisShip') };
+    closeVerifyForm();
+    return r;
+  });
+  check('第一次產出行為不變：第1次、已出貨0、本次＝全部', vf1.seq === '1' && vf1.shipped === '0' && vf1.thisShip === '80');
+
   results.forEach(r => console.log(r[0], r[1]));
   const fails = results.filter(r => r[0] === 'FAIL').length;
   console.log(errors.length ? 'JS ERRORS:\n' + errors.join('\n') : 'NO JS ERRORS');

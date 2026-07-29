@@ -59,14 +59,34 @@ async function openVerifyForm(no){
     if(!items.length){ toast('這張單沒有瓶裝品項，無法產生驗收單','err'); return; }
     /* 抬頭這欄是「客戶批號」（客戶自己的批號／貨號），跟我們自己的 LOT 是兩套編號，
        系統裡沒有客戶批號資料，不從我方 it.lot 帶入，一律留空給人工填 */
-    /* 這張單先前已經產生過幾次驗收單（不分整批/分批），拿來算「第幾次出貨」 */
-    const priorCount=(formsData&&formsData.ok&&Array.isArray(formsData.records))
-      ? formsData.records.filter(r=>String(r.no||'').trim()===String(no).trim()).length : 0;
+    /* 這張單先前產生過的驗收單留底：算「第幾次出貨」，並把每次的「本次出貨數」
+       按品項（品名＋容量）加總 → 這次打開時「已出貨」自動帶前幾次的量、
+       「本次出貨」自動帶剩餘量（第二次產出就不會又是全部數量了，2026-07-28 Molly 回報） */
+    const priorForms=(formsData&&formsData.ok&&Array.isArray(formsData.records))
+      ? formsData.records.filter(r=>String(r.no||'').trim()===String(no).trim()) : [];
+    const priorCount=priorForms.length;
+    const shippedSum={};
+    priorForms.forEach(f=>{
+      const its=Array.isArray(f.items)?f.items:parseJsonSafe(f.items_json,[]);
+      (its||[]).forEach(pi=>{
+        const k=String(pi.name||'').trim()+'|'+String(pi.vol==null?'':pi.vol).trim();
+        shippedSum[k]=(shippedSum[k]||0)+(parseFloat(pi.thisShip)||0);
+      });
+    });
     VERIFY_DATA={ no:q.quoteNo, client:q.clientName||'', priorCount,
-      rows:items.map(it=>({ name:it.name||'', lot:it.lot||'', vol:it.volume||'',
-        ordered:parseFloat(it.qty)||0, mfg:'', thisShip:(parseFloat(it.qty)||0), shipped:0 })) };
+      rows:items.map(it=>{
+        const ordered=parseFloat(it.qty)||0;
+        const k=String(it.name||'').trim()+'|'+String(it.volume==null?'':it.volume).trim();
+        const shipped=shippedSum[k]||0;
+        const remain=ordered-shipped;
+        return { name:it.name||'', lot:it.lot||'', vol:it.volume||'', ordered, mfg:'',
+          thisShip: shipped>0 ? (remain>0?remain:0) : ordered, shipped };
+      }) };
     buildVerifyModal('');
     document.getElementById('vf-overlay').style.display='flex';
+    if(priorCount>0 && VERIFY_DATA.rows.some(r=>r.shipped>0)){
+      toast(`已帶入前 ${priorCount} 張驗收單的出貨數量：「已出貨」＝之前出過的、「本次出貨」＝剩餘量（都可以再改）`,'ok');
+    }
   }catch(e){ toast(e.message||'讀取失敗','err'); }
 }
 
