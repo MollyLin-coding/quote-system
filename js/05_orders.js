@@ -557,40 +557,40 @@ function renderReport(){
       <div class="rpt-stat"><div class="k">本月已收尾款</div><div class="v" style="color:#2E7D4F">${money(paidSum)}</div></div>
       <div class="rpt-stat"><div class="k">還沒收的尾款（累計）</div><div class="v" style="color:#B03A2E">${money(unpaidSum)}</div></div>
     </div>
-    ${rows.length?`<div class="tbl-scroll"><table class="rec-table" style="margin-top:10px"><thead><tr><th>客戶</th><th style="text-align:center">筆數</th><th style="text-align:right">金額</th></tr></thead><tbody>
-      ${rows.map(([k,v])=>`<tr><td>${escHtml(k)}</td><td style="text-align:center">${v.n}</td><td style="text-align:right">${money(v.a)}</td></tr>`).join('')}
+    ${rows.length?`<div class="tbl-scroll"><table class="rec-table mcard" style="margin-top:10px"><thead><tr><th>客戶</th><th style="text-align:center">筆數</th><th style="text-align:right">金額</th></tr></thead><tbody>
+      ${rows.map(([k,v])=>`<tr><td class="mc-main">${escHtml(k)}</td><td data-l="筆數" style="text-align:center">${v.n}</td><td data-l="金額" style="text-align:right">${money(v.a)}</td></tr>`).join('')}
     </tbody></table></div>`:'<div class="rec-empty">本月尚無成交（狀態需為已收訂金以上才列入）</div>'}
     <div style="font-size:11px;color:#A8A69C;margin-top:8px">※ 以報價日期歸屬月份；狀態「已收訂金」（含）之後視為成交。</div>
 
     <div class="rpt-head" style="margin-top:22px">還沒收的尾款　<span style="font-size:11px;color:#A8A69C;font-weight:400">已出貨或已開發票、但還沒收尾款的單（不分月份，點列可開編輯進度）</span></div>
-    ${unpaidRows.length?`<div class="tbl-scroll"><table class="rec-table" style="margin-top:8px"><thead><tr><th>單號</th><th>客戶</th><th style="text-align:right">尾款金額</th><th style="text-align:center">預計尾款日</th><th style="text-align:center">發票</th></tr></thead><tbody>
+    ${unpaidRows.length?`<div class="tbl-scroll"><table class="rec-table mcard" style="margin-top:8px"><thead><tr><th>單號</th><th>客戶</th><th style="text-align:right">尾款金額</th><th style="text-align:center">預計尾款日</th><th style="text-align:center">發票</th></tr></thead><tbody>
       ${unpaidRows.map(r=>{
         const o=r.o, s=o.st||{};
         const fde=s.final_date_est;
         let fdeTxt='—';
         if(fde){ const d=daysBetween(fde); fdeTxt=(d!=null&&d<0)?`<span style="color:#B03A2E;font-weight:600">${escHtml(fde.slice(5))}（逾期${-d}天）</span>`:escHtml(fde.slice(5)); }
         return `<tr style="cursor:pointer" onclick="openOrdEdit('${escHtml(o.no)}')">
-          <td><b>${escHtml(o.no)}</b></td>
-          <td>${escHtml(o.client.split('｜')[0])}</td>
-          <td style="text-align:right">${money(r.amt)}${r.est?'<span style="color:#B5541F;font-size:10.5px;margin-left:4px">推估</span>':''}</td>
-          <td style="text-align:center">${fdeTxt}</td>
-          <td style="text-align:center">${s.invoice_no?'✓':'未開'}</td>
+          <td class="mc-main"><b>${escHtml(o.no)}</b></td>
+          <td data-l="客戶">${escHtml(o.client.split('｜')[0])}</td>
+          <td data-l="尾款金額" style="text-align:right">${money(r.amt)}${r.est?'<span style="color:#B5541F;font-size:10.5px;margin-left:4px">推估</span>':''}</td>
+          <td data-l="預計尾款日" style="text-align:center">${fdeTxt}</td>
+          <td data-l="發票" style="text-align:center">${s.invoice_no?'✓':'未開'}</td>
         </tr>`;
       }).join('')}
     </tbody><tfoot><tr><td colspan="2" style="text-align:right;font-weight:700">合計</td><td style="text-align:right;font-weight:700">${money(unpaidSum)}</td><td colspan="2"></td></tr></tfoot></table></div>`
       :'<div class="rec-empty">目前沒有還沒收的尾款 🎉</div>'}
 
     <div class="rpt-head" style="margin-top:22px">已出貨未開發票　<span style="font-size:11px;color:#A8A69C;font-weight:400">出貨超過 7 天標橘提醒</span></div>
-    ${unbilledList.length?`<div class="tbl-scroll"><table class="rec-table" style="margin-top:8px"><thead><tr><th>單號</th><th>客戶</th><th style="text-align:center">實際出貨日</th><th style="text-align:center">出貨後天數</th></tr></thead><tbody>
+    ${unbilledList.length?`<div class="tbl-scroll"><table class="rec-table mcard" style="margin-top:8px"><thead><tr><th>單號</th><th>客戶</th><th style="text-align:center">實際出貨日</th><th style="text-align:center">出貨後天數</th></tr></thead><tbody>
       ${unbilledList.map(o=>{
         const sd=o.st?.ship_date_actual;
         const d=sd?daysBetween(sd):null;
         const days=d==null?null:-d;
         return `<tr style="cursor:pointer" onclick="openOrdEdit('${escHtml(o.no)}')">
-          <td><b>${escHtml(o.no)}</b></td>
-          <td>${escHtml(o.client.split('｜')[0])}</td>
-          <td style="text-align:center">${sd?escHtml(sd.slice(5)):'—'}</td>
-          <td style="text-align:center">${days==null?'—':`<span class="ob ${days>7?'warn':''}">${days} 天</span>`}</td>
+          <td class="mc-main"><b>${escHtml(o.no)}</b></td>
+          <td data-l="客戶">${escHtml(o.client.split('｜')[0])}</td>
+          <td data-l="實際出貨日" style="text-align:center">${sd?escHtml(sd.slice(5)):'—'}</td>
+          <td data-l="出貨天數" style="text-align:center">${days==null?'—':`<span class="ob ${days>7?'warn':''}">${days} 天</span>`}</td>
         </tr>`;
       }).join('')}
     </tbody></table></div>`:'<div class="rec-empty">目前沒有已出貨未開發票的單 🎉</div>'}

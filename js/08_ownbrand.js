@@ -175,9 +175,9 @@ async function loadConsignInventory(){
       const p=ownbrandBySku(r.sku_id);
       const nm=r.name||(p?p.name:r.sku_id);
       const vol=r.volume||(p?p.volume:'');
-      return `<tr><td>${escHtml(nm)}</td><td style="text-align:center">${escHtml(vol)}</td>
-        <td style="text-align:right;font-weight:600">${(parseFloat(r.balance)||0).toLocaleString()}</td>
-        <td style="text-align:right">${(parseFloat(r.deposit_pool_qty)||0).toLocaleString()}</td></tr>`;
+      return `<tr><td class="mc-main">${escHtml(nm)}</td><td data-l="容量" style="text-align:center">${escHtml(vol)}</td>
+        <td data-l="實體庫存" style="text-align:right;font-weight:600">${(parseFloat(r.balance)||0).toLocaleString()}</td>
+        <td data-l="保證金在池瓶數" style="text-align:right">${(parseFloat(r.deposit_pool_qty)||0).toLocaleString()}</td></tr>`;
     }).join('');
   }catch(e){ body.innerHTML=`<tr><td colspan="4" class="rec-empty">${escHtml(e.message||'載入失敗')}</td></tr>`; }
 }
@@ -195,9 +195,9 @@ async function loadConsignLedger(){
       const p=ownbrandBySku(r.sku_id);
       const nm=p?`${p.name}（${p.volume}）`:r.sku_id;
       const up=(r.unit_price!=null&&r.unit_price!=='')?money(r.unit_price):'—';
-      return `<tr><td>${escHtml(r.date||'')}</td><td>${escHtml(CS_TYPE_LABEL[r.type]||r.type||'')}</td>
-        <td>${escHtml(nm)}</td><td style="text-align:right">${(parseFloat(r.qty)||0).toLocaleString()}</td>
-        <td style="text-align:right">${up}</td><td>${escHtml(r.note||'')}</td></tr>`;
+      return `<tr><td class="mc-main">${escHtml(r.date||'')}</td><td data-l="類型">${escHtml(CS_TYPE_LABEL[r.type]||r.type||'')}</td>
+        <td data-l="公版酒">${escHtml(nm)}</td><td data-l="數量" style="text-align:right">${(parseFloat(r.qty)||0).toLocaleString()}</td>
+        <td data-l="折後單價" style="text-align:right">${up}</td><td data-l="備註">${escHtml(r.note||'')}</td></tr>`;
     }).join('');
   }catch(e){ body.innerHTML=`<tr><td colspan="6" class="rec-empty">${escHtml(e.message||'載入失敗')}</td></tr>`; }
 }
@@ -389,14 +389,33 @@ async function loadConsignMonthly(){
     CS_MONTHLY={ ...d, year:y, month:m, customer:curConsignCustomer(), for_customer:CS_CUR, for_ym:ym };
     const lines=d.lines||[];
     if(!lines.length){ wrap.innerHTML='<div class="rec-empty">本月無銷售紀錄</div>'; return; }
-    wrap.innerHTML=`<div class="tbl-scroll"><table class="rec-table">
+    wrap.innerHTML=`<div class="tbl-scroll"><table class="rec-table mcard">
       <thead><tr><th>公版酒</th><th style="text-align:center">容量</th><th style="text-align:right">銷售數量</th><th style="text-align:right">折後單價</th><th style="text-align:right">小計</th></tr></thead>
-      <tbody>${lines.map(l=>`<tr><td>${escHtml(l.name||l.sku_id)}</td><td style="text-align:center">${escHtml(l.volume||'')}</td>
-        <td style="text-align:right">${(parseFloat(l.qty)||0).toLocaleString()}</td><td style="text-align:right">${money(l.unit_price)}</td>
-        <td style="text-align:right;font-weight:700">${money(l.amount)}</td></tr>`).join('')}</tbody>
+      <tbody>${lines.map(l=>`<tr><td class="mc-main">${escHtml(l.name||l.sku_id)}</td><td data-l="容量" style="text-align:center">${escHtml(l.volume||'')}</td>
+        <td data-l="銷售數量" style="text-align:right">${(parseFloat(l.qty)||0).toLocaleString()}</td><td data-l="折後單價" style="text-align:right">${money(l.unit_price)}</td>
+        <td data-l="小計" style="text-align:right;font-weight:700">${money(l.amount)}</td></tr>`).join('')}</tbody>
       <tfoot><tr><td colspan="4" style="text-align:right;font-weight:700;padding:10px 12px">本月應收（含稅）</td><td style="text-align:right;font-weight:700;color:var(--gold-deep)">${money(d.total)}</td></tr></tfoot>
-      </table></div>`;
+      </table></div><div id="cs-settled" style="margin-top:8px;font-size:12.5px;color:var(--hint)">查詢請款狀態中…</div>`;
+    csCheckSettled();
   }catch(e){ wrap.innerHTML=`<div class="rec-empty">${escHtml(e.message||'計算失敗')}</div>`; }
+}
+/* 這個「客戶＋結算期間」是否已轉出過報價單（防重複請款；轉報價單時會把期間寫進備註）*/
+async function csCheckSettled(){
+  const snap=CS_MONTHLY;
+  try{
+    const d=await readCall(withLimit({action:'getQuotes', token:AUTH_TOKEN, filters:{}}));
+    if(CS_MONTHLY!==snap || !CS_MONTHLY) return;   // 期間/客戶已切換就別亂寫畫面
+    const c=CS_MONTHLY.customer||{};
+    const from=CS_MONTHLY.period&&CS_MONTHLY.period.from;
+    const q=from?(d.quotes||[]).find(q=>q.quoteType==='consign'
+      && String(q.clientName||'').trim()===String(c.name||'').trim()
+      && String(q.remark||'').includes('寄售月結：'+from)):null;
+    CS_MONTHLY.settled=q||null;
+    const el=document.getElementById('cs-settled');
+    if(el) el.innerHTML=q
+      ? `✅ 這個月已於 ${escHtml(q.quoteDate||'')} 轉出報價單 <b>${escHtml(q.quoteNo)}</b>（已請款，別重複開單）`
+      : `📌 這個月還沒轉出報價單（尚未請款）`;
+  }catch(e){ const el=document.getElementById('cs-settled'); if(el) el.textContent=''; }
 }
 function exportConsignMonthly(){
   if(csMonthlyStale()){ toast('請先按「產生月結」（客戶或月份換過了）','err'); return; }
@@ -436,6 +455,7 @@ function exportConsignMonthly(){
 function consignMonthlyToQuote(){
   if(csMonthlyStale()){ toast('請先按「產生月結」（客戶或月份換過了）','err'); return; }
   if(!CS_MONTHLY||!(CS_MONTHLY.lines&&CS_MONTHLY.lines.length)){ toast('請先「產生月結」再轉為報價單','err'); return; }
+  if(CS_MONTHLY.settled && !confirm('這個月已經在 '+(CS_MONTHLY.settled.quoteDate||'')+' 轉出過報價單 '+CS_MONTHLY.settled.quoteNo+'。\n再轉一次會出現兩張同月份的請款單，確定要繼續嗎？')) return;
   const c=CS_MONTHLY.customer||{};
   const period=(CS_MONTHLY.period&&CS_MONTHLY.period.from)?`${CS_MONTHLY.period.from} ～ ${CS_MONTHLY.period.to}`:`${CS_MONTHLY.year}年${CS_MONTHLY.month}月`;
   resetAll(true);
@@ -445,11 +465,19 @@ function consignMonthlyToQuote(){
   { const box=document.getElementById('qf-detail'); if(box) box.style.display='none'; }
   setType('consign');
   const set=(id,v)=>{ const e=document.getElementById(id); if(e && v!=null && v!=='') e.value=v; };
+  // 交叉帶入：客戶主檔（客戶管理）有同名客戶時，自動帶發票抬頭／統編／地址，統編不用再手查
+  let master=null;
+  try{
+    const pk=rcPeek({action:'getCustomers', token:AUTH_TOKEN});
+    const list=(pk&&pk.data&&pk.data.customers)||[];
+    master=list.find(x=>String(x.active||'Y').toUpperCase()!=='N' && String(x.name||'').trim()===String(c.name||'').trim())||null;
+  }catch(e){}
   set('f-cli', c.name);
-  set('f-inv', c.name);
-  set('f-con', c.contact);
-  set('f-ph', c.phone);
-  set('f-ad', c.ship_address);
+  set('f-inv', (master&&master.invoice_title)||c.name);
+  set('f-tax', master&&master.tax_id);
+  set('f-con', c.contact||(master&&master.contact));
+  set('f-ph', c.phone||(master&&master.phone));
+  set('f-ad', c.ship_address||(master&&master.address));
   let note=`寄售月結：${period}`;
   if(c.default_discount) note+=`（折數 ${(c.default_discount*10).toFixed(1).replace(/\.0$/,'')} 折）`;
   set('f-note', note);

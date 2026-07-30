@@ -232,6 +232,30 @@ function tdCard(icon, title, list, rowsHtml, emptyTxt){
     ${arr.length ? rowsHtml : `<div class="td-none">✓ ${escHtml(emptyTxt)}</div>`}
   </div>`;
 }
+/* 寄售請款提醒（2026-07-30 加）：純前端——用登入預抓的寄售客戶檔算「近 3 天內的請款日」，
+   不多打任何後端請求。billing_day＝每月幾號請款；到期日已過就看下個月。 */
+function tdConsignBilling(){
+  try{
+    const pk = rcPeek({action:'getConsignCustomers', token:(typeof AUTH_TOKEN!=='undefined'?AUTH_TOKEN:'')});
+    const cs = (pk && pk.data && pk.data.customers) || [];
+    const now = new Date(); const y=now.getFullYear(), mo=now.getMonth(), dnum=now.getDate();
+    const out = [];
+    cs.forEach(c=>{
+      if(String(c.active||'Y').toUpperCase()==='N') return;
+      const bd = parseInt(c.billing_day,10); if(!(bd>=1 && bd<=31)) return;
+      const dim  = new Date(y, mo+1, 0).getDate();          // 這個月幾天（請款日 31 號遇小月＝月底）
+      let dd = Math.min(bd,dim) - dnum;                     // 距這個月的請款日還幾天
+      if(dd < 0){                                            // 這個月已過 → 看下個月
+        const dim2 = new Date(y, mo+2, 0).getDate();
+        dd = (dim - dnum) + Math.min(bd,dim2);
+      }
+      if(dd <= 3) out.push({ name:c.name||c.customer_id, customer_id:c.customer_id, bd, dd, urgent: dd===0 });
+    });
+    out.sort((a,b)=>a.dd-b.dd);
+    return out;
+  }catch(e){ return []; }
+}
+function tdOpenConsign(){ gotoPage('consign'); }
 function renderToday(){
   const wrap = document.getElementById('td-body'); if(!wrap) return;
   const d = TD_DATA;
@@ -244,7 +268,8 @@ function renderToday(){
   // 「出貨：XXX」備忘（item_id 為 ship-單號）是舊版存單自動寫進行事曆的，
   // 跟上面的 🚚 出貨卡片重複，這裡不再列一次
   const cal       = (d.calendar  || []).filter(it=>!/^ship-/.test(String(it.item_id||'')));
-  const total = shipDue.length + finalDue.length + noScan.length + noInvoice.length + cal.length;
+  const csBill    = tdConsignBilling();
+  const total = shipDue.length + finalDue.length + noScan.length + noInvoice.length + cal.length + csBill.length;
 
   // 後端某區塊讀取失敗時淡淡提示一下（該區塊會是空的，不是真的沒事）
   const warn = (d.warnings && d.warnings.length)
@@ -300,8 +325,15 @@ function renderToday(){
     </button>`;
   });
 
+  // 6. 寄售請款日（近 3 天內；點了直接去寄售管理產月結）
+  const billRows = tdRowsHtml(csBill, (o,dim)=>`<button type="button" class="td-row${dim?' dim':''}" onclick="tdOpenConsign()">
+      <div class="td-r1">${escHtml(o.name)}
+        <span class="td-tag ${o.dd===0?'red':'warn'}">${o.dd===0?'今天請款！':('還有 '+o.dd+' 天')}</span></div>
+      <div class="td-r2">每月 ${o.bd} 號請款　·　點一下去寄售管理產月結</div>
+    </button>`);
+
   // 全部都不急時，先講一句好消息，再把「還不急」的清單列出來
-  const urgTotal = [shipDue, finalDue, noScan, noInvoice, cal]
+  const urgTotal = [shipDue, finalDue, noScan, noInvoice, cal, csBill]
     .reduce((n, arr)=> n + arr.filter(tdIsUrgent).length, 0);
   const calmBar = urgTotal ? '' :
     `<div class="td-calm">今天沒有急件 🎉　下面是還不急、可以先看看的事情。</div>`;
@@ -311,6 +343,7 @@ function renderToday(){
     ${tdCard('💰','該催的尾款', finalDue, finalRows, '沒有要催的尾款')}
     ${tdCard('📮','客戶還沒回報驗收', noScan, scanRows, '沒有待催回報')}
     ${tdCard('🧾','已出貨未開發票', noInvoice, invRows, '沒有待開發票')}
+    ${csBill.length?tdCard('💸','寄售請款日', csBill, billRows, ''):''}
     ${tdCard('📅','今天的行事曆', cal, calRows, '今天沒有排定事項')}
   </div>`;
 }
