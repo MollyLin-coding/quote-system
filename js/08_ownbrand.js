@@ -143,14 +143,27 @@ function onSelectConsignCustomer(){
   }
   box.style.display='block';
   if(!document.getElementById('cs-month').value){ const n=new Date(); document.getElementById('cs-month').value=n.getFullYear()+'-'+s2(n.getMonth()+1); }
-  document.getElementById('cs-monthly').innerHTML='';
+  csClearMonthly();   // 換客戶＝上一個客戶的月結作廢，避免匯出/轉單用到別人的資料
   loadConsignInventory(); loadConsignLedger();
+}
+/* 月結暫存作廢（換客戶／換月份時呼叫；匯出與轉報價單前也會再比對一次） */
+function csClearMonthly(){
+  CS_MONTHLY=null;
+  const w=document.getElementById('cs-monthly'); if(w) w.innerHTML='';
+}
+/* 匯出/轉報價單前的保險：月結資料必須是「目前這個客戶＋目前選的月份」產的 */
+function csMonthlyStale(){
+  const ym=document.getElementById('cs-month').value;
+  return !CS_MONTHLY || String(CS_MONTHLY.for_customer)!==String(CS_CUR) || CS_MONTHLY.for_ym!==ym;
 }
 async function loadConsignInventory(){
   const body=document.getElementById('cs-inv-body');
-  body.innerHTML=sklTableRows(4,4);
+  // 一次抓「全部客戶」的庫存進 90 秒讀取快取（前端本來就有按客戶過濾）：
+  // 切換客戶不再重打後端（原本每切一次 2.5 秒起跳）；登記異動後快取自動清掉會重抓。
+  const payload={action:'getConsignInventory', token:AUTH_TOKEN};
+  if(!rcPeek(payload)) body.innerHTML=sklTableRows(4,4);
   try{
-    const d=await apiCall({action:'getConsignInventory', token:AUTH_TOKEN, customer_id:CS_CUR});
+    const d=await readCall(payload);
     if(!d.ok) throw new Error(d.error||'載入庫存失敗');
     CS_INV=(d.inventory||[]).filter(r=>!r.customer_id||String(r.customer_id)===String(CS_CUR));
     const dep=(d.deposit_held_by_customer&&d.deposit_held_by_customer[CS_CUR])||0;
@@ -170,9 +183,10 @@ async function loadConsignInventory(){
 }
 async function loadConsignLedger(){
   const body=document.getElementById('cs-ledger-body');
-  body.innerHTML=sklTableRows(6,4);
+  const payload={action:'getConsignLedger', token:AUTH_TOKEN};   // 同庫存：抓全部進快取，切客戶 0 秒
+  if(!rcPeek(payload)) body.innerHTML=sklTableRows(6,4);
   try{
-    const d=await apiCall({action:'getConsignLedger', token:AUTH_TOKEN, customer_id:CS_CUR});
+    const d=await readCall(payload);
     if(!d.ok) throw new Error(d.error||'載入明細失敗');
     let rows=(d.rows||[]).filter(r=>!r.customer_id||String(r.customer_id)===String(CS_CUR));
     rows.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
@@ -190,7 +204,17 @@ async function loadConsignLedger(){
 function populateConsignSkuSelect(selId){
   const s=document.getElementById(selId); if(!s) return;
   const ps=OWNBRAND_PRODUCTS||[];
-  s.innerHTML=ps.length?ps.map(p=>`<option value="${escHtml(p.sku_id)}">${escHtml(p.name+'（'+p.volume+'）')}</option>`).join(''):'<option value="">尚無公版酒（先在後台同步）</option>';
+  if(!ps.length){
+    // 任何寫入動作（存客戶/存單…）都會清讀取快取，把公版酒清單一起洗掉；
+    // 這裡自動補載，否則存完客戶馬上開「登記異動」會看到空下拉（預跑抓到的 BUG）
+    s.innerHTML='<option value="">公版酒載入中…</option>';
+    loadOwnbrandData().then(()=>{
+      const ps2=OWNBRAND_PRODUCTS||[];
+      s.innerHTML=ps2.length?ps2.map(p=>`<option value="${escHtml(p.sku_id)}">${escHtml(p.name+'（'+p.volume+'）')}</option>`).join(''):'<option value="">尚無公版酒（先在後台同步）</option>';
+    }).catch(()=>{ s.innerHTML='<option value="">尚無公版酒（先在後台同步）</option>'; });
+    return;
+  }
+  s.innerHTML=ps.map(p=>`<option value="${escHtml(p.sku_id)}">${escHtml(p.name+'（'+p.volume+'）')}</option>`).join('');
 }
 
 /* ---- 客戶新增/編輯 ---- */
@@ -257,6 +281,11 @@ async function saveConsignCustomerForm(){
   const id=g('cs-f-id'), name=g('cs-f-name');
   if(!id){ toast('請填客戶代碼','err'); _csSaving=false; return; }
   if(!name){ toast('請填客戶名稱','err'); _csSaving=false; return; }
+  // 新增模式：代碼撞到既有客戶會整筆覆蓋對方（後端是 upsert），這裡先擋下來
+  const editing=document.getElementById('cs-f-id').readOnly;
+  if(!editing && CS_CUSTOMERS.some(c=>String(c.customer_id)===String(id))){
+    toast('客戶代碼「'+id+'」已存在，換一個代碼；要改既有客戶請用「客戶設定」','err'); _csSaving=false; return;
+  }
   const disc=parseFloat(g('cs-f-disc'));
   const customer={ customer_id:id, name, default_discount:(disc>0&&disc<=1)?disc:0.75,
     billing_day:g('cs-f-bill'), contact:g('cs-f-contact'), phone:g('cs-f-phone'),
@@ -291,6 +320,28 @@ function onConsignMoveType(){
   if(priceRow) priceRow.style.display=(t==='out')?'block':'none';
   const hint=document.getElementById('cs-m-qtyhint');
   hint.textContent = t==='deposit_refund' ? '退還保證金的瓶數（通常＝在池瓶數）' : (t==='adjust' ? '可為負數' : '瓶數');
+  csMoveDepositHint();
+}
+/* 鋪貨/退貨時即時顯示保證金金額（100ml $50／500ml $250，值來自 consign_terms），不用心算 */
+function csMoveDepositUnit(sku){
+  const p=ownbrandBySku(sku); if(!p||!CONSIGN_TERMS) return 0;
+  const v=String(p.volume||'');
+  if(v==='100ml') return parseFloat(CONSIGN_TERMS.deposit_100ml)||0;
+  if(v==='500ml') return parseFloat(CONSIGN_TERMS.deposit_500ml)||0;
+  return 0;
+}
+function csMoveDepositHint(){
+  const el=document.getElementById('cs-m-dephint'); if(!el) return;
+  const t=document.getElementById('cs-m-type').value;
+  const sku=document.getElementById('cs-m-sku').value;
+  const qty=parseFloat(document.getElementById('cs-m-qty').value)||0;
+  const u=csMoveDepositUnit(sku);
+  let txt='';
+  if(qty>0&&u>0){
+    if(t==='in') txt='💰 此次應收保證金：'+money(qty*u)+'（每瓶 '+money(u)+'）';
+    else if(t==='return'||t==='deposit_refund') txt='💰 此次應退保證金：'+money(qty*u)+'（每瓶 '+money(u)+'）';
+  }
+  el.textContent=txt; el.style.display=txt?'block':'none';
 }
 let _csMoveSaving=false;
 async function saveConsignMove(){
@@ -305,6 +356,14 @@ async function saveConsignMove(){
   if(!sku){ toast('請選公版酒','err'); _csMoveSaving=false; return; }
   if(!(qty!==0 && !isNaN(qty))){ toast('請填數量','err'); _csMoveSaving=false; return; }
   if(type!=='adjust' && qty<0){ toast('此類型數量需為正數','err'); _csMoveSaving=false; return; }
+  // 超賣/超退提醒（提醒不硬擋，按確定仍可登記，保留彈性）
+  const invRow=(CS_INV||[]).find(r=>String(r.sku_id)===String(sku));
+  const balNow=invRow?(parseFloat(invRow.balance)||0):0;
+  const poolNow=invRow?(parseFloat(invRow.deposit_pool_qty)||0):0;
+  let warn='';
+  if((type==='out'||type==='return') && qty>balNow) warn='這支酒在客戶端的庫存只剩 '+balNow+' 瓶，確定要登記'+(type==='out'?'銷售':'退貨')+' '+qty+' 瓶嗎？（登記後庫存會變負數）';
+  if(type==='deposit_refund' && qty>poolNow) warn='保證金在池瓶數只有 '+poolNow+' 瓶，確定要退 '+qty+' 瓶的保證金嗎？';
+  if(warn && !confirm(warn)){ _csMoveSaving=false; return; }
   const movement={ date, customer_id:CS_CUR, sku_id:sku, type, qty, note };
   if(type==='out' && priceRaw!=='') movement.unit_price=parseFloat(priceRaw)||0;
   try{
@@ -327,7 +386,7 @@ async function loadConsignMonthly(){
   try{
     const d=await apiCall({action:'getConsignMonthly', token:AUTH_TOKEN, customer_id:CS_CUR, year:y, month:m});
     if(!d.ok) throw new Error(d.error||'計算失敗');
-    CS_MONTHLY={ ...d, year:y, month:m, customer:curConsignCustomer() };
+    CS_MONTHLY={ ...d, year:y, month:m, customer:curConsignCustomer(), for_customer:CS_CUR, for_ym:ym };
     const lines=d.lines||[];
     if(!lines.length){ wrap.innerHTML='<div class="rec-empty">本月無銷售紀錄</div>'; return; }
     wrap.innerHTML=`<div class="tbl-scroll"><table class="rec-table">
@@ -340,6 +399,7 @@ async function loadConsignMonthly(){
   }catch(e){ wrap.innerHTML=`<div class="rec-empty">${escHtml(e.message||'計算失敗')}</div>`; }
 }
 function exportConsignMonthly(){
+  if(csMonthlyStale()){ toast('請先按「產生月結」（客戶或月份換過了）','err'); return; }
   if(!CS_MONTHLY||!(CS_MONTHLY.lines&&CS_MONTHLY.lines.length)){ toast('請先「產生月結」再匯出','err'); return; }
   const c=CS_MONTHLY.customer||{};
   const period=(CS_MONTHLY.period&&CS_MONTHLY.period.from)?`${CS_MONTHLY.period.from} ～ ${CS_MONTHLY.period.to}`:`${CS_MONTHLY.year}年${CS_MONTHLY.month}月`;
@@ -374,6 +434,7 @@ function exportConsignMonthly(){
 
 /* ---- 把月結資料轉為正式報價單（寄售月結 quoteType='consign'）---- */
 function consignMonthlyToQuote(){
+  if(csMonthlyStale()){ toast('請先按「產生月結」（客戶或月份換過了）','err'); return; }
   if(!CS_MONTHLY||!(CS_MONTHLY.lines&&CS_MONTHLY.lines.length)){ toast('請先「產生月結」再轉為報價單','err'); return; }
   const c=CS_MONTHLY.customer||{};
   const period=(CS_MONTHLY.period&&CS_MONTHLY.period.from)?`${CS_MONTHLY.period.from} ～ ${CS_MONTHLY.period.to}`:`${CS_MONTHLY.year}年${CS_MONTHLY.month}月`;
@@ -422,7 +483,8 @@ function prefetchPayloads(){
     {action:'getVerifications', token:AUTH_TOKEN, filters:{}},   // ＋驗收管理與訂單徽章共用的兩支
     {action:'listVerifyForms', token:AUTH_TOKEN, filters:{}},
     {action:'listShipments', token:AUTH_TOKEN},                  // ＋訂單列的「分批×N」徽章
-    {action:'getCustomers', token:AUTH_TOKEN}                    // ＋客戶主檔（客戶管理與報價單下拉共用）
+    {action:'getCustomers', token:AUTH_TOKEN},                   // ＋客戶主檔（客戶管理與報價單下拉共用）
+    {action:'getConsignCustomers', token:AUTH_TOKEN}             // ＋寄售客戶（寄售頁下拉秒開）⚠ 已滿 8 份＝後端 BATCH_MAX_ 上限，要再加就得先調後端
   ]);
 }
 function prefetchCommon(){

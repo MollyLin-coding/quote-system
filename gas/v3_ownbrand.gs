@@ -240,10 +240,14 @@ function handleGetOwnbrandTiers_(params) {
 // action: getConsignCustomers / saveConsignCustomer
 // ===================================================================
 function handleGetConsignCustomers_(params) {
+  // v41：改回傳「全部」客戶（含 active=N）。原本把停用客戶濾掉，導致「先停用再退保證金/
+  // 產最後一期月結」的流程走不下去（客戶從前端下拉完全消失）。前端負責標示「（已停用）」。
+  const all = v2ReadAll_(SHEET_CONSIGN_CUSTOMERS, CONSIGN_CUSTOMERS_HEADERS);
   const isActive = function (o) { return String(o.active).toUpperCase() !== 'N'; };
+  all.sort(function (a, b) { return (isActive(a) ? 0 : 1) - (isActive(b) ? 0 : 1); }); // 啟用中排前面
   return {
     ok: true,
-    customers: v2ReadAll_(SHEET_CONSIGN_CUSTOMERS, CONSIGN_CUSTOMERS_HEADERS).filter(isActive),
+    customers: all,
     discounts: v2ReadAll_(SHEET_CONSIGN_DISCOUNTS, CONSIGN_DISCOUNTS_HEADERS)
   };
 }
@@ -513,21 +517,25 @@ function handleGetConsignMonthly_(params) {
   const productsById = {};
   v2ReadAll_(SHEET_OWNBRAND_PRODUCTS, OWNBRAND_PRODUCTS_HEADERS).forEach(function (p) { productsById[p.sku_id] = p; });
 
-  const bySku = {};
+  // v41：改按「SKU＋單價」分組。原本只按 SKU 分組、unit_price 取最後一筆，
+  // 同月同品項若出現兩種售價（改折數/單筆促銷價），列上的 qty×unit_price 會對不上 amount，
+  // 前端「轉為報價單」再用 qty×unit_price 重算就會算錯總額。分開列後每列金額都自洽。
+  const byKey = {};
   rows.forEach(function (r) {
     const qty = Number(r.qty) || 0;
     const unitPrice = Number(r.unit_price) || 0;
-    if (!bySku[r.sku_id]) bySku[r.sku_id] = { sku_id: r.sku_id, qty: 0, amount: 0, unit_price: unitPrice };
-    bySku[r.sku_id].qty += qty;
-    bySku[r.sku_id].amount += qty * unitPrice;
-    bySku[r.sku_id].unit_price = unitPrice;
+    const key = r.sku_id + '|' + unitPrice;
+    if (!byKey[key]) byKey[key] = { sku_id: r.sku_id, qty: 0, amount: 0, unit_price: unitPrice };
+    byKey[key].qty += qty;
+    byKey[key].amount += qty * unitPrice;
   });
 
-  const lines = Object.keys(bySku).map(function (skuId) {
-    const b = bySku[skuId];
-    const p = productsById[skuId] || {};
-    return { sku_id: skuId, name: p.name || '', volume: p.volume || '', qty: b.qty, unit_price: b.unit_price, amount: b.amount };
+  const lines = Object.keys(byKey).map(function (key) {
+    const b = byKey[key];
+    const p = productsById[b.sku_id] || {};
+    return { sku_id: b.sku_id, name: p.name || '', volume: p.volume || '', qty: b.qty, unit_price: b.unit_price, amount: b.amount };
   });
+  lines.sort(function (a, b) { return String(a.sku_id).localeCompare(String(b.sku_id)) || a.unit_price - b.unit_price; });
 
   const total = lines.reduce(function (sum, l) { return sum + l.amount; }, 0);
 
