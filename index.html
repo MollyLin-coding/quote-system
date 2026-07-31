@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260731a">
-<script src="js/00_qrcode.js?v=20260731a"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260731b">
+<script src="js/00_qrcode.js?v=20260731b"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -632,7 +632,12 @@
       </div>
       <div class="tbl-scroll">
       <table class="rec-table mcard">
-        <thead><tr><th>單號 / 客戶</th><th>進度</th><th style="text-align:right">總計</th><th style="text-align:center">出貨日</th><th>提醒</th><th>操作</th></tr></thead>
+        <thead id="ord-thead"><tr>
+          <th data-sk="no" data-lbl="單號 / 客戶" style="cursor:pointer" title="點擊排序" onclick="setOrdSort('no')">單號 / 客戶</th>
+          <th data-sk="stage" data-lbl="進度" style="cursor:pointer" title="點擊排序" onclick="setOrdSort('stage')">進度</th>
+          <th data-sk="total" data-lbl="總計" style="text-align:right;cursor:pointer" title="點擊排序" onclick="setOrdSort('total')">總計</th>
+          <th data-sk="ship" data-lbl="出貨日" style="text-align:center;cursor:pointer" title="點擊排序" onclick="setOrdSort('ship')">出貨日</th>
+          <th>提醒</th><th>操作</th></tr></thead>
         <tbody id="ord-body"><tr><td colspan="6" style="padding:12px 14px"><div class="skl" style="width:52%"></div></td></tr><tr><td colspan="6" style="padding:12px 14px"><div class="skl" style="width:64%"></div></td></tr><tr><td colspan="6" style="padding:12px 14px"><div class="skl" style="width:44%"></div></td></tr></tbody>
       </table>
       </div>
@@ -789,13 +794,15 @@
     <div id="oe-timeline"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
       <div class="fl"><label>狀態（走到哪一關）</label><select class="fi" id="oe-status">
-        <option value="quoted">報價中</option><option value="deposit">已收訂金</option><option value="shipped">已出貨</option>
+        <option value="quoted">報價中</option><option value="deposit">已收訂金</option><option value="production">排產中</option><option value="shipped">已出貨</option>
         <option value="invoiced">已開發票</option><option value="paid">已收尾款</option><option value="closed">結案</option><option value="cancelled">取消</option></select></div>
       <div class="fl"><label>訂單總額（訂金/尾款帶入的依據）</label>
         <div style="display:flex;gap:6px;align-items:center">
           <input class="fi" type="number" id="oe-grand_total" style="flex:1">
           <button type="button" class="rec-act-btn" style="white-space:nowrap" onclick="fillHalf()">依規則帶入</button>
         </div></div>
+      <div class="fl" style="grid-column:1/-1"><label>客戶批號（客戶自己的批號／貨號；沒填會自動帶驗收單上的）</label>
+        <input class="fi" id="oe-cust_lot" placeholder="客戶自己的批號／貨號（選填）"></div>
 
       <div class="oe-sec">① 訂金</div>
       <div class="fl"><label>訂金金額</label><input class="fi" type="number" id="oe-deposit_amt"></div>
@@ -1072,19 +1079,19 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260731a"></script>
-<script src="js/01_quote_form.js?v=20260731a"></script>
-<script src="js/01b_quote_preview.js?v=20260731a"></script>
-<script src="js/02_core_api.js?v=20260731a"></script>
-<script src="js/03_quote_custom.js?v=20260731a"></script>
-<script src="js/04_company.js?v=20260731a"></script>
-<script src="js/05_orders.js?v=20260731a"></script>
-<script src="js/06_verify_mgmt.js?v=20260731a"></script>
-<script src="js/07_calendar.js?v=20260731a"></script>
-<script src="js/08_ownbrand.js?v=20260731a"></script>
-<script src="js/09_verify_form.js?v=20260731a"></script>
-<script src="js/10_today.js?v=20260731a"></script>
-<script src="js/11_customers.js?v=20260731a"></script>
-<script src="js/99_boot.js?v=20260731a"></script>
+<script src="js/00_utils.js?v=20260731b"></script>
+<script src="js/01_quote_form.js?v=20260731b"></script>
+<script src="js/01b_quote_preview.js?v=20260731b"></script>
+<script src="js/02_core_api.js?v=20260731b"></script>
+<script src="js/03_quote_custom.js?v=20260731b"></script>
+<script src="js/04_company.js?v=20260731b"></script>
+<script src="js/05_orders.js?v=20260731b"></script>
+<script src="js/06_verify_mgmt.js?v=20260731b"></script>
+<script src="js/07_calendar.js?v=20260731b"></script>
+<script src="js/08_ownbrand.js?v=20260731b"></script>
+<script src="js/09_verify_form.js?v=20260731b"></script>
+<script src="js/10_today.js?v=20260731b"></script>
+<script src="js/11_customers.js?v=20260731b"></script>
+<script src="js/99_boot.js?v=20260731b"></script>
 </body>
 </html>
