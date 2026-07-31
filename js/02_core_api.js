@@ -253,6 +253,10 @@ function collectQuote(){
   // 免運優惠（顯示用、不計價）：以特殊品項存進 items_json，適用所有單型；金額放 deduction，unitPrice/subtotal=0 不影響總計
   { const _fs=parseFloat(document.getElementById('f-freeship')?.value)||0;
     if(_fs>0){ items.push({ itemType:'freeship', name:'免運優惠', lot:'', volume:'', unitPrice:0, deduction:_fs, logoFee:0, qty:1, unit:'', subtotal:0, flavorList:'' }); } }
+  // 批次標籤（Lot/日期標記＋客戶名稱標籤）：後端主表沒有 tagLot/tagCli 欄位，直接存會被丟掉、重開就消失；
+  // 比照免運優惠存成特殊品項列（品項後端全欄保存），Lot 標記放 lot 欄、客戶名稱標籤借放 flavorList 欄，載入時還原
+  { const _tl=val('f-tag-lot'), _tc=val('f-tag-cli');
+    if(_tl||_tc){ items.push({ itemType:'taglabel', name:'批次標籤', lot:_tl, volume:'', unitPrice:0, deduction:0, logoFee:0, qty:1, unit:'', subtotal:0, flavorList:_tc }); } }
 
   const numFromText=id=>parseFloat((document.getElementById(id).textContent||'0').replace(/[$,]/g,''))||0;
   const svcMode=g('svc-mode')?g('svc-mode').value:'';
@@ -546,7 +550,9 @@ function loadQuoteIntoForm(q){
   { const same=!(q.shipAddress||q.shipContact||q.shipPhone);
     const chk=document.getElementById('f-shipsame'); if(chk) chk.checked=same;
     toggleShipSame('f'); }
-  set('f-tag-lot',q.tagLot); set('f-tag-cli',q.tagCli);
+  // 批次標籤：後端主表沒存 tagLot/tagCli，從 taglabel 特殊列還原；物件本身有值（本地往返/測試）優先用
+  { const _tg=(q.items||[]).find(it=>it.itemType==='taglabel')||{};
+    set('f-tag-lot', q.tagLot||_tg.lot); set('f-tag-cli', q.tagCli||_tg.flavorList); }
   set('f-dt',q.quoteDate); set('f-hdl',q.handler);
   set('f-ven',q.venue); set('f-ent',q.entryTime); set('f-svc',q.serviceTime); set('f-ext',q.exitTime);
   set('f-note',q.remark);
@@ -568,7 +574,7 @@ function loadQuoteIntoForm(q){
   if(q.quoteType==='bottle'||q.quoteType==='ownbrand'||q.quoteType==='ownlabel'||q.quoteType==='consign'){
     document.getElementById('itbody-bot').innerHTML=''; botItems=[];
     extras=[];
-    const realItems = items.filter(it=>it.itemType!=='extra'&&it.itemType!=='freeship');
+    const realItems = items.filter(it=>it.itemType!=='extra'&&it.itemType!=='freeship'&&it.itemType!=='taglabel');
     // 贈品／不計價 還原：後端有存 noCharge 用它；沒存則以「有單價有瓶數但小計為0」判定（subtotal 是後端固定欄位，一定會回來）
     const isGiftItem = it => (String(it.noCharge||'').toUpperCase()==='Y') || (parseFloat(it.unitPrice)>0 && parseFloat(it.qty)>0 && !(parseFloat(it.subtotal)>0));
     colLot = realItems.some(it=>it.lot);
@@ -584,6 +590,7 @@ function loadQuoteIntoForm(q){
     items.forEach(it=>{
       if(it.itemType==='extra'){ extras.push({id:`ext${++_extSeq}`,n:it.name,a:it.unitPrice||it.subtotal||0}); }
       else if(it.itemType==='freeship'){ /* 免運優惠已於上方共用區還原到 f-freeship，不建品項列 */ }
+      else if(it.itemType==='taglabel'){ /* 批次標籤已於上方共用區還原到 f-tag-lot / f-tag-cli，不建品項列 */ }
       else { addBotRow({name:it.name,lot:it.lot,vol:it.volume,price:it.unitPrice,ded:it.deduction,logo:it.logoFee,qty:it.qty,mark:((it.is_oem==='Y'||it.is_label==='Y')?1:0), gift:(isGiftItem(it)?1:0),
         lp:((it.listPrice!=null&&it.listPrice!=='')?it.listPrice:it.unitPrice), disc:(it.discount!=null?it.discount:''), discManual:((it.discount!=null&&it.discount!=='')?1:0), listprice:(it.listPrice||it.unitPrice)}); }
     });
