@@ -112,7 +112,7 @@ async function tdBuildFallback(){
   const cli = o => String(o.client||'').split('｜')[0];
 
   (ORDERS_CACHE||[]).forEach(o=>{
-    const st = o.st || {}; const s = String(st.status||'quoted');
+    const st = o.st || {}; const s = (typeof effOrdStatus==='function')?effOrdStatus(st):String(st.status||'quoted');
     // A. 今天／逾期該出貨（恆為「急」）
     if(['cancelled','closed','paid','shipped','invoiced'].indexOf(s) < 0 && st.ship_date_est && !st.ship_date_actual){
       const dd = daysBetween(vmLocalYmd(st.ship_date_est));
@@ -131,7 +131,7 @@ async function tdBuildFallback(){
         urgent:urgent, days_until:ahead });
     }
     // D. 已出貨未開發票。**全部都列**，超過 7 天／沒填實際出貨日＝急（判定沿用後端：看發票號碼）
-    if(s === 'shipped' && !st.invoice_no){
+    if((s === 'shipped' || (s === 'paid' && st.ship_date_actual)) && !st.invoice_no){
       const ymd = st.ship_date_actual ? vmLocalYmd(st.ship_date_actual) : '';
       const dd = ymd ? daysBetween(ymd) : null;
       const days = (dd == null) ? null : -dd;

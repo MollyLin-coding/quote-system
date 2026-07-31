@@ -1,16 +1,33 @@
 /* ============================================================
    二、訂單追蹤
    ============================================================ */
-const ORDER_STAGES=[['quoted','報價中'],['deposit','已收訂金'],['shipped','已出貨'],['invoiced','已開發票'],['paid','已收尾款'],['closed','結案'],['cancelled','已取消']];
+const ORDER_STAGES=[['quoted','報價中'],['deposit','已收訂金'],['production','排產中'],['shipped','已出貨'],['invoiced','已開發票'],['paid','已收尾款'],['closed','結案'],['cancelled','已取消']];
 function stageLabel(s){ const f=ORDER_STAGES.find(x=>x[0]===s); return f?f[1]:'報價中'; }
-function stageIdx(s){ return {quoted:1,deposit:2,shipped:3,invoiced:4,paid:5,closed:6}[s]||1; }
-/* 六關卡：報價→訂金→出貨→發票→尾款→結案。以「有沒有填資料」或狀態判斷是否過關 */
-function orderSteps(st){
+function stageIdx(s){ return {quoted:1,deposit:2,production:3,shipped:4,invoiced:5,paid:6,closed:7}[s]||1; }
+/* 有效狀態：手動選的狀態 vs 依「實際填了什麼資料」推得的狀態，取比較後面的那個。
+   規則：填了訂金日→至少排產中；填了實際出貨日→至少已出貨；填了發票→至少已開發票；
+   填了尾款收款日→至少已收尾款（客戶跳過訂金直接付全款也適用）。
+   「已取消」一律尊重手動設定。全站列表／篩選／月報表都用這個，
+   所以就算忘了改狀態，只要日期有填，單子就不會卡在「報價中」。 */
+function effOrdStatus(st){
   st=st||{}; const s=st.status||'quoted';
+  if(s==='cancelled') return s;
+  const has=v=>String(v==null?'':v).trim()!=='';
+  let d='quoted';
+  if(has(st.deposit_date)) d='production';
+  if(has(st.ship_date_actual)) d='shipped';
+  if(has(st.invoice_date)||has(st.invoice_no)) d='invoiced';
+  if(has(st.final_date)) d='paid';
+  return stageIdx(d)>stageIdx(s)?d:s;
+}
+/* 七關卡：報價→訂金→排產→出貨→發票→尾款→結案。以「有沒有填資料」或有效狀態判斷是否過關 */
+function orderSteps(st){
+  st=st||{}; const s=effOrdStatus(st);
   const ge=(arr)=>arr.includes(s);
   return [
     {key:'quote',   label:'報價', done:true,                                                              date:''},
-    {key:'deposit', label:'訂金', done: !!st.deposit_date     || ge(['deposit','shipped','invoiced','paid','closed']), date: st.deposit_date||''},
+    {key:'deposit', label:'訂金', done: !!st.deposit_date     || ge(['deposit','production','shipped','invoiced','paid','closed']), date: st.deposit_date||''},
+    {key:'production', label:'排產', done: ge(['production','shipped','invoiced','paid','closed']) || !!st.ship_date_actual, date:''},
     {key:'ship',    label:'出貨', done: !!st.ship_date_actual || ge(['shipped','invoiced','paid','closed']),           date: st.ship_date_actual||''},
     {key:'invoice', label:'發票', done: !!st.invoice_date     || ge(['invoiced','paid','closed']),                     date: st.invoice_date||''},
     {key:'final',   label:'尾款', done: !!st.final_date       || ge(['paid','closed']),                                date: st.final_date||''},
@@ -20,8 +37,9 @@ function orderSteps(st){
 function orderTimelineHtml(o){
   const st=o.st||{}; const steps=orderSteps(st);
   steps[0].date=o.quoteDate||'';
-  if(!steps[2].done && st.ship_date_est)  steps[2].sub='預計 '+st.ship_date_est.slice(5);
-  if(!steps[4].done && st.final_date_est) steps[4].sub='預計 '+st.final_date_est.slice(5);
+  const _ship=steps.find(x=>x.key==='ship'), _final=steps.find(x=>x.key==='final');
+  if(!_ship.done && st.ship_date_est)   _ship.sub='預計 '+st.ship_date_est.slice(5);
+  if(!_final.done && st.final_date_est) _final.sub='預計 '+st.final_date_est.slice(5);
   // 目前進行到的關卡＝最後一個已完成的下一關
   let curIdx=0; steps.forEach((sp,i)=>{ if(sp.done) curIdx=i; });
   if(curIdx<steps.length-1) curIdx++;
@@ -86,14 +104,14 @@ function ordSideBadges(force){
   loadShipmentBadges(force);
 }
 function orderBadges(o){
-  const s=o.st?.status||'quoted';
+  const s=effOrdStatus(o.st);
   let h='';
   if(s==='quoted' && o.expiry){
     const d=daysBetween(o.expiry);
     if(d!=null && d<0) h+='<span class="ob red">已過有效期</span>';
     else if(d!=null && d<=7) h+=`<span class="ob red">有效期剩 ${d} 天</span>`;
   }
-  if(o.st?.ship_date_est && !o.st?.ship_date_actual && ['deposit','quoted'].includes(s)){
+  if(o.st?.ship_date_est && !o.st?.ship_date_actual && ['deposit','production','quoted'].includes(s)){
     const d=daysBetween(o.st.ship_date_est);
     if(d!=null && d<0) h+='<span class="ob red">出貨已逾期</span>';
     else if(d!=null && d<=3) h+=`<span class="ob warn">出貨倒數 ${d} 天</span>`;
@@ -115,7 +133,10 @@ async function loadOrderVerifyBadges(force){
       readCall({action:'listVerifyForms', token:AUTH_TOKEN, filters:{}}, force).catch(()=>({})),
       readCall({action:'getVerifications', token:AUTH_TOKEN, filters:{}}, force).catch(()=>({}))
     ]);
-    ORDER_VSUM={ forms:(lf&&lf.summary)||{}, reps:(gv&&gv.summary)||{}, repList:(gv&&gv.records)||[] };
+    // 客戶批號備援：每張單取最新一張驗收單上填的客戶批號（records 已是新→舊）
+    const lots={};
+    ((lf&&lf.records)||[]).forEach(r=>{ if(r.no && String(r.lot||'').trim() && !(r.no in lots)) lots[r.no]=String(r.lot).trim(); });
+    ORDER_VSUM={ forms:(lf&&lf.summary)||{}, reps:(gv&&gv.summary)||{}, repList:(gv&&gv.records)||[], lots };
     renderOrders();
   }catch(_){}
 }
@@ -134,19 +155,26 @@ function orderVerifyBadge(o){
   if(unh>0) h+=`<span class="ob red">客訴 ${unh} 待處理</span>`;
   return h;
 }
+/* 訂單的客戶批號：編輯進度手動填的優先，沒填就帶最新驗收單上的 */
+function ordCustLot(o){
+  const manual=String(o.st?.cust_lot||'').trim();
+  if(manual) return manual;
+  return (ORDER_VSUM&&ORDER_VSUM.lots&&ORDER_VSUM.lots[o.no])||'';
+}
 function orderDots(o){
-  const s=o.st?.status||'quoted';
+  const s=effOrdStatus(o.st);
   if(s==='cancelled') return '<span class="ost grey">已取消</span>';
   const steps=orderSteps(o.st||{});
   let dots=''; steps.forEach(sp=>{ dots+=`<span class="odot${sp.done?' f':''}"></span>`; });
   return `<span class="odots">${dots}</span><span class="ost">${stageLabel(s)}</span>`;
 }
 function passOrdFilter(o){
-  const s=o.st?.status||'quoted';
+  const s=effOrdStatus(o.st);
   switch(ORD_FILTER){
     case 'all': return s!=='cancelled';
     case 'quoted': return s==='quoted';
-    case 'toship': return s==='deposit';
+    case 'production': return s==='production';
+    case 'toship': return s==='deposit'||s==='production';
     case 'toinv': return s==='shipped';
     case 'tofinal': return s==='invoiced';
     case 'done': return s==='paid'||s==='closed';
@@ -160,28 +188,63 @@ function setOrdFilter(f, el){
   if(el) el.classList.add('on');
   renderOrders();
 }
+/* ---- 表頭點擊排序：第一下↑、第二下↓、第三下回預設（報價日新→舊） ---- */
+let ORD_SORT={key:'',dir:1};
+function setOrdSort(key){
+  if(ORD_SORT.key===key){ ORD_SORT = ORD_SORT.dir===1 ? {key,dir:-1} : {key:'',dir:1}; }
+  else ORD_SORT={key,dir:1};
+  renderOrders();
+}
+function ordSortVal(o,key){
+  switch(key){
+    case 'no': return o.no||'';
+    case 'stage': return stageIdx(effOrdStatus(o.st));
+    case 'total': return parseFloat(o.total)||0;
+    case 'ship': return o.st?.ship_date_actual||o.st?.ship_date_est||'';
+  }
+  return '';
+}
+function ordApplySort(rows){
+  if(!ORD_SORT.key) return rows;                      // 預設順序＝buildOrders 排好的（報價日新→舊）
+  const k=ORD_SORT.key, d=ORD_SORT.dir;
+  return rows.slice().sort((a,b)=>{
+    const va=ordSortVal(a,k), vb=ordSortVal(b,k);
+    const ea=(va===''||va==null), eb=(vb===''||vb==null);
+    if(ea&&eb) return 0; if(ea) return 1; if(eb) return -1;   // 空值永遠排最後
+    if(typeof va==='number') return (va-vb)*d;
+    return String(va).localeCompare(String(vb))*d;
+  });
+}
+function ordPaintSortHeads(){
+  document.querySelectorAll('#ord-thead th[data-sk]').forEach(th=>{
+    const k=th.getAttribute('data-sk');
+    const arrow=(ORD_SORT.key===k)?(ORD_SORT.dir===1?' ▲':' ▼'):'';
+    th.innerHTML=escHtml(th.getAttribute('data-lbl')||'')+`<span style="color:#A6824A">${arrow}</span>`;
+  });
+}
 function renderOrders(){
   const body=document.getElementById('ord-body'); if(!body||!ORDERS_CACHE) return;
   // 篩選計數
   const cnt=k=>{ const old=ORD_FILTER; ORD_FILTER=k; const n=ORDERS_CACHE.filter(passOrdFilter).length; ORD_FILTER=old; return n; };
-  const fs=[['all','全部'],['quoted','報價中'],['toship','待出貨'],['toinv','待開發票'],['tofinal','待收尾款'],['done','已結案'],['cancelled','已取消']];
+  const fs=[['all','全部'],['quoted','報價中'],['production','排產中'],['toship','待出貨'],['toinv','待開發票'],['tofinal','待收尾款'],['done','已結案'],['cancelled','已取消']];
   document.getElementById('ord-filters').innerHTML=fs.map(([k,l])=>
     `<button class="fchip${ORD_FILTER===k?' on':''}" onclick="setOrdFilter('${k}',this)">${l} <b>${cnt(k)}</b></button>`).join('');
-  const rows=ORDERS_CACHE.filter(passOrdFilter);
+  ordPaintSortHeads();
+  const rows=ordApplySort(ORDERS_CACHE.filter(passOrdFilter));
   if(!rows.length){ body.innerHTML='<tr><td colspan="6" class="rec-empty">沒有符合的訂單</td></tr>'+(listMaybeMore(ORDERS_CACHE.length)?moreRowHtml(6):''); return; }
   body.innerHTML=rows.map(o=>{
     const note=(o.st?.track_note||'').split('\n')[0];
     const shipD=o.st?.ship_date_actual?`${o.st.ship_date_actual.slice(5)} ✓`:(o.st?.ship_date_est?o.st.ship_date_est.slice(5):'—');
+    const lot=ordCustLot(o);
     return `<tr>
       <td class="mc-main"><b>${escHtml(o.no)}</b> <span class="rec-badge ${o.typeKey==='banquet'?'banquet':o.typeKey==='custom'?'custom':'bottle'}">${o.type}</span><br>
-        <span style="color:#6B6B63;font-size:11.5px">${escHtml(o.client)}</span></td>
+        <span style="color:#6B6B63;font-size:11.5px">${escHtml(o.client)}</span>${lot?`<br><span style="color:#A6824A;font-size:11px">批號 ${escHtml(lot)}</span>`:''}</td>
       <td data-l="進度">${orderDots(o)}${note?`<br><span class="onote">📌 ${escHtml(note)}${(o.st.track_note.includes('\n'))?'…':''}</span>`:''}</td>
       <td data-l="總計" style="text-align:right;font-weight:600">${money(o.total)}</td>
       <td data-l="出貨日" style="text-align:center">${shipD}</td>
       <td data-l="提醒">${orderBadges(o)}${orderVerifyBadge(o)}</td>
       <td class="rec-actions" data-l="操作">
         <button class="rec-act-btn primary" onclick="openOrdEdit('${escAttr(o.no)}')">編輯進度</button>
-        <button class="rec-act-btn" onclick="copyOrder('${escAttr(o.no)}','${o.src}')">複製</button>
         <button class="rec-act-btn" onclick="openChangeLog('${escAttr(o.no)}')">修改紀錄</button>
         ${['bottle','ownbrand','ownlabel','consign'].includes(o.typeKey)?`<button class="rec-act-btn" onclick="openVerifyForm('${escAttr(o.no)}')">驗收單</button>`:''}
         ${o.src==='custom'?`<button class="rec-act-btn" onclick="loadCustomFromOrders('${escAttr(o.no)}')">載入編輯</button>`:''}
@@ -200,10 +263,13 @@ function openOrdEdit(no){
   document.getElementById('oe-title').textContent=`編輯進度 — ${no}（${o.client}）`;
   document.getElementById('oe-timeline').innerHTML=orderTimelineHtml(o);
   document.getElementById('oe-status').value=st.status||'quoted';
-  ['deposit_amt','deposit_date','ship_date_est','ship_date_actual','invoice_no','invoice_date',
+  ['cust_lot','deposit_amt','deposit_date','ship_date_est','ship_date_actual','invoice_no','invoice_date',
    'invoice_last5','invoice_detail','invoice_photos','final_amt','final_date_est','final_date'].forEach(k=>{
     document.getElementById('oe-'+k).value=g(k);
   });
+  // 客戶批號沒手動填、但驗收單上有 → 用 placeholder 提示（存檔仍以手動填的為準）
+  const _vlot=(ORDER_VSUM&&ORDER_VSUM.lots&&ORDER_VSUM.lots[no])||'';
+  document.getElementById('oe-cust_lot').placeholder=_vlot?`驗收單上填的是「${_vlot}」，沒填就顯示它`:'客戶自己的批號／貨號（選填）';
   // 訂單總額：沒存過就先帶報價單總額，讓後端據此算訂金/尾款各半
   document.getElementById('oe-grand_total').value = st.grand_total || (o.total?Math.round(o.total):'') || '';
   // 這張單從沒存過進度（新單）→ 訂金/尾款依付款規則自動帶入（預設各半；
@@ -263,9 +329,16 @@ async function saveOrdEdit(){
   if(!ORD_EDITING) return;
   if(_busy.ordEdit) return; _busy.ordEdit=true;
   const fields={ status:document.getElementById('oe-status').value };
-  ['grand_total','deposit_amt','deposit_date','ship_date_est','ship_date_actual','invoice_no','invoice_date',
+  ['cust_lot','grand_total','deposit_amt','deposit_date','ship_date_est','ship_date_actual','invoice_no','invoice_date',
    'invoice_last5','invoice_detail','invoice_photos','final_amt','final_date_est','final_date','track_note']
     .forEach(k=>{ fields[k]=document.getElementById('oe-'+k).value; });
+  // 自動推進：填了訂金日→排產中、實際出貨日→已出貨、發票→已開發票、尾款收款日→已收尾款。
+  // 手動選了更後面的（含結案）或已取消就不動。
+  let bumped='';
+  if(fields.status!=='cancelled'){
+    const eff=effOrdStatus(fields);
+    if(eff!==fields.status){ bumped=stageLabel(eff); fields.status=eff; }
+  }
   const no=ORD_EDITING, snap=ORDERS_CACHE;   // apiCall（寫入類）會把 ORDERS_CACHE 清空，先留一份
   const btn=document.getElementById('oe-save');
   if(btn){ btn.disabled=true; btn.textContent='儲存中…'; }
@@ -280,7 +353,7 @@ async function saveOrdEdit(){
       renderOrders();
       if(typeof renderReport==='function' && currentPage==='report') renderReport();
     }
-    toast('進度已儲存','ok'); closeOrdEdit();
+    toast(bumped?`進度已儲存，狀態自動更新為「${bumped}」`:'進度已儲存','ok'); closeOrdEdit();
     loadOrders().catch(()=>{});
   }catch(e){ toast(e.message||'儲存失敗','err'); }
   finally{ _busy.ordEdit=false; if(btn){ btn.disabled=false; btn.textContent='儲存進度'; } }
@@ -518,27 +591,41 @@ function rptFinalAmt(o){
 function rptUnpaidList(){
   if(!ORDERS_CACHE) return [];
   return ORDERS_CACHE.filter(o=>{
-    const s=o.st?.status;
+    const s=effOrdStatus(o.st);
     return (s==='shipped'||s==='invoiced') && !(o.st&&o.st.final_date);
   });
 }
 function rptUnbilledList(){
   if(!ORDERS_CACHE) return [];
-  return ORDERS_CACHE.filter(o=> o.st?.status==='shipped' && !(o.st&&o.st.invoice_no));
+  // 已出貨（含尾款先收了）但發票還沒開；結案／取消的不追
+  return ORDERS_CACHE.filter(o=>{ const s=effOrdStatus(o.st); return (s==='shipped'||(s==='paid'&&o.st&&o.st.ship_date_actual)) && !(o.st&&o.st.invoice_no); });
+}
+/* 成交日：訂金日／實際出貨日／尾款收款日中「最早的實際發生日」。
+   三個都沒填、但狀態有手動推進（不是報價中/已取消）→ 退回報價日。
+   先出貨、隔月才請款的單：沒收過訂金就算在「出貨那個月」；有訂金就算在收訂金那個月。 */
+function rptDealDate(o){
+  const s=effOrdStatus(o.st);
+  if(s==='quoted'||s==='cancelled') return '';
+  const st=o.st||{};
+  const ds=[st.deposit_date, st.ship_date_actual, st.final_date]
+    .map(v=>String(v||'').trim()).filter(v=>/^\d{4}-\d{2}/.test(v)).sort();
+  return ds[0]||o.quoteDate||'';
 }
 function renderReport(){
   const el=document.getElementById('rpt-box'); if(!el||!ORDERS_CACHE) return;
   const mm=`${RPT_Y}-${String(RPT_M).padStart(2,'0')}`;
   const inMonth=ORDERS_CACHE.filter(o=>(o.quoteDate||'').startsWith(mm));
-  const dealt=inMonth.filter(o=>{ const s=o.st?.status||'quoted'; return s!=='quoted'&&s!=='cancelled'; });
+  // 成交＝以「成交日」歸屬月份（訂金→出貨→收款中最早的實際日期），不再看報價日、
+  // 也不再被手動狀態卡住：只要有填收款/出貨日期，就算狀態忘了改也會列入
+  const dealt=ORDERS_CACHE.filter(o=>rptDealDate(o).startsWith(mm));
   const sum=dealt.reduce((s,o)=>s+(parseFloat(o.total)||0),0);
   const byC={}; dealt.forEach(o=>{ const k=o.client.split('｜')[0]; byC[k]=byC[k]||{n:0,a:0}; byC[k].n++; byC[k].a+=parseFloat(o.total)||0; });
   const rows=Object.entries(byC).sort((a,b)=>b[1].a-a[1].a);
 
   // 對帳視角：本月已收訂金／已收尾款（存量以外的月份篩選），未收尾款（存量、不分月）
-  const depositedThisMonth=ORDERS_CACHE.filter(o=>o.st?.status!=='cancelled' && (o.st?.deposit_date||'').startsWith(mm));
+  const depositedThisMonth=ORDERS_CACHE.filter(o=>effOrdStatus(o.st)!=='cancelled' && (o.st?.deposit_date||'').startsWith(mm));
   const depositSum=depositedThisMonth.reduce((s,o)=>s+(parseFloat(o.st.deposit_amt)||0),0);
-  const paidThisMonth=ORDERS_CACHE.filter(o=>o.st?.status!=='cancelled' && (o.st?.final_date||'').startsWith(mm));
+  const paidThisMonth=ORDERS_CACHE.filter(o=>effOrdStatus(o.st)!=='cancelled' && (o.st?.final_date||'').startsWith(mm));
   const paidSum=paidThisMonth.reduce((s,o)=>s+(parseFloat(o.st.final_amt)||0),0);
   const unpaidList=rptUnpaidList();
   const rptRowDaysLeft=r=>{ const d=daysBetween(r.o.st?.final_date_est); return d==null?99999:d; };
@@ -559,8 +646,8 @@ function renderReport(){
     </div>
     ${rows.length?`<div class="tbl-scroll"><table class="rec-table mcard" style="margin-top:10px"><thead><tr><th>客戶</th><th style="text-align:center">筆數</th><th style="text-align:right">金額</th></tr></thead><tbody>
       ${rows.map(([k,v])=>`<tr><td class="mc-main">${escHtml(k)}</td><td data-l="筆數" style="text-align:center">${v.n}</td><td data-l="金額" style="text-align:right">${money(v.a)}</td></tr>`).join('')}
-    </tbody></table></div>`:'<div class="rec-empty">本月尚無成交（狀態需為已收訂金以上才列入）</div>'}
-    <div style="font-size:11px;color:#A8A69C;margin-top:8px">※ 以報價日期歸屬月份；狀態「已收訂金」（含）之後視為成交。</div>
+    </tbody></table></div>`:'<div class="rec-empty">本月尚無成交（有填訂金日／出貨日／收款日其中一個，就會列入該月）</div>'}
+    <div style="font-size:11px;color:#A8A69C;margin-top:8px">※ 成交以「最早的實際往來日」歸屬月份：有收訂金→算收訂金那個月；先出貨後請款→算出貨那個月；直接付全款→算收款那個月。「本月報價」則照報價日計算。</div>
 
     <div class="rpt-head" style="margin-top:22px">還沒收的尾款　<span style="font-size:11px;color:#A8A69C;font-weight:400">已出貨或已開發票、但還沒收尾款的單（不分月份，點列可開編輯進度）</span></div>
     ${unpaidRows.length?`<div class="tbl-scroll"><table class="rec-table mcard" style="margin-top:8px"><thead><tr><th>單號</th><th>客戶</th><th style="text-align:right">尾款金額</th><th style="text-align:center">預計尾款日</th><th style="text-align:center">發票</th></tr></thead><tbody>
@@ -600,12 +687,13 @@ function renderReport(){
 function exportReport(){
   if(!ORDERS_CACHE) return;
   const mm=`${RPT_Y}-${String(RPT_M).padStart(2,'0')}`;
-  const rows=ORDERS_CACHE.filter(o=>(o.quoteDate||'').startsWith(mm));
-  const head=['單號','類型','客戶','報價日','總計','狀態','訂金','訂金日','預計出貨','實際出貨','發票號碼','發票開立日','發票後五碼','尾款','預計尾款日','尾款收款日','備註'];
+  // 匯出範圍＝報價日或成交日落在本月的單（跟畫面上的成交統計對得起來）
+  const rows=ORDERS_CACHE.filter(o=>(o.quoteDate||'').startsWith(mm) || rptDealDate(o).startsWith(mm));
+  const head=['單號','類型','客戶','客戶批號','報價日','成交日','總計','狀態','訂金','訂金日','預計出貨','實際出貨','發票號碼','發票開立日','發票後五碼','尾款','預計尾款日','尾款收款日','備註'];
   const csv=[head.join(',')].concat(rows.map(o=>{
     const s=o.st||{};
     const esc=v=>'"'+String(v==null?'':v).replace(/"/g,'""').replace(/\n/g,' ')+'"';
-    return [o.no,o.type,o.client,o.quoteDate,Math.round(o.total),stageLabel(s.status||'quoted'),s.deposit_amt||'',s.deposit_date||'',s.ship_date_est||'',s.ship_date_actual||'',s.invoice_no||'',s.invoice_date||'',s.invoice_last5||'',s.final_amt||'',s.final_date_est||'',s.final_date||'',s.track_note||''].map(esc).join(',');
+    return [o.no,o.type,o.client,ordCustLot(o),o.quoteDate,rptDealDate(o),Math.round(o.total),stageLabel(effOrdStatus(s)),s.deposit_amt||'',s.deposit_date||'',s.ship_date_est||'',s.ship_date_actual||'',s.invoice_no||'',s.invoice_date||'',s.invoice_last5||'',s.final_amt||'',s.final_date_est||'',s.final_date||'',s.track_note||''].map(esc).join(',');
   })).join('\r\n');
   const blob=new Blob(['﻿'+csv],{type:'text/csv'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);

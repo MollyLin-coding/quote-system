@@ -143,7 +143,7 @@ function renderTodayFocus(){
     else if(d!=null&&d<=7) items.push({o:d,h:`${box}<span class="ob warn">${d===0?'今天':d+' 天後'}</span> 📌 ${escHtml(it.title)}`,click:`openCalEdit('${escHtml(it.item_id)}')`});
   });
   (ORDERS_CACHE||[]).forEach(o=>{
-    const s=o.st?.status||'quoted';
+    const s=effOrdStatus(o.st);
     if(s==='cancelled'||s==='closed'||s==='paid') return;
     if(o.st?.ship_date_est&&!o.st?.ship_date_actual){
       const d=daysBetween(o.st.ship_date_est);

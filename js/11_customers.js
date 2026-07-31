@@ -112,12 +112,12 @@ function cusBuild(qs, cq, os, gv, lf, gc){
     c.quotes.sort((a,b)=> String(b.date||'').localeCompare(String(a.date||'')) || String(b.no||'').localeCompare(String(a.no||'')));
     c.count=c.quotes.length;
     c.quoteSum=c.quotes.reduce((s,q)=>s+(q.total||0),0);
-    const dealt=c.quotes.filter(q=>{ const s=q.st&&q.st.status; return s && s!=='quoted' && s!=='cancelled'; });
+    const dealt=c.quotes.filter(q=>{ if(!q.st) return false; const s=effOrdStatus(q.st); return s!=='quoted' && s!=='cancelled'; });
     c.dealCount=dealt.length;
     c.dealSum=dealt.reduce((s,q)=>s+(q.total||0),0);
-    c.unpaidList=c.quotes.filter(q=>{ const s=q.st&&q.st.status; return (s==='shipped'||s==='invoiced') && !(q.st&&q.st.final_date); });
+    c.unpaidList=c.quotes.filter(q=>{ if(!q.st) return false; const s=effOrdStatus(q.st); return (s==='shipped'||s==='invoiced') && !q.st.final_date; });
     c.unpaid=c.unpaidList.reduce((s,q)=>s+cusFinalAmt(q).amt,0);
-    c.openList=c.quotes.filter(q=>{ const s=(q.st&&q.st.status)||'quoted'; return s!=='closed' && s!=='cancelled' && s!=='paid'; });
+    c.openList=c.quotes.filter(q=>{ const s=effOrdStatus(q.st); return s!=='closed' && s!=='cancelled' && s!=='paid'; });
     c.lastDate=c.quotes.length?(c.quotes[0].date||''):'';
     c.pending=c.reports.filter(r=>typeof vmIsUnhandled==='function' && vmIsUnhandled(r)).length;
     return c;
@@ -270,7 +270,7 @@ function renderCusDetail(){
 
   /* 2. 往來報價單 */
   const qRows=c.quotes.map(q=>{
-    const s=(q.st&&q.st.status)||'';
+    const s=q.st?effOrdStatus(q.st):'';
     const pill=s?`<span class="ob ${s==='cancelled'?'grey':(s==='closed'||s==='paid')?'':'info'}">${escHtml(stageLabel(s))}</span>`:'<span class="ob grey">未建進度</span>';
     return `<tr class="clickable" onclick="cusOpenQuote('${escAttr(q.no)}','${escAttr(q.src)}')">
       <td class="mc-main" style="font-weight:600">${escHtml(q.no||'—')}</td>
@@ -283,7 +283,7 @@ function renderCusDetail(){
 
   /* 3. 訂單進度與未收款 */
   const openRows=c.openList.map(q=>{
-    const s=q.st||{}; const stat=s.status||'quoted';
+    const s=q.st||{}; const stat=effOrdStatus(s);
     const fa=cusFinalAmt(q);
     const owe=(stat==='shipped'||stat==='invoiced')&&!s.final_date;
     const fde=s.final_date_est; let fdeTxt='—';
