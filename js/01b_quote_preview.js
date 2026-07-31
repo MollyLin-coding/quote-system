@@ -89,42 +89,39 @@ function buildStdDocParts(){
     </tr></thead>`;
     colgroup = `<colgroup><col><col style="width:64px"><col style="width:64px"><col style="width:92px"><col style="width:118px"></colgroup>`;
 
-    // group 1
-    const g1p=parseFloat(document.getElementById('ban-g1-price').value)||0;
-    const g1q=parseFloat(document.getElementById('ban-g1-qty').value)||0;
-    if(g1p||g1q){
-      const flavorStr = flavors.g1.length ? `（${flavors.g1.map(escHtml).join('、')}）` : '';
+    // 兩組客製化調酒（計價方式：杯或 ml；手動小計＝談好的整包價）
+    const banGroupRow=(g,label)=>{
+      const p=parseFloat(document.getElementById(`ban-${g}-price`).value)||0;
+      const q=parseFloat(document.getElementById(`ban-${g}-qty`).value)||0;
+      const sub=banGroupSub(g);
+      if(!p&&!q&&!sub) return;
+      const unit=(banUnitOf(g)==='ml')?'ml':'杯';
+      const flavorStr = flavors[g].length ? `（${flavors[g].map(escHtml).join('、')}）` : '';
       rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
-        <td style="padding:11px 12px;font-weight:600;color:#22241F">客製化調酒<span style="font-weight:400;color:#6B6B63;font-size:11.5px">${flavorStr}</span></td>
-        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${g1q}</td>
-        <td style="padding:11px 8px;text-align:center;color:#6B6B63">杯</td>
-        <td style="padding:11px 8px;text-align:right;color:#6B6B63">${g1p?'$'+g1p.toLocaleString():'—'}</td>
-        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(g1p*g1q).toLocaleString()}</td>
+        <td style="padding:11px 12px;font-weight:600;color:#22241F">${label}<span style="font-weight:400;color:#6B6B63;font-size:11.5px">${flavorStr}</span></td>
+        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${q?q.toLocaleString():'—'}</td>
+        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${unit}</td>
+        <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+p.toLocaleString():'—'}</td>
+        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(sub).toLocaleString()}</td>
       </tr>`);
-    }
-    const g2p=parseFloat(document.getElementById('ban-g2-price').value)||0;
-    const g2q=parseFloat(document.getElementById('ban-g2-qty').value)||0;
-    if(g2p||g2q){
-      const flavorStr = flavors.g2.length ? `（${flavors.g2.map(escHtml).join('、')}）` : '';
-      rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
-        <td style="padding:11px 12px;font-weight:600;color:#22241F">客製化無酒精雞尾酒<span style="font-weight:400;color:#6B6B63;font-size:11.5px">${flavorStr}</span></td>
-        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${g2q}</td>
-        <td style="padding:11px 8px;text-align:center;color:#6B6B63">杯</td>
-        <td style="padding:11px 8px;text-align:right;color:#6B6B63">${g2p?'$'+g2p.toLocaleString():'—'}</td>
-        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(g2p*g2q).toLocaleString()}</td>
-      </tr>`);
-    }
+    };
+    banGroupRow('g1','客製化調酒');
+    banGroupRow('g2','客製化無酒精雞尾酒');
     banFreeItems.forEach(id=>{
       const row=document.getElementById(`bf-${id}`); if(!row) return;
       const n=escHtml(gs(row,'name')),u=escHtml(gs(row,'unit')),p=gv(row,'price'),q=gv(row,'qty');
-      const sub=p*q;
-      if(!n&&!sub) return;
+      const note=escHtml(gs(row,'note'));
+      const info=banFreeRowInfo(row);
+      if(!n&&!info.sub) return;
+      const subCell=info.free
+        ? `<span style="text-decoration:line-through;color:#9a968c">$${Math.round(info.sub).toLocaleString()}</span> <span style="color:#A6824A;font-weight:700">免費</span>`
+        : `$${Math.round(info.sub).toLocaleString()}`;
       rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
-        <td style="padding:11px 12px;font-weight:600;color:#22241F">${n}</td>
-        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${q}</td>
-        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${u}</td>
+        <td style="padding:11px 12px;font-weight:600;color:#22241F">${n}${note?`<div style="font-size:10.5px;color:#A8A69C;font-weight:400;margin-top:2px">${note}</div>`:''}</td>
+        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${q?q.toLocaleString():'—'}</td>
+        <td style="padding:11px 8px;text-align:center;color:#6B6B63">${u||'—'}</td>
         <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+p.toLocaleString():'—'}</td>
-        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(sub).toLocaleString()}</td>
+        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">${subCell}</td>
       </tr>`);
     });
     // service fee

@@ -309,23 +309,86 @@ function moveBotRow(id,dir){
   reorderBotDom(); calc();
 }
 
+// ── BANQUET 計價方式（杯／ML）與手動小計 ──
+/* 兩組客製化調酒可切換「以杯計價」或「以 ML 計價」（大桶出貨、談整包價的宴會單用）；
+   勾「手動小計」可直接填談好的整包價（例：40,000ml 共 $39,000），不用單價×數量。 */
+function banUnitOf(g){ const e=document.getElementById(`ban-${g}-unit`); return (e&&e.value==='ml')?'ml':'cup'; }
+function banManualOn(g){ const e=document.getElementById(`ban-${g}-man`); return !!(e&&e.checked); }
+function onBanUnitChange(g){
+  const ml=banUnitOf(g)==='ml';
+  const lb=document.getElementById(`ban-${g}-qtylabel`); if(lb) lb.textContent=ml?'總ML數':'總杯數';
+  const qi=document.getElementById(`ban-${g}-qty`); if(qi) qi.placeholder=ml?'40000':(g==='g1'?'90':'0');
+  calcBan();
+}
+function toggleBanManual(g){
+  const on=banManualOn(g);
+  const mi=document.getElementById(`ban-${g}-subman`);
+  if(mi){
+    mi.style.display=on?'':'none';
+    if(on && !mi.value){   // 勾起時先帶入目前的自動小計當起點，再讓人改成談好的整包價
+      const p=parseFloat(document.getElementById(`ban-${g}-price`).value)||0;
+      const q=parseFloat(document.getElementById(`ban-${g}-qty`).value)||0;
+      if(p*q) mi.value=Math.round(p*q);
+    }
+  }
+  calcBan();
+}
+/* 該組小計：手動小計優先，否則單價×數量（杯或 ML 都一樣） */
+function banGroupSub(g){
+  if(banManualOn(g)) return parseFloat(document.getElementById(`ban-${g}-subman`)?.value)||0;
+  const p=parseFloat(document.getElementById(`ban-${g}-price`)?.value)||0;
+  const q=parseFloat(document.getElementById(`ban-${g}-qty`)?.value)||0;
+  return p*q;
+}
+
 // ── BANQUET FREE ITEMS ──
-function addBanFreeRow(){
+/* 自訂品項列（宴會）：比照自訂報價單的列，多了 備註小字／免費贈送／手動小計。
+   版面沿用自訂單的 .crow 樣式；小計欄未勾手動時唯讀、自動＝單價×數量。 */
+function addBanFreeRow(prefill){
+  prefill=prefill||{};
   rowId++;
   const id=rowId;
+  const manual=!!prefill.manual;
   const div=document.createElement('div');
   div.id=`bf-${id}`;
-  div.className='itr';
-  div.style.gridTemplateColumns='3fr 60px 56px 86px 86px 26px';
+  div.className='crow'+(prefill.free?' free':'');
   div.innerHTML=`
-    <input placeholder="自訂品項描述" oninput="calc()" data-f="name">
-    <input type="number" placeholder="1" oninput="calc()" data-f="qty">
-    <input placeholder="式" oninput="calc()" data-f="unit">
-    <input type="number" placeholder="0" oninput="calc()" data-f="price">
-    <div class="sub" id="bfs-${id}">—</div>
-    <button class="del" onclick="delBanFreeRow(${id})">✕</button>`;
+    <div class="crow-top" style="grid-template-columns:3fr 60px 56px 86px 86px 26px;min-width:0">
+      <input placeholder="自訂品項描述" oninput="calc()" data-f="name" value="${escAttr(prefill.name||'')}">
+      <input type="number" placeholder="1" oninput="calc()" data-f="qty" value="${prefill.qty!=null?prefill.qty:''}">
+      <input placeholder="式" oninput="calc()" data-f="unit" value="${escAttr(prefill.unit||'')}">
+      <input type="number" placeholder="0" oninput="calc()" data-f="price" value="${prefill.price!=null?prefill.price:''}">
+      <input type="number" placeholder="—" data-f="subval" value="${prefill.subval!=null?prefill.subval:''}" oninput="calc()" ${manual?'':'readonly'}>
+      <button class="del" onclick="delBanFreeRow(${id})">✕</button>
+    </div>
+    <div class="crow-bottom">
+      <div class="crow-note"><input placeholder="備註說明（選填，顯示於品名下方小字）" data-f="note" value="${escAttr(prefill.note||'')}" oninput="calc()"></div>
+      <div class="crow-flags">
+        <label title="談好的整包價直接填小計"><input type="checkbox" data-f="manual" ${manual?'checked':''} onchange="toggleBanFreeManual(${id})">手動小計</label>
+        <label title="顯示金額但劃線標示免費，不計入總計"><input type="checkbox" data-f="free" ${prefill.free?'checked':''} onchange="calc()">免費</label>
+      </div>
+    </div>`;
   document.getElementById('ban-free-body').appendChild(div);
   banFreeItems.push(id);
+}
+function toggleBanFreeManual(id){
+  const row=document.getElementById(`bf-${id}`); if(!row) return;
+  const man=row.querySelector('[data-f="manual"]').checked;
+  row.querySelector('[data-f="subval"]').readOnly=!man;
+  calc();
+}
+/* 該列小計＋免費旗標（collectQuote／預覽／calc 共用） */
+function banFreeRowInfo(row){
+  const manual=!!(row.querySelector('[data-f="manual"]')&&row.querySelector('[data-f="manual"]').checked);
+  const free=!!(row.querySelector('[data-f="free"]')&&row.querySelector('[data-f="free"]').checked);
+  const subInput=row.querySelector('[data-f="subval"]');
+  let sub;
+  if(manual){ sub=(subInput&&subInput.value!=='')?(parseFloat(subInput.value)||0):0; }
+  else {
+    sub=gv(row,'price')*gv(row,'qty');
+    if(subInput) subInput.value=sub?Math.round(sub):'';
+  }
+  return {manual, free, sub};
 }
 function delBanFreeRow(id){
   const el=document.getElementById(`bf-${id}`); if(el) el.remove();
@@ -407,16 +470,9 @@ function onSvcModeChange(){
 }
 
 function calcBan(){
-  // group totals
-  const g1p=parseFloat(document.getElementById('ban-g1-price').value)||0;
-  const g1q=parseFloat(document.getElementById('ban-g1-qty').value)||0;
-  const g1sub=g1p*g1q;
-  document.getElementById('ban-g1-sub').textContent='$'+Math.round(g1sub).toLocaleString();
-
-  const g2p=parseFloat(document.getElementById('ban-g2-price').value)||0;
-  const g2q=parseFloat(document.getElementById('ban-g2-qty').value)||0;
-  const g2sub=g2p*g2q;
-  document.getElementById('ban-g2-sub').textContent='$'+Math.round(g2sub).toLocaleString();
+  // group totals（手動小計優先；杯／ML 計價的乘法相同）
+  document.getElementById('ban-g1-sub').textContent='$'+Math.round(banGroupSub('g1')).toLocaleString();
+  document.getElementById('ban-g2-sub').textContent='$'+Math.round(banGroupSub('g2')).toLocaleString();
 
   // service fee
   const mode=document.getElementById('svc-mode').value;
@@ -468,19 +524,13 @@ function calc(){
       }
     });
   } else {
-    const g1p=parseFloat(document.getElementById('ban-g1-price').value)||0;
-    const g1q=parseFloat(document.getElementById('ban-g1-qty').value)||0;
-    const g2p=parseFloat(document.getElementById('ban-g2-price').value)||0;
-    const g2q=parseFloat(document.getElementById('ban-g2-qty').value)||0;
-    rawSub += g1p*g1q + g2p*g2q;
+    rawSub += banGroupSub('g1') + banGroupSub('g2');
 
     banFreeItems.forEach(id=>{
       const row=document.getElementById(`bf-${id}`); if(!row) return;
-      const p=gv(row,'price'),q=gv(row,'qty');
-      const lineRaw=p*q;
-      rawSub+=lineRaw;
-      const el=document.getElementById(`bfs-${id}`);
-      if(el) el.textContent=lineRaw?'$'+Math.round(lineRaw).toLocaleString():'—';
+      const info=banFreeRowInfo(row);
+      row.classList.toggle('free', info.free);
+      if(!info.free) rawSub+=info.sub;   // 免費列：顯示金額但不計入總計
     });
 
     const mode=document.getElementById('svc-mode').value;
@@ -751,6 +801,14 @@ function resetAll(skipConfirm){
   document.getElementById('ext-list').innerHTML='';
   document.getElementById('uprev').innerHTML='';
   renderFlavors('g1'); renderFlavors('g2');
+  // 宴會計價方式還原：杯計價、手動小計關閉（通用清空迴圈會把 select 設成空值，這裡補回預設）
+  ['g1','g2'].forEach(g=>{
+    const u=document.getElementById(`ban-${g}-unit`); if(u) u.value='cup';
+    const m=document.getElementById(`ban-${g}-man`); if(m) m.checked=false;
+    const s=document.getElementById(`ban-${g}-subman`); if(s){ s.value=''; s.style.display='none'; }
+    const lb=document.getElementById(`ban-${g}-qtylabel`); if(lb) lb.textContent='總杯數';
+    const qi=document.getElementById(`ban-${g}-qty`); if(qi) qi.placeholder=(g==='g1'?'90':'0');
+  });
   document.getElementById('svc-detail-wrap').classList.remove('on');
   addBotRow();
   if(qType==='banquet'){ addBanFreeRow(); addBanAddonRow(); }

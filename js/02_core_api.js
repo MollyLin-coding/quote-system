@@ -218,19 +218,22 @@ function collectQuote(){
         listPrice:(colOwn&&_lpEl?(parseFloat(_lpEl.value)||''):''), discount:(colOwn&&_diEl?_diEl.value.trim():'') });
     });
   } else {
-    // banquet groups
-    const g1p=num('ban-g1-price'),g1q=num('ban-g1-qty');
-    if(g1p||g1q) items.push({ itemType:'banquet_group', name:'客製化調酒', lot:'', volume:'',
-      unitPrice:g1p, deduction:0, logoFee:0, qty:g1q, unit:'杯', subtotal:g1p*g1q, flavorList:flavors.g1.join('、') });
-    const g2p=num('ban-g2-price'),g2q=num('ban-g2-qty');
-    if(g2p||g2q) items.push({ itemType:'banquet_group', name:'客製化無酒精雞尾酒', lot:'', volume:'',
-      unitPrice:g2p, deduction:0, logoFee:0, qty:g2q, unit:'杯', subtotal:g2p*g2q, flavorList:flavors.g2.join('、') });
+    // banquet groups（unit 依計價方式存「杯」或「ml」；手動小計時 subtotal＝談好的整包價）
+    const g1p=num('ban-g1-price'),g1q=num('ban-g1-qty'),g1sub=Math.round(banGroupSub('g1'));
+    if(g1p||g1q||g1sub) items.push({ itemType:'banquet_group', name:'客製化調酒', lot:'', volume:'',
+      unitPrice:g1p, deduction:0, logoFee:0, qty:g1q, unit:(banUnitOf('g1')==='ml'?'ml':'杯'), subtotal:g1sub, flavorList:flavors.g1.join('、') });
+    const g2p=num('ban-g2-price'),g2q=num('ban-g2-qty'),g2sub=Math.round(banGroupSub('g2'));
+    if(g2p||g2q||g2sub) items.push({ itemType:'banquet_group', name:'客製化無酒精雞尾酒', lot:'', volume:'',
+      unitPrice:g2p, deduction:0, logoFee:0, qty:g2q, unit:(banUnitOf('g2')==='ml'?'ml':'杯'), subtotal:g2sub, flavorList:flavors.g2.join('、') });
     banFreeItems.forEach(rid=>{
       const row=document.getElementById(`bf-${rid}`); if(!row) return;
-      const name=gs(row,'name'); const sub=gv(row,'price')*gv(row,'qty');
+      const name=gs(row,'name'); const info=banFreeRowInfo(row); const sub=Math.round(info.sub);
       if(!name && !sub) return;
+      // 免費列：subtotal 存 0（不計價），原金額借放 deduction 供載入／預覽還原劃線價；
+      // 備註借放 flavorList 欄（後端品項表沒有備註欄，宴會自訂列原本不用此欄）
       items.push({ itemType:'banquet_free', name, lot:'', volume:'', unitPrice:gv(row,'price'),
-        deduction:0, logoFee:0, qty:gv(row,'qty'), unit:gs(row,'unit'), subtotal:sub, flavorList:'' });
+        deduction:(info.free?sub:0), logoFee:0, qty:gv(row,'qty'), unit:gs(row,'unit'),
+        subtotal:(info.free?0:sub), flavorList:gs(row,'note'), noCharge:(info.free?'Y':'N') });
     });
     banAddonItems.forEach(rid=>{
       const row=document.getElementById(`ba-${rid}`); if(!row) return;
@@ -288,7 +291,8 @@ function collectQuote(){
 /* ---- 儲存（新增 or 更新）---- */
 /* 判斷標準報價單是否至少有一筆品項（含瓶裝列／宴會自訂列／宴會加購列／宴會兩組數量）*/
 function quoteHasItems(){
-  const check=(ids,pfx)=>ids.some(id=>{ const r=document.getElementById(pfx+'-'+id); return r&&Array.from(r.querySelectorAll('[data-f]')).some(i=>i.value&&i.value.trim()!==''); });
+  // 排除 checkbox（其 .value 恆為 'on'，會把空列誤判成有內容）
+  const check=(ids,pfx)=>ids.some(id=>{ const r=document.getElementById(pfx+'-'+id); return r&&Array.from(r.querySelectorAll('[data-f]')).some(i=>i.type!=='checkbox'&&i.value&&i.value.trim()!==''); });
   if(check(botItems,'r')) return true;
   if(check(banFreeItems,'bf')) return true;
   if(check(banAddonItems,'ba')) return true;
@@ -406,21 +410,26 @@ function downloadBase64_(base64, mime, filename){
      類型與關鍵字都改成前端篩，所以打字搜尋、換類型都是 0 秒。
    ・有快取先秒開舊資料，背景再更新（loadRecords(true)＝強制重抓）。 */
 let REC_QUOTES = null;
+let REC_CUSTOM = null;   // 自訂報價單備份（listCustomQuotes）——2026-07-31 起一併列進報價紀錄
 function recPayload(){ return withLimit({ action:'getQuotes', token:AUTH_TOKEN, filters:{} }); }
+function recCustomPayload(){ return { action:'listCustomQuotes', token:AUTH_TOKEN }; }
 async function loadRecords(force){
   const body=document.getElementById('rec-body');
-  const P=recPayload();
-  const hit=rcPeek(P);
+  const P=recPayload(), PC=recCustomPayload();
+  const hit=rcPeek(P), hitC=rcPeek(PC);
+  if(hitC && hitC.data && hitC.data.ok!==false) REC_CUSTOM=hitC.data.quotes||[];
   if(hit && hit.data && !force){ REC_QUOTES=hit.data.quotes||[]; renderRecords(); }
   else body.innerHTML=sklTableRows(6,5);
-  if(!force && rcFresh(P)) return;                        // 90 秒內剛抓過就不重打
+  if(!force && rcFresh(P) && rcFresh(PC)) return;         // 90 秒內剛抓過就不重打
   try {
-    const data=await readCall(P, force);
-    if(!data.ok){
-      if(!hit) body.innerHTML=`<tr><td colspan="6" class="rec-empty">${data.error||'載入失敗'}</td></tr>`;
+    const [data,dataC]=await readCallMany([P,PC], force);
+    if(!data || !data.ok){
+      if(!hit) body.innerHTML=`<tr><td colspan="6" class="rec-empty">${(data&&data.error)||'載入失敗'}</td></tr>`;
       return;
     }
     REC_QUOTES=data.quotes||[];
+    if(dataC && dataC.ok) REC_CUSTOM=dataC.quotes||[];
+    window._CQ_CACHE=REC_CUSTOM||[];   // 讓「開啟自訂單」直接用，不用再打一次後端
     renderRecords();
   } catch(e){
     if(!hit) body.innerHTML=`<tr><td colspan="6" class="rec-empty">${e.message||'載入失敗'}</td></tr>`;
@@ -433,10 +442,16 @@ function renderRecords(){
     const kwEl=document.getElementById('rec-search'), tfEl=document.getElementById('rec-type-filter');
     const kw=kwEl?kwEl.value.trim():''; const tf=tfEl?tfEl.value:'';
     let quotes=REC_QUOTES.filter(q=>q.status!=='已刪除');
-    if(tf) quotes=quotes.filter(q=>q.quoteType===tf);
-    if(kw){ const k=kw.toLowerCase(); quotes=quotes.filter(q=> String(q.clientName||'').toLowerCase().includes(k) || String(q.quoteNo||'').toLowerCase().includes(k)); }
-    if(quotes.length===0){ body.innerHTML='<tr><td colspan="6" class="rec-empty">'+(REC_QUOTES.length?'沒有符合條件的報價單':'尚無報價單記錄')+'</td></tr>'; return; }
-    body.innerHTML=quotes.map(q=>{
+    // 自訂報價單備份也一併列入（正規化成同一種列格式，quoteType='custom'）
+    const customs=(REC_CUSTOM||[]).map(c=>({ _custom:true, quoteNo:c.quote_no, clientName:c.client,
+      quoteType:'custom', quoteDate:String(c.quote_date||'').slice(0,10),
+      grandTotal:(parseJsonSafe(c.totals_json,{}).total)||0 }));
+    let merged=(tf==='custom')?customs.slice():(tf?quotes.filter(q=>q.quoteType===tf):quotes.concat(customs));
+    if(kw){ const k=kw.toLowerCase(); merged=merged.filter(q=> String(q.clientName||'').toLowerCase().includes(k) || String(q.quoteNo||'').toLowerCase().includes(k)); }
+    // 單號皆為 YYYYMMDD-NN 格式，直接以單號新→舊排序（自訂單與標準單自然交錯）
+    merged.sort((a,b)=>String(b.quoteNo||'').localeCompare(String(a.quoteNo||'')));
+    if(merged.length===0){ body.innerHTML='<tr><td colspan="6" class="rec-empty">'+((REC_QUOTES.length||customs.length)?'沒有符合條件的報價單':'尚無報價單記錄')+'</td></tr>'; return; }
+    body.innerHTML=merged.map(q=>{
       const typeBadge=q.quoteType==='bottle'
         ? '<span class="rec-badge bottle">瓶裝酒代工</span>'
         : q.quoteType==='ownbrand'
@@ -445,8 +460,24 @@ function renderRecords(){
         ? '<span class="rec-badge ownbrand">公版酒客製標</span>'
         : q.quoteType==='consign'
         ? '<span class="rec-badge consign">寄售月結</span>'
+        : q.quoteType==='custom'
+        ? '<span class="rec-badge custom">自訂報價單</span>'
         : '<span class="rec-badge banquet">宴會酒水</span>';
       const total='$'+Math.round(q.grandTotal||0).toLocaleString();
+      if(q._custom){
+        // 自訂單：開啟／預覽走自訂報價單頁；後端沒有刪除自訂單的 action，不提供刪除
+        return `<tr class="clickable" onclick="recOpenCustom('${escAttr(q.quoteNo)}')">
+          <td class="mc-main" style="font-weight:600">${escHtml(q.quoteNo||'—')}</td>
+          <td data-l="客戶">${escHtml(q.clientName||'—')}</td>
+          <td data-l="類型">${typeBadge}</td>
+          <td data-l="報價日">${escHtml(q.quoteDate||'—')}</td>
+          <td data-l="總計" style="font-weight:600">${total}</td>
+          <td class="rec-actions" data-l="操作" onclick="event.stopPropagation()">
+            <button class="rec-act-btn primary" onclick="recOpenCustom('${escAttr(q.quoteNo)}')">開啟</button>
+            <button class="rec-act-btn" onclick="recPreviewCustom('${escAttr(q.quoteNo)}')">預覽</button>
+          </td>
+        </tr>`;
+      }
       return `<tr class="clickable" onclick="openRecord('${escAttr(q.quoteNo)}')">
         <td class="mc-main" style="font-weight:600">${escHtml(q.quoteNo||'—')}</td>
         <td data-l="客戶">${escHtml(q.clientName||'—')}</td>
@@ -562,13 +593,37 @@ function loadQuoteIntoForm(q){
     flavors={g1:[],g2:[]};
     document.getElementById('ban-free-body').innerHTML=''; banFreeItems=[];
     document.getElementById('ban-addon-body').innerHTML=''; banAddonItems=[];
+    // 先清掉兩組群組的殘留值（含計價方式／手動小計），沒存到的組才不會留上一張單的數字
+    ['g1','g2'].forEach(g=>{
+      set(`ban-${g}-price`,''); set(`ban-${g}-qty`,'');
+      const us=document.getElementById(`ban-${g}-unit`); if(us) us.value='cup';
+      const m=document.getElementById(`ban-${g}-man`); if(m) m.checked=false;
+      const s=document.getElementById(`ban-${g}-subman`); if(s){ s.value=''; s.style.display='none'; }
+      if(typeof onBanUnitChange==='function') onBanUnitChange(g);
+    });
+    // 宴會群組還原：計價方式（杯／ml）看存下的 unit；手動小計靠「subtotal ≠ 單價×數量」判定（相容舊單）
+    const restoreBanGroup=(g,it)=>{
+      set(`ban-${g}-price`,it.unitPrice); set(`ban-${g}-qty`,it.qty);
+      const us=document.getElementById(`ban-${g}-unit`); if(us) us.value=(String(it.unit).toLowerCase()==='ml')?'ml':'cup';
+      if(typeof onBanUnitChange==='function') onBanUnitChange(g);
+      const auto=Math.round((parseFloat(it.unitPrice)||0)*(parseFloat(it.qty)||0));
+      const st=Math.round(parseFloat(it.subtotal)||0);
+      if(st && st!==auto){
+        const m=document.getElementById(`ban-${g}-man`); if(m) m.checked=true;
+        const s=document.getElementById(`ban-${g}-subman`); if(s){ s.style.display=''; s.value=st; }
+      }
+      flavors[g]=it.flavorList?String(it.flavorList).split('、').filter(Boolean):[];
+    };
     items.forEach(it=>{
       if(it.itemType==='banquet_group'){
-        if(it.name==='客製化調酒'){ set('ban-g1-price',it.unitPrice); set('ban-g1-qty',it.qty); flavors.g1=it.flavorList?String(it.flavorList).split('、').filter(Boolean):[]; }
-        else { set('ban-g2-price',it.unitPrice); set('ban-g2-qty',it.qty); flavors.g2=it.flavorList?String(it.flavorList).split('、').filter(Boolean):[]; }
+        restoreBanGroup(it.name==='客製化調酒'?'g1':'g2', it);
       } else if(it.itemType==='banquet_free'){
-        addBanFreeRow(); const rid=banFreeItems[banFreeItems.length-1]; const row=document.getElementById(`bf-${rid}`);
-        if(row){ row.querySelector('[data-f=name]').value=it.name||''; row.querySelector('[data-f=qty]').value=it.qty||''; row.querySelector('[data-f=unit]').value=it.unit||''; row.querySelector('[data-f=price]').value=it.unitPrice||''; }
+        const free=String(it.noCharge||'').toUpperCase()==='Y';
+        const disp=free?(parseFloat(it.deduction)||0):(parseFloat(it.subtotal)||0);
+        const auto=Math.round((parseFloat(it.unitPrice)||0)*(parseFloat(it.qty)||0));
+        const manual=!!disp && Math.round(disp)!==auto;
+        addBanFreeRow({name:it.name, qty:it.qty, unit:it.unit, price:it.unitPrice,
+          note:it.flavorList||'', free, manual, subval:(manual?Math.round(disp):'')});
       } else if(it.itemType==='banquet_addon'){
         addBanAddonRow({name:it.name,qty:it.qty,unit:it.unit,price:it.unitPrice});
       }
@@ -605,7 +660,7 @@ function isFormDirty(){
   const hasRowData = (ids, prefix) => ids.some(id=>{
     const row=document.getElementById(`${prefix}-${id}`);
     if(!row) return false;
-    return Array.from(row.querySelectorAll('[data-f]')).some(i=>i.value && i.value.trim()!=='');
+    return Array.from(row.querySelectorAll('[data-f]')).some(i=>i.type!=='checkbox' && i.value && i.value.trim()!=='');
   });
   if(hasRowData(botItems,'r')) return true;
   if(hasRowData(banFreeItems,'bf')) return true;

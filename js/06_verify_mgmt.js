@@ -412,4 +412,7 @@ async function loadCustomQuoteByNo(no, asCopy){
   toast(asCopy?('已複製 '+no+' 為新自訂單'):('已載入 '+no),'ok');
 }
 function loadCustomFromOrders(no){ loadCustomQuoteByNo(no,false); }
+/* 報價紀錄頁列出的自訂單：開啟＝載入到自訂報價單頁；預覽＝載入後直接開預覽視窗 */
+async function recOpenCustom(no){ await loadCustomQuoteByNo(no,false); }
+async function recPreviewCustom(no){ await loadCustomQuoteByNo(no,false); openCustomPreview(); }
 

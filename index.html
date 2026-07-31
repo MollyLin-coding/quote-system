@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260730b">
-<script src="js/00_qrcode.js?v=20260730b"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260731a">
+<script src="js/00_qrcode.js?v=20260731a"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -272,7 +272,10 @@
           <div class="ig-head">
             <span class="ig-name">客製化調酒</span>
             <input class="ig-price" type="number" id="ban-g1-price" placeholder="150" oninput="calcBan()">
-            <span class="ig-unit">元 / 杯</span>
+            <select class="ig-unit-sel" id="ban-g1-unit" onchange="onBanUnitChange('g1')" title="計價方式：以杯計價或以 ML 計價">
+              <option value="cup">元 / 杯</option>
+              <option value="ml">元 / ml</option>
+            </select>
           </div>
           <div class="ig-body">
             <div class="flavor-list" id="ban-g1-flavors"></div>
@@ -281,8 +284,10 @@
               <button onclick="addFlavor('g1')">+ 新增品名</button>
             </div>
             <div class="ig-qty-row">
-              <label>總杯數</label>
+              <label id="ban-g1-qtylabel">總杯數</label>
               <input type="number" id="ban-g1-qty" placeholder="90" oninput="calcBan()">
+              <label class="ig-man" title="談好的整包價直接填，不用單價×數量"><input type="checkbox" id="ban-g1-man" onchange="toggleBanManual('g1')">手動小計</label>
+              <input type="number" id="ban-g1-subman" class="ig-subman" style="display:none" placeholder="整包價" oninput="calcBan()">
               <span class="ig-sub" id="ban-g1-sub">$0</span>
             </div>
           </div>
@@ -292,7 +297,10 @@
           <div class="ig-head">
             <span class="ig-name">客製化無酒精雞尾酒</span>
             <input class="ig-price" type="number" id="ban-g2-price" placeholder="120" oninput="calcBan()">
-            <span class="ig-unit">元 / 杯</span>
+            <select class="ig-unit-sel" id="ban-g2-unit" onchange="onBanUnitChange('g2')" title="計價方式：以杯計價或以 ML 計價">
+              <option value="cup">元 / 杯</option>
+              <option value="ml">元 / ml</option>
+            </select>
           </div>
           <div class="ig-body">
             <div class="flavor-list" id="ban-g2-flavors"></div>
@@ -301,8 +309,10 @@
               <button onclick="addFlavor('g2')">+ 新增品名</button>
             </div>
             <div class="ig-qty-row">
-              <label>總杯數</label>
+              <label id="ban-g2-qtylabel">總杯數</label>
               <input type="number" id="ban-g2-qty" placeholder="0" oninput="calcBan()">
+              <label class="ig-man" title="談好的整包價直接填，不用單價×數量"><input type="checkbox" id="ban-g2-man" onchange="toggleBanManual('g2')">手動小計</label>
+              <input type="number" id="ban-g2-subman" class="ig-subman" style="display:none" placeholder="整包價" oninput="calcBan()">
               <span class="ig-sub" id="ban-g2-sub">$0</span>
             </div>
           </div>
@@ -596,6 +606,7 @@
           <option value="ownbrand">公版酒買斷</option>
           <option value="ownlabel">公版酒客製標</option>
           <option value="consign">寄售月結</option>
+          <option value="custom">自訂報價單</option>
         </select>
         <button class="btn btn-dk" onclick="renderRecords()"><i class="ti ti-search"></i>查詢</button>
         <button class="rec-act-btn" onclick="loadRecords(true)"><i class="ti ti-refresh"></i> 重新整理</button>
@@ -1061,19 +1072,19 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260730b"></script>
-<script src="js/01_quote_form.js?v=20260730b"></script>
-<script src="js/01b_quote_preview.js?v=20260730b"></script>
-<script src="js/02_core_api.js?v=20260730b"></script>
-<script src="js/03_quote_custom.js?v=20260730b"></script>
-<script src="js/04_company.js?v=20260730b"></script>
-<script src="js/05_orders.js?v=20260730b"></script>
-<script src="js/06_verify_mgmt.js?v=20260730b"></script>
-<script src="js/07_calendar.js?v=20260730b"></script>
-<script src="js/08_ownbrand.js?v=20260730b"></script>
-<script src="js/09_verify_form.js?v=20260730b"></script>
-<script src="js/10_today.js?v=20260730b"></script>
-<script src="js/11_customers.js?v=20260730b"></script>
-<script src="js/99_boot.js?v=20260730b"></script>
+<script src="js/00_utils.js?v=20260731a"></script>
+<script src="js/01_quote_form.js?v=20260731a"></script>
+<script src="js/01b_quote_preview.js?v=20260731a"></script>
+<script src="js/02_core_api.js?v=20260731a"></script>
+<script src="js/03_quote_custom.js?v=20260731a"></script>
+<script src="js/04_company.js?v=20260731a"></script>
+<script src="js/05_orders.js?v=20260731a"></script>
+<script src="js/06_verify_mgmt.js?v=20260731a"></script>
+<script src="js/07_calendar.js?v=20260731a"></script>
+<script src="js/08_ownbrand.js?v=20260731a"></script>
+<script src="js/09_verify_form.js?v=20260731a"></script>
+<script src="js/10_today.js?v=20260731a"></script>
+<script src="js/11_customers.js?v=20260731a"></script>
+<script src="js/99_boot.js?v=20260731a"></script>
 </body>
 </html>
