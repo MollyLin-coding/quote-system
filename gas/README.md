@@ -1,5 +1,7 @@
 # GAS 後端原始碼備份
 
+> **⚠️ 待部署（2026-07-31 v32 改動）**：本機的 `v2_extensions.gs`（order_status 新欄 `cust_lot`、有效狀態 `effOrdStatus_`、結案日自動填修正）與 `v33_digest.gs`（今日待辦改用有效狀態）已更新，**尚未**部署到線上。部署步驟：貼上這兩個檔案 → 建立新版本部署 → 在編輯器手動執行一次 `setupOrderStatusV30Columns()`（幫 order_status 表補上 cust_lot 欄）。部署完成後請把本段刪除並更新下方版本資訊。
+
 來源：Apps Script 專案「Quote System API」
 專案 ID: 1ULEfHbKEkBrnttftDah9wz_d3dAViqRoS-vflWxp34xIe_65GyaM-o7e
 線上部署版本：**v40**（2026-07-26 21:59 部署，客戶主檔 customers 四個 action；v39＝同一次請求共用試算表連線；v38＝登入一併回傳今日待辦；v37＝batch）

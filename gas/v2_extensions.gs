@@ -37,7 +37,25 @@ const COMPANIES_HEADERS = ['company_id','name','tax_id','address','brand','conta
 const PRODUCTS_HEADERS = ['product_id','company_id','name','spec','unit','unit_price','tier_json','label_fee','logo_fee','note','active','bottle_cap','moq','lead_time'];
 const RULES_HEADERS = ['rule_id','company_id','rule_type','params_json','display_text','active'];
 const CUSTOM_QUOTES_HEADERS = ['quote_no','tag','client','contact','quote_date','expiry','tax_mode','tax_rate','headers_json','items_json','totals_json','created_at','updated_at','client_json'];
-const ORDER_STATUS_HEADERS = ['quote_no','status','deposit_amt','deposit_date','ship_date_est','ship_date_actual','invoice_no','invoice_date','final_amt','final_date','track_note','updated_at','grand_total','invoice_last5','invoice_detail','invoice_photos','final_date_est','closed_at'];
+const ORDER_STATUS_HEADERS = ['quote_no','status','deposit_amt','deposit_date','ship_date_est','ship_date_actual','invoice_no','invoice_date','final_amt','final_date','track_note','updated_at','grand_total','invoice_last5','invoice_detail','invoice_photos','final_date_est','closed_at','cust_lot'];
+
+/* v32：有效狀態（與前端 effOrdStatus 同一套規則）。
+   手動狀態 vs 依實際填寫日期推得的狀態，取比較後面的：
+   訂金日→排產中(production)、實際出貨日→已出貨、發票→已開發票、尾款收款日→已收尾款。
+   已取消一律尊重手動。給行事曆同步與今日待辦用，避免狀態忘了改就漏提醒。 */
+function effOrdStatus_(o) {
+  o = o || {};
+  var s = String(o.status || 'quoted') || 'quoted';
+  if (s === 'cancelled') return s;
+  var idx = { quoted: 1, deposit: 2, production: 3, shipped: 4, invoiced: 5, paid: 6, closed: 7 };
+  var has = function (v) { return String(v === null || v === undefined ? '' : v).trim() !== ''; };
+  var d = 'quoted';
+  if (has(o.deposit_date)) d = 'production';
+  if (has(o.ship_date_actual)) d = 'shipped';
+  if (has(o.invoice_date) || has(o.invoice_no)) d = 'invoiced';
+  if (has(o.final_date)) d = 'paid';
+  return (idx[d] || 1) > (idx[s] || 1) ? d : s;
+}
 
 var SHEET_QUOTE_PDFS = 'quote_pdfs';
 var QUOTE_PDF_HEADERS = ['quote_no','created_at','pdf_url','doc_url','file_name','active','note'];
@@ -256,8 +274,8 @@ function handleUpdateOrderStatus_(params) {
   const now = tpeNow_();
   let rowNum = v2FindRow_(SHEET_ORDER_STATUS, ORDER_STATUS_HEADERS, 'quote_no', quoteNo);
 
-  // v30: 結案時自動填結案日（未帶 closed_at 時）
-  if (fields.status === '結案' && (fields.closed_at === undefined || fields.closed_at === '')) {
+  // v30: 結案時自動填結案日（未帶 closed_at 時）；v32 修正：前端存的是 'closed' 不是中文
+  if ((fields.status === 'closed' || fields.status === '結案') && (fields.closed_at === undefined || fields.closed_at === '')) {
     fields.closed_at = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd');
   }
   // v30: 新單自動帶 50/50 訂金尾款（未指定金額時，總額取自主表或前端傳入）
@@ -896,7 +914,7 @@ function syncGoogleCalendar_() {
   orders.forEach(function (o) {
     var no = String(o['quote_no'] || '');
     if (!no) return;
-    var status = String(o['status'] || '').toLowerCase();
+    var status = effOrdStatus_(o);
     var client = clientByNo[no] || no;
     var est = o['ship_date_est'];
     var actual = o['ship_date_actual'];

@@ -139,7 +139,7 @@ function buildTodayDigest_(opts) {
   try {
     var skipShip = ['cancelled', 'closed', 'paid', 'shipped', 'invoiced'];
     orders.forEach(function (o) {
-      if (skipShip.indexOf(String(o.status || '')) >= 0) return;
+      if (skipShip.indexOf(effOrdStatus_(o)) >= 0) return;
       if (o.ship_date_actual) return;
       var est = dgYmd_(o.ship_date_est);
       if (!est) return;
@@ -159,7 +159,7 @@ function buildTodayDigest_(opts) {
   /* B. 待催尾款：已出貨/已開發票、尾款日期空白，且預計尾款日 ≦ 今天+7（沒填預計日的一律列出） */
   try {
     orders.forEach(function (o) {
-      var st = String(o.status || '');
+      var st = effOrdStatus_(o);
       if (st !== 'shipped' && st !== 'invoiced') return;
       if (o.final_date) return;
       var planned = dgYmd_(o.final_date_est);
@@ -240,7 +240,9 @@ function buildTodayDigest_(opts) {
   /* D. 已出貨超過 7 天仍未開發票 */
   try {
     orders.forEach(function (o) {
-      if (String(o.status || '') !== 'shipped') return;
+      var stD = effOrdStatus_(o);
+      // 已出貨未開發票；尾款先收了（paid）但確實出過貨、發票沒開的也要追
+      if (stD !== 'shipped' && !(stD === 'paid' && o.ship_date_actual)) return;
       if (o.invoice_no) return;
       var sd = dgYmd_(o.ship_date_actual);
       var days = sd ? dgDiffDays_(sd, today) : null;
