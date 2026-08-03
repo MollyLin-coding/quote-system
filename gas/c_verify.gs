@@ -64,29 +64,46 @@ function verifyFindQuoteRow_(no) {
   var ss = ssApp_();
   var sh = ss.getSheetByName(SHEET_MAIN);
   var lastRow = sh.getLastRow();
-  if (lastRow < 2) return null;
-  var data = sh.getRange(2, 1, lastRow - 1, effW_(sh, MAIN_HEADERS)).getValues();
   var target = String(no).trim();
-  var idx = data.findIndex(function (r) {
-    return String(r[MAIN_COLS.quoteNo - 1]).trim() === target;
-  });
-  if (idx === -1) return null;
-  return { client: data[idx][MAIN_COLS.clientName - 1] };
+  if (lastRow >= 2) {
+    var data = sh.getRange(2, 1, lastRow - 1, effW_(sh, MAIN_HEADERS)).getValues();
+    var idx = data.findIndex(function (r) {
+      return String(r[MAIN_COLS.quoteNo - 1]).trim() === target;
+    });
+    if (idx !== -1) return { client: data[idx][MAIN_COLS.clientName - 1] };
+  }
+  // 寄售鋪貨產的「出貨驗收單」（單號 CS- 開頭）沒有對應報價單：改查驗收單留底存的客戶名（8/3 加）
+  if (target.indexOf('CS-') === 0) {
+    var vf = verifyFormFindByNo_(target);
+    if (vf && vf.client) return { client: vf.client };
+  }
+  return null;
 }
 function verifyGetItemNames_(no) {
   resolveColMaps_();
   var ss = ssApp_();
   var sh = ss.getSheetByName(SHEET_ITEMS);
   var lastRow = sh.getLastRow();
-  if (lastRow < 2) return [];
-  var data = sh.getRange(2, 1, lastRow - 1, effW_(sh, ITEM_HEADERS)).getValues();
   var target = String(no).trim();
   var names = [];
-  data.forEach(function (r) {
-    if (String(r[ITEM_COLS.quoteNo - 1]).trim() !== target) return;
-    var nm = verifyClean_(r[ITEM_COLS.name - 1], 100);
-    if (nm && names.indexOf(nm) === -1) names.push(nm);
-  });
+  if (lastRow >= 2) {
+    var data = sh.getRange(2, 1, lastRow - 1, effW_(sh, ITEM_HEADERS)).getValues();
+    data.forEach(function (r) {
+      if (String(r[ITEM_COLS.quoteNo - 1]).trim() !== target) return;
+      var nm = verifyClean_(r[ITEM_COLS.name - 1], 100);
+      if (nm && names.indexOf(nm) === -1) names.push(nm);
+    });
+  }
+  // 同上：報價單品項表查無資料時，改用驗收單留底的品項明細（寄售鋪貨那批）
+  if (!names.length && target.indexOf('CS-') === 0) {
+    var vf2 = verifyFormFindByNo_(target);
+    if (vf2 && vf2.items) {
+      vf2.items.forEach(function (it) {
+        var nm = verifyClean_((it && it.name) || '', 100);
+        if (nm && names.indexOf(nm) === -1) names.push(nm);
+      });
+    }
+  }
   return names;
 }
 
@@ -414,10 +431,10 @@ function buildVerifyHtml_(data) {
 // ===================================================================
 const SHEET_VERIFY_FORM = '驗收單紀錄';
 const VERIFY_FORM_HEADERS = [
-  '紀錄ID', '建立時間', '單號', 'Lot', '配送日期', '專案經理', '箱數', '品項明細JSON'
+  '紀錄ID', '建立時間', '單號', 'Lot', '配送日期', '專案經理', '箱數', '品項明細JSON', '客戶'
 ];
 const VERIFY_FORM_COLS = {
-  id: 1, created_at: 2, no: 3, lot: 4, ship_date: 5, pm: 6, boxes: 7, items_json: 8
+  id: 1, created_at: 2, no: 3, lot: 4, ship_date: 5, pm: 6, boxes: 7, items_json: 8, client: 9
 };
 function getOrCreateVerifyFormSheet_() {
   var ss = ssApp_();
@@ -429,11 +446,37 @@ function getOrCreateVerifyFormSheet_() {
     sh.getRange(1, 1, 1, VERIFY_FORM_HEADERS.length).setValues([VERIFY_FORM_HEADERS])
       .setFontWeight('bold').setBackground('#1B4D2E').setFontColor('#FFFFFF');
     sh.setFrozenRows(1);
+  } else if (String(sh.getRange(1, VERIFY_FORM_HEADERS.length).getValue()) === '') {
+    // 表頭比程式的欄位清單短（8/3 新加「客戶」欄）→ 自動補上缺的表頭標籤，不用手動跑 setup
+    var cur = sh.getRange(1, 1, 1, VERIFY_FORM_HEADERS.length).getValues()[0];
+    for (var i = 0; i < VERIFY_FORM_HEADERS.length; i++) {
+      if (String(cur[i]) === '') {
+        sh.getRange(1, i + 1).setValue(VERIFY_FORM_HEADERS[i])
+          .setFontWeight('bold').setBackground('#1B4D2E').setFontColor('#FFFFFF');
+      }
+    }
   }
   return sh;
 }
 function verifyFormGenId_() {
   return 'VF' + (new Date().getTime()) + '-' + Math.floor(Math.random() * 9000 + 1000);
+}
+// 依單號查最新一筆驗收單留底（給寄售鋪貨那批的 QR 回報頁查客戶名／品項用，見 verifyFindQuoteRow_/verifyGetItemNames_）
+function verifyFormFindByNo_(no) {
+  var sh = getOrCreateVerifyFormSheet_();
+  var lastRow = sh.getLastRow();
+  if (lastRow < 2) return null;
+  var data = sh.getRange(2, 1, lastRow - 1, VERIFY_FORM_HEADERS.length).getValues();
+  var target = String(no).trim();
+  var found = null;
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][VERIFY_FORM_COLS.no - 1] || '').trim() !== target) continue;
+    found = data[i]; // 同單號可能不只一筆（編輯會取代但取代前短暫並存），取最後一筆＝最新
+  }
+  if (!found) return null;
+  var items = [];
+  try { items = JSON.parse(found[VERIFY_FORM_COLS.items_json - 1] || '[]'); } catch (e) { items = []; }
+  return { client: found[VERIFY_FORM_COLS.client - 1] || '', items: items };
 }
 function handleSaveVerifyForm_(params) {
   var rec = (params && params.record) || {};
@@ -463,6 +506,9 @@ function handleSaveVerifyForm_(params) {
   row[VERIFY_FORM_COLS.pm - 1] = verifyClean_(rec.pm, 60);
   row[VERIFY_FORM_COLS.boxes - 1] = Number(rec.boxes) || 0;
   row[VERIFY_FORM_COLS.items_json - 1] = JSON.stringify(items);
+  // 客戶名（8/3 加）：報價單那套出貨驗收單靠單號歸戶查得到，不用填；寄售鋪貨那批沒有報價單可查，
+  // 前端 saveConsignVerifyFormRecord 會把客戶名直接帶進來存這欄。
+  row[VERIFY_FORM_COLS.client - 1] = verifyClean_(rec.client, 100);
   sh.appendRow(row);
   return { ok: true, id: id };
 }
@@ -489,7 +535,8 @@ function handleListVerifyForms_(params) {
         ship_date: r[VERIFY_FORM_COLS.ship_date - 1],
         pm: r[VERIFY_FORM_COLS.pm - 1],
         boxes: r[VERIFY_FORM_COLS.boxes - 1],
-        items: items
+        items: items,
+        client: r[VERIFY_FORM_COLS.client - 1] || ''
       });
       if (!summary[no]) summary[no] = { count: 0, last_at: '' };
       summary[no].count++;

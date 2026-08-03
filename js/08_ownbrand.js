@@ -302,6 +302,8 @@ async function saveConsignCustomerForm(){
 }
 
 /* ---- 登記異動 ---- */
+let CS_MOVE_ROWID=0;
+let csMoveItems=[];   // [{id, sku, qty}]　鋪貨/補貨（type=in）用的多列狀態
 function openConsignMove(){
   if(!CS_CUR){ toast('請先選擇客戶','err'); return; }
   populateConsignSkuSelect('cs-m-sku');
@@ -310,17 +312,69 @@ function openConsignMove(){
   document.getElementById('cs-m-qty').value='';
   document.getElementById('cs-m-price').value='';
   document.getElementById('cs-m-note').value='';
+  { const e=document.getElementById('cs-m-handler'); if(e) e.value=''; }
+  { const e=document.getElementById('cs-m-genvf'); if(e) e.checked=true; }
+  CS_MOVE_ROWID=0; csMoveItems=[]; csAddMoveRow(); csAddMoveRow();   // 預留兩列，方便直接一次填多款
+  if(!OWNBRAND_PRODUCTS || !OWNBRAND_PRODUCTS.length){ loadOwnbrandData().then(renderCsMoveItems).catch(()=>{}); }
   onConsignMoveType();
   document.getElementById('cs-move-overlay').style.display='flex';
 }
 function closeConsignMove(){ document.getElementById('cs-move-overlay').style.display='none'; }
 function onConsignMoveType(){
   const t=document.getElementById('cs-m-type').value;
+  const isIn=(t==='in');
+  const single=document.getElementById('cs-m-single-wrap');
+  const multi=document.getElementById('cs-m-multi-wrap');
+  if(single) single.style.display=isIn?'none':'block';
+  if(multi) multi.style.display=isIn?'block':'none';
   const priceRow=document.getElementById('cs-m-price').closest('.fl');
   if(priceRow) priceRow.style.display=(t==='out')?'block':'none';
   const hint=document.getElementById('cs-m-qtyhint');
   hint.textContent = t==='deposit_refund' ? '退還保證金的瓶數（通常＝在池瓶數）' : (t==='adjust' ? '可為負數' : '瓶數');
   csMoveDepositHint();
+}
+/* ---- 鋪貨/補貨多列（一次登記多款酒）---- */
+function csMoveSkuOptions(selectedSku){
+  const ps=OWNBRAND_PRODUCTS||[];
+  return '<option value="">選擇公版酒…</option>'+ps.map(p=>
+    `<option value="${escHtml(p.sku_id)}"${String(p.sku_id)===String(selectedSku)?' selected':''}>${escHtml(p.name+'（'+p.volume+'）')}</option>`
+  ).join('');
+}
+function csAddMoveRow(){
+  CS_MOVE_ROWID++;
+  csMoveItems.push({id:CS_MOVE_ROWID, sku:'', qty:''});
+  renderCsMoveItems();
+}
+function csDelMoveRow(id){
+  csMoveItems=csMoveItems.filter(r=>r.id!==id);
+  if(!csMoveItems.length){ csAddMoveRow(); return; }
+  renderCsMoveItems();
+}
+function csMoveRowInput(id, key, val){
+  const r=csMoveItems.find(x=>x.id===id); if(r) r[key]=val;
+  csMoveRowDepositHint(id);
+}
+function csMoveRowDepositHint(id){
+  const el=document.getElementById('cs-m-rowdep-'+id); if(!el) return;
+  const r=csMoveItems.find(x=>x.id===id);
+  const u=r?csMoveDepositUnit(r.sku):0;
+  const qty=r?(parseFloat(r.qty)||0):0;
+  el.textContent=(qty>0&&u>0)?('保證金 '+money(qty*u)):'';
+}
+function renderCsMoveItems(){
+  const body=document.getElementById('cs-m-items-body'); if(!body) return;
+  body.innerHTML=csMoveItems.map(r=>`<div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+    <select class="fi" style="flex:2" onchange="csMoveRowInput(${r.id},'sku',this.value)">${csMoveSkuOptions(r.sku)}</select>
+    <input class="fi" type="number" min="0" style="flex:1" placeholder="數量" value="${(r.qty!=null&&r.qty!=='')?escAttr(r.qty):''}" oninput="csMoveRowInput(${r.id},'qty',this.value)">
+    <span id="cs-m-rowdep-${r.id}" style="font-size:11px;color:#7A5A1E;white-space:nowrap;width:84px"></span>
+    <button type="button" class="del" onclick="csDelMoveRow(${r.id})">✕</button>
+  </div>`).join('');
+  csMoveItems.forEach(r=>csMoveRowDepositHint(r.id));
+}
+function csGenVerifyNo(customerId){
+  const n=new Date(), p=x=>String(x).padStart(2,'0');
+  const stamp=n.getFullYear()+p(n.getMonth()+1)+p(n.getDate())+p(n.getHours())+p(n.getMinutes())+p(n.getSeconds());
+  return 'CS-'+String(customerId||'').replace(/[^A-Za-z0-9]/g,'')+'-'+stamp;
 }
 /* 鋪貨/退貨時即時顯示保證金金額（100ml $50／500ml $250，值來自 consign_terms），不用心算 */
 function csMoveDepositUnit(sku){
@@ -348,11 +402,48 @@ async function saveConsignMove(){
   if(_csMoveSaving) return; _csMoveSaving=true;
   const type=document.getElementById('cs-m-type').value;
   const date=document.getElementById('cs-m-date').value;
+  const note=document.getElementById('cs-m-note').value.trim();
+  if(!date){ toast('請選日期','err'); _csMoveSaving=false; return; }
+
+  if(type==='in'){
+    // 鋪貨/補貨：一次登記多款（一次呼叫 addConsignMovements，backend 用鎖包住避免單號互撞）
+    const rows=csMoveItems.map(r=>({sku:String(r.sku||'').trim(), qty:parseFloat(r.qty)}));
+    const valid=rows.filter(r=>r.sku && !isNaN(r.qty) && r.qty>0);
+    const partial=rows.filter(r=>(r.sku && (isNaN(r.qty)||r.qty<=0)) || (!r.sku && !isNaN(r.qty)));
+    // 先看有沒有「填了一半」的列（比較具體、對使用者更有幫助）；全部列都完全空白才顯示泛用提示
+    if(partial.length){ toast('有列只填了一半（公版酒或數量缺一個），請補齊或用 ✕ 刪掉該列','err'); _csMoveSaving=false; return; }
+    if(!valid.length){ toast('請至少填一款酒的公版酒與數量','err'); _csMoveSaving=false; return; }
+    const movements=valid.map(r=>({ date, customer_id:CS_CUR, sku_id:r.sku, type:'in', qty:r.qty, note }));
+    try{
+      const d=await apiCall({action:'addConsignMovements', token:AUTH_TOKEN, movements});
+      if(!d.ok) throw new Error(d.error||'儲存失敗');
+      toast('已登記鋪貨（共 '+valid.length+' 款）','ok');
+      const genvf=document.getElementById('cs-m-genvf');
+      const wantVf=!!(genvf&&genvf.checked);
+      const handler=(document.getElementById('cs-m-handler')||{}).value||'';
+      const c=curConsignCustomer();
+      closeConsignMove();
+      loadConsignInventory(); loadConsignLedger();
+      if(wantVf){
+        const rowsForVf=valid.map(r=>{ const p=ownbrandBySku(r.sku); return { name:p?p.name:r.sku, vol:p?p.volume:'', qty:r.qty }; });
+        openConsignVerifyForm({
+          no: csGenVerifyNo(CS_CUR),
+          client: (c&&c.name)||CS_CUR,
+          shipDate: date,
+          handler: handler,
+          note: note,
+          rows: rowsForVf
+        });
+      }
+    }catch(e){ toast(e.message||'儲存失敗','err'); }
+    finally{ _csMoveSaving=false; }
+    return;
+  }
+
+  // ---- 其他類型：維持原本單款登記 ----
   const sku=document.getElementById('cs-m-sku').value;
   const qty=parseFloat(document.getElementById('cs-m-qty').value);
   const priceRaw=document.getElementById('cs-m-price').value.trim();
-  const note=document.getElementById('cs-m-note').value.trim();
-  if(!date){ toast('請選日期','err'); _csMoveSaving=false; return; }
   if(!sku){ toast('請選公版酒','err'); _csMoveSaving=false; return; }
   if(!(qty!==0 && !isNaN(qty))){ toast('請填數量','err'); _csMoveSaving=false; return; }
   if(type!=='adjust' && qty<0){ toast('此類型數量需為正數','err'); _csMoveSaving=false; return; }

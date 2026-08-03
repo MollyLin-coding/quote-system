@@ -70,6 +70,16 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
         DB.ledger.push(row);
         return { ok: true, movement: row };
       }
+      if (a === 'addConsignMovements') {   // 8/3 加：鋪貨/補貨一次登記多款，複數版本
+        const rows = (q.movements || []).map(m => {
+          let up = m.unit_price;
+          if (m.type === 'out' && (up === undefined || up === null || up === '')) up = resolvePrice(m.customer_id, m.sku_id);
+          const row = { movement_id: 'CM-' + String(++DB.seq).padStart(4, '0'), date: m.date, customer_id: m.customer_id, sku_id: m.sku_id, type: m.type, qty: Number(m.qty), unit_price: (m.type === 'out' ? up : (up != null ? up : '')), note: m.note || '' };
+          DB.ledger.push(row);
+          return row;
+        });
+        return { ok: true, movements: rows };
+      }
       if (a === 'getConsignInventory') {
         const agg = {};
         DB.ledger.forEach(r => {
@@ -153,10 +163,18 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
     await page.waitForTimeout(150);   // SKU 下拉可能需要自動補載（寫入後快取被清）
     await page.evaluate(({ type, sku, qty, date, price }) => {
       document.getElementById('cs-m-type').value = type;
-      document.getElementById('cs-m-sku').value = sku;
-      document.getElementById('cs-m-qty').value = String(qty);
       document.getElementById('cs-m-date').value = date;
-      document.getElementById('cs-m-price').value = price == null ? '' : String(price);
+      if (type === 'in') {
+        // 8/3 起鋪貨/補貨改用多列 UI（一次可登記多款）；這支舊測試沿用單筆語意，塞進第一列，
+        // 並關掉「同時產生出貨驗收單」（這支測試不驗證驗收單，不需要多開一個彈窗）
+        csMoveItems[0].sku = sku; csMoveItems[0].qty = String(qty);
+        renderCsMoveItems();
+        const g = document.getElementById('cs-m-genvf'); if (g) g.checked = false;
+      } else {
+        document.getElementById('cs-m-sku').value = sku;
+        document.getElementById('cs-m-qty').value = String(qty);
+        document.getElementById('cs-m-price').value = price == null ? '' : String(price);
+      }
       return saveConsignMove();
     }, { type, sku, qty, date, price });
     await page.waitForTimeout(250);

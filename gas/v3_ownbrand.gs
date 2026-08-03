@@ -425,6 +425,83 @@ function handleAddConsignMovement_(params) {
 }
 
 // ===================================================================
+// action: addConsignMovements（複數，2026-08-03 加）—— 一次登記多款鋪貨
+// 前端「登記異動」選鋪貨/補貨時可一次填好幾款酒，一次呼叫寫進 consign_ledger 好幾列。
+// 跟單筆 addConsignMovement 共用同一套驗證規則；差別是這支包 ScriptLock，
+// 同一批的單號在鎖內接續編號，不會因為同時寫好幾列而互撞（單筆那支流量低，維持原樣不動）。
+// ===================================================================
+function handleAddConsignMovements_(params) {
+  const list = Array.isArray(params.movements) ? params.movements : [];
+  if (!list.length) throw new Error('缺少 movements');
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sh = v2Sheet_(SHEET_CONSIGN_LEDGER, CONSIGN_LEDGER_HEADERS);
+    const now = new Date();
+    const serialByDate = {};
+    const rowsToAppend = [];
+    const savedList = [];
+
+    list.forEach(function (m) {
+      const customerId = m.customer_id, skuId = m.sku_id, type = m.type;
+      if (!customerId || !skuId || !type) throw new Error('缺少 customer_id / sku_id / type');
+      if (['in', 'out', 'return', 'adjust', 'deposit_refund'].indexOf(type) === -1) throw new Error('type 必須是 in/out/return/adjust/deposit_refund 其中之一');
+
+      const qty = Number(m.qty);
+      if (isNaN(qty)) throw new Error('qty 格式錯誤');
+      if (type !== 'adjust' && qty <= 0) throw new Error('qty 必須為正整數（僅 adjust 可正負）');
+
+      let unitPrice = m.unit_price;
+      if (type === 'out') {
+        if (unitPrice === undefined || unitPrice === null || unitPrice === '') {
+          unitPrice = resolveConsignUnitPrice_(customerId, skuId).unitPrice;
+        }
+      } else {
+        unitPrice = unitPrice !== undefined && unitPrice !== null ? unitPrice : '';
+      }
+
+      const dateStr = m.date || Utilities.formatDate(now, 'Asia/Taipei', 'yyyy-MM-dd');
+      if (serialByDate[dateStr] === undefined) {
+        // 跟單筆版本同一套找「目前這個日期最大序號」的算法；本次呼叫內同一日期接續往上編，
+        // 不用每列都重掃一次表（此時 rowsToAppend 都還沒真的寫進表，掃到的是舊資料，序號才不會撞）
+        const datePart = String(dateStr).replace(/-/g, '');
+        const lastRow = sh.getLastRow();
+        let maxSerial = 0;
+        if (lastRow >= 2) {
+          const ids = sh.getRange(2, 1, lastRow - 1, 1).getValues();
+          const prefix = 'CM-' + datePart + '-';
+          ids.forEach(function (r) {
+            const id = String(r[0] || '');
+            if (id.indexOf(prefix) === 0) {
+              const serial = parseInt(id.substring(prefix.length), 10);
+              if (serial > maxSerial) maxSerial = serial;
+            }
+          });
+        }
+        serialByDate[dateStr] = maxSerial;
+      }
+      serialByDate[dateStr]++;
+      const movementId = 'CM-' + String(dateStr).replace(/-/g, '') + '-' + String(serialByDate[dateStr]).padStart(4, '0');
+
+      const rowVals = [movementId, dateStr, customerId, skuId, type, qty, unitPrice, m.note || '', Utilities.formatDate(now, 'Asia/Taipei', "yyyy-MM-dd'T'HH:mm:ss'+08:00'")];
+      rowsToAppend.push(rowVals);
+      const saved = {};
+      CONSIGN_LEDGER_HEADERS.forEach(function (h, i) { saved[h] = rowVals[i]; });
+      savedList.push(saved);
+    });
+
+    if (rowsToAppend.length) {
+      sh.getRange(sh.getLastRow() + 1, 1, rowsToAppend.length, CONSIGN_LEDGER_HEADERS.length).setValues(rowsToAppend);
+    }
+    logChange_('addConsignMovements', savedList.map(function (s) { return s.movement_id; }).join(','), { count: savedList.length });
+    return { ok: true, movements: savedList };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ===================================================================
 // action: getConsignInventory —— 在客戶端庫存（in-out-return+adjust）＋保證金餘額
 // ===================================================================
 function handleGetConsignInventory_(params) {

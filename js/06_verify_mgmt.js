@@ -44,6 +44,8 @@ function vmCatBar(reps){
 }
 function vmClientOf(no){
   if(VM_DATA){ const r=(VM_DATA.reports||[]).find(x=>x.no===no&&x.client); if(r) return r.client; }
+  // 寄售鋪貨產的驗收單（單號 CS- 開頭）沒有報價單可查，客戶名直接存在留底的 client 欄（8/3 加）
+  if(VM_DATA){ const f=(VM_DATA.forms||[]).find(x=>String(x.no||'').trim()===String(no).trim()&&x.client); if(f) return f.client; }
   if(ORDERS_CACHE){ const o=ORDERS_CACHE.find(x=>x.no===no); if(o) return (o.client||'').split('｜')[0]; }
   return '';
 }
@@ -236,6 +238,16 @@ function vmEditForm(id){
   const items=Array.isArray(f.items)?f.items:parseJsonSafe(f.items_json,[]);
   if(!Array.isArray(items)||!items.length){ toast('這筆留底沒有品項明細，無法編輯','err'); return; }
   const noStr=String(f.no||'').trim();
+  // 寄售鋪貨那批（單號開頭 CS-）沒有對應的報價單，走簡化版驗收單編輯（09_verify_form.js 的 openConsignVerifyForm）
+  if(noStr.indexOf('CS-')===0){
+    openConsignVerifyForm({
+      no:noStr, client:f.client||vmClientOf(noStr)||'',
+      shipDate:vmLocalYmd(f.ship_date)||'', handler:f.pm||'', note:'',
+      rows:items.map(it=>({ name:it.name||'', vol:it.vol||'', qty:(it.thisShip!=null&&it.thisShip!=='')?it.thisShip:(it.ordered||0) }))
+    }, id);
+    toast('已帶回這筆驗收單；只看不改直接關閉即可，修改後按「產生驗收單」會以新版取代舊紀錄','ok');
+    return;
+  }
   // 「第幾次出貨」推估＝同單號、比這筆更早的留底數＋1（欄位仍可手改）
   const earlier=((VM_DATA&&VM_DATA.forms)||[]).filter(x=>String(x.no||'').trim()===noStr && String(x.created_at||'')<String(f.created_at||'')).length;
   VERIFY_DATA={ no:noStr, client:vmClientOf(noStr)||'', priorCount:earlier,

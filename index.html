@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260803a">
-<script src="js/00_qrcode.js?v=20260803a"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260803b">
+<script src="js/00_qrcode.js?v=20260803b"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -1043,7 +1043,7 @@
 </div>
 
 <div class="v2ov" id="cs-move-overlay">
-  <div class="v2box" style="max-width:480px">
+  <div class="v2box" style="max-width:560px">
     <div class="v2h"><span>登記寄售異動</span><button class="v2x" onclick="closeConsignMove()">✕</button></div>
     <div class="fl"><label>類型</label><select class="fi" id="cs-m-type" onchange="onConsignMoveType()">
       <option value="in">鋪貨 / 補貨（進客戶端）</option>
@@ -1053,10 +1053,23 @@
       <option value="deposit_refund">退保證金（終止合約/轉模式）</option>
     </select></div>
     <div class="fl" style="margin-top:8px"><label>日期</label><input class="fi" type="date" id="cs-m-date"></div>
-    <div class="fl" style="margin-top:8px"><label>公版酒</label><select class="fi" id="cs-m-sku" onchange="csMoveDepositHint()"></select></div>
-    <div class="fl" style="margin-top:8px"><label>數量 <span class="opt" id="cs-m-qtyhint"></span></label><input class="fi" type="number" id="cs-m-qty" placeholder="數量" oninput="csMoveDepositHint()"></div>
-    <div id="cs-m-dephint" style="display:none;margin-top:8px;padding:8px 10px;background:#FBF7EC;border:1px solid #E8DCBB;border-radius:8px;font-size:12.5px;color:#7A5A1E"></div>
-    <div class="fl" style="margin-top:8px"><label>折後單價 <span class="opt">選填，留空由系統依折數自動算（僅銷售用）</span></label><input class="fi" type="number" id="cs-m-price" placeholder="留空自動"></div>
+    <!-- 單款登記（鋪貨/補貨以外的類型用這組） -->
+    <div id="cs-m-single-wrap">
+      <div class="fl" style="margin-top:8px"><label>公版酒</label><select class="fi" id="cs-m-sku" onchange="csMoveDepositHint()"></select></div>
+      <div class="fl" style="margin-top:8px"><label>數量 <span class="opt" id="cs-m-qtyhint"></span></label><input class="fi" type="number" id="cs-m-qty" placeholder="數量" oninput="csMoveDepositHint()"></div>
+      <div id="cs-m-dephint" style="display:none;margin-top:8px;padding:8px 10px;background:#FBF7EC;border:1px solid #E8DCBB;border-radius:8px;font-size:12.5px;color:#7A5A1E"></div>
+      <div class="fl" style="margin-top:8px"><label>折後單價 <span class="opt">選填，留空由系統依折數自動算（僅銷售用）</span></label><input class="fi" type="number" id="cs-m-price" placeholder="留空自動"></div>
+    </div>
+    <!-- 多款鋪貨（type=in 時顯示，一次可登記好幾款酒） -->
+    <div id="cs-m-multi-wrap" style="display:none">
+      <div class="fl" style="margin-top:8px"><label>鋪貨酒款 <span class="opt">可新增多款，一次登記</span></label></div>
+      <div id="cs-m-items-body"></div>
+      <button type="button" class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63;font-size:12px;padding:6px 12px;margin-top:4px" onclick="csAddMoveRow()">＋ 新增酒款</button>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:12px;font-size:12.5px;color:var(--fg);cursor:pointer">
+        <input type="checkbox" id="cs-m-genvf" checked> 同時產生「出貨驗收單」（簡化版，含掃碼回報客訴 QR）
+      </label>
+      <div class="fl" style="margin-top:8px"><label>經手人 <span class="opt">選填，會印在驗收單上</span></label><input class="fi" id="cs-m-handler" placeholder="選填"></div>
+    </div>
     <div class="fl" style="margin-top:8px"><label>備註 <span class="opt">選填</span></label><input class="fi" id="cs-m-note"></div>
     <div style="display:flex;gap:10px;margin-top:16px">
       <button class="btn btn-gold" onclick="saveConsignMove()">儲存</button>
@@ -1079,19 +1092,19 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260803a"></script>
-<script src="js/01_quote_form.js?v=20260803a"></script>
-<script src="js/01b_quote_preview.js?v=20260803a"></script>
-<script src="js/02_core_api.js?v=20260803a"></script>
-<script src="js/03_quote_custom.js?v=20260803a"></script>
-<script src="js/04_company.js?v=20260803a"></script>
-<script src="js/05_orders.js?v=20260803a"></script>
-<script src="js/06_verify_mgmt.js?v=20260803a"></script>
-<script src="js/07_calendar.js?v=20260803a"></script>
-<script src="js/08_ownbrand.js?v=20260803a"></script>
-<script src="js/09_verify_form.js?v=20260803a"></script>
-<script src="js/10_today.js?v=20260803a"></script>
-<script src="js/11_customers.js?v=20260803a"></script>
-<script src="js/99_boot.js?v=20260803a"></script>
+<script src="js/00_utils.js?v=20260803b"></script>
+<script src="js/01_quote_form.js?v=20260803b"></script>
+<script src="js/01b_quote_preview.js?v=20260803b"></script>
+<script src="js/02_core_api.js?v=20260803b"></script>
+<script src="js/03_quote_custom.js?v=20260803b"></script>
+<script src="js/04_company.js?v=20260803b"></script>
+<script src="js/05_orders.js?v=20260803b"></script>
+<script src="js/06_verify_mgmt.js?v=20260803b"></script>
+<script src="js/07_calendar.js?v=20260803b"></script>
+<script src="js/08_ownbrand.js?v=20260803b"></script>
+<script src="js/09_verify_form.js?v=20260803b"></script>
+<script src="js/10_today.js?v=20260803b"></script>
+<script src="js/11_customers.js?v=20260803b"></script>
+<script src="js/99_boot.js?v=20260803b"></script>
 </body>
 </html>

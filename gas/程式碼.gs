@@ -453,6 +453,9 @@ function handleRequest_(e) {
       case 'addConsignMovement':
         requireAuth_(params);
         return jsonResponse_(handleAddConsignMovement_(params));
+      case 'addConsignMovements':
+        requireAuth_(params);
+        return jsonResponse_(handleAddConsignMovements_(params));
       case 'getConsignInventory':
         requireAuth_(params);
         return jsonResponse_(handleGetConsignInventory_(params));

@@ -411,3 +411,174 @@ ${isPreview?'':'<script>window.onload=function(){setTimeout(function(){try{windo
 </body></html>`;
 }
 
+/* ===================================================================
+   寄售鋪貨簡化版「出貨驗收單」（2026-08-03 加）
+   跟報價單那套出貨 Lot 驗收單共用同一份版面 CSS／分頁邏輯（verifyDocStyleBlock／buildVerifyPages），
+   但沒有「訂購總數／已出貨／待出貨」這些報價單才有的概念，只印品項/容量/數量＋簽收欄。
+   單號用 CS-<客戶代碼>-<時間戳>（csGenVerifyNo，08_ownbrand.js），跟真報價單號分開兩套；
+   QR 掃碼回報沿用同一套 c_verify.gs——後端查不到報價單時，會改查這裡存進留底的客戶名／品項
+   （見 verifyFindQuoteRow_／verifyGetItemNames_ 的 CS- 分支，及 handleSaveVerifyForm_ 新增的 client 欄）。
+   =================================================================== */
+let CONSIGN_VF_DATA=null;
+let CONSIGN_VF_EDIT_ID=null;   // 編輯模式：正在取代的舊留底紀錄ID（null＝一般新開）
+
+function ensureConsignVerifyOverlay(){
+  if(document.getElementById('cs-vf-overlay')) return;
+  const ov=document.createElement('div');
+  ov.className='v2ov'; ov.id='cs-vf-overlay';
+  ov.innerHTML=`<div class="v2box" style="max-width:640px">
+    <div class="v2h"><span>寄售鋪貨・出貨驗收單</span><button class="v2x" onclick="closeConsignVerifyForm()">✕</button></div>
+    <div id="cs-vf-body"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="btn btn-g" onclick="closeConsignVerifyForm()">跳過，不產生</button>
+      <button class="btn btn-g" onclick="previewConsignVerifyPdf()"><i class="ti ti-eye"></i>預覽</button>
+      <button class="btn btn-gold" onclick="generateConsignVerifyPdf()"><i class="ti ti-file-download"></i>產生驗收單</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+function closeConsignVerifyForm(){ CONSIGN_VF_EDIT_ID=null; const o=document.getElementById('cs-vf-overlay'); if(o) o.style.display='none'; }
+
+/* data={no, client, shipDate, handler, note, rows:[{name,vol,qty}]}；editId 有值＝編輯既有留底（產生後取代舊筆） */
+function openConsignVerifyForm(data, editId){
+  CONSIGN_VF_DATA={ ...data, rows:(data.rows||[]).map(r=>({...r})) };
+  CONSIGN_VF_EDIT_ID=editId||null;
+  ensureConsignVerifyOverlay();
+  buildConsignVerifyModal();
+  document.getElementById('cs-vf-overlay').style.display='flex';
+}
+function buildConsignVerifyModal(){
+  const d=CONSIGN_VF_DATA; if(!d) return;
+  const ttl=document.querySelector('#cs-vf-overlay .v2h span');
+  if(ttl) ttl.textContent = CONSIGN_VF_EDIT_ID ? '編輯驗收單（產生後取代舊留底）' : '寄售鋪貨・出貨驗收單';
+  const inS='border:1px solid var(--bd);border-radius:5px;padding:5px 7px;font-size:12px;font-family:inherit;width:100%';
+  const rowsH=d.rows.map((r,i)=>`<tr>
+    <td><input style="${inS}" data-i="${i}" data-k="name" class="cvfi" value="${escHtml(r.name||'')}"></td>
+    <td><input style="${inS};width:90px" data-i="${i}" data-k="vol" class="cvfi" value="${escHtml(r.vol||'')}"></td>
+    <td><input type="number" min="0" style="${inS};width:80px" data-i="${i}" data-k="qty" class="cvfi" value="${(r.qty!==''&&r.qty!=null)?r.qty:''}"></td>
+    <td style="text-align:center"><button class="del" onclick="csVfDelRow(${i})">✕</button></td>
+  </tr>`).join('');
+  document.getElementById('cs-vf-body').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div class="fl"><label>客戶</label><input class="fi ro" id="cs-vf-client" value="${escHtml(d.client||'')}" readonly></div>
+      <div class="fl"><label>單號</label><input class="fi ro" value="${escHtml(d.no||'')}" readonly></div>
+      <div class="fl"><label>日期</label><input class="fi" type="date" id="cs-vf-date" value="${escHtml(d.shipDate||'')}"></div>
+      <div class="fl"><label>經手人 <span class="opt">選填</span></label><input class="fi" id="cs-vf-handler" value="${escHtml(d.handler||'')}"></div>
+      <div class="fl" style="grid-column:span 2"><label>備註 <span class="opt">選填</span></label><input class="fi" id="cs-vf-note" value="${escHtml(d.note||'')}"></div>
+    </div>
+    <div style="overflow-x:auto;margin-top:12px">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:var(--gold-pale);color:var(--gold-deep)">
+          <th style="padding:7px 4px;text-align:left;padding-left:6px">酒款</th>
+          <th style="padding:7px 4px">容量</th><th style="padding:7px 4px">數量</th><th style="padding:7px 4px"></th>
+        </tr></thead>
+        <tbody id="cs-vf-rows">${rowsH}</tbody>
+      </table>
+    </div>
+    <button type="button" class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63;font-size:12px;padding:6px 12px;margin-top:8px" onclick="csVfAddRow()">＋ 新增品項</button>
+    <p style="font-size:11px;color:var(--hint);margin-top:10px;line-height:1.6">簡化版驗收單：品項／容量／數量＋簽收欄，右下 QR 供客戶收貨後線上驗收回報（跟訂單那套出貨驗收單共用同一套回報系統）。</p>`;
+}
+function csVfSyncFromInputs(){
+  if(!CONSIGN_VF_DATA) return;
+  document.querySelectorAll('#cs-vf-rows .cvfi').forEach(el=>{
+    const i=+el.dataset.i, k=el.dataset.k;
+    if(CONSIGN_VF_DATA.rows[i]) CONSIGN_VF_DATA.rows[i][k]=el.value;
+  });
+}
+function csVfAddRow(){
+  csVfSyncFromInputs();
+  CONSIGN_VF_DATA.rows.push({name:'', vol:'', qty:''});
+  buildConsignVerifyModal();
+}
+function csVfDelRow(i){
+  csVfSyncFromInputs();
+  CONSIGN_VF_DATA.rows.splice(i,1);
+  if(!CONSIGN_VF_DATA.rows.length) CONSIGN_VF_DATA.rows.push({name:'', vol:'', qty:''});
+  buildConsignVerifyModal();
+}
+function csVfCollect(){
+  csVfSyncFromInputs();
+  const d=CONSIGN_VF_DATA;
+  const gvl=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
+  d.client=gvl('cs-vf-client')||d.client;
+  d.shipDate=gvl('cs-vf-date');
+  d.handler=gvl('cs-vf-handler');
+  d.note=gvl('cs-vf-note');
+  d.rows=(d.rows||[]).filter(r=>String(r.name||'').trim()!==''&&(parseFloat(r.qty)||0)>0);
+  return d;
+}
+function buildConsignVerifyDocHtml(d, opts){
+  const isPreview=!!(opts&&opts.preview);
+  const qrSvg=verifyQrSvg(verifyQrUrl(d.no,''),4);
+  const theadCols=`<th class="l" style="width:50%">酒款</th><th style="width:20%">容量</th><th style="width:15%">數量</th><th style="width:15%">簽收</th>`;
+  const rowsHtml=d.rows.map(r=>`<tr><td class="l">${escHtml(r.name)}</td><td>${escHtml(r.vol)||'—'}</td><td>${(parseFloat(r.qty)||0)||'—'}</td><td></td></tr>`);
+  const headerBlockHtml=`
+  <div class="hd">
+    <div class="hl"><img src="${VERIFY_LOGO}" alt="凱文南坡萬實業社"></div>
+    <div class="hr">
+      <div class="ttl" style="font-size:19px">寄售鋪貨驗收單</div>
+      <div class="nos">單號 <b>${escHtml(d.no)}</b><span class="sp"></span>日期 <b>${vfDate(d.shipDate)||'—'}</b></div>
+    </div>
+  </div>
+  <div class="meta">
+    <div><span>客戶</span><b>${escHtml(d.client||'')||'—'}</b></div>
+    <div><span>經手人</span><b>${escHtml(d.handler||'')||'—'}</b></div>
+    <div><span>備註</span><b>${escHtml(d.note||'')||'—'}</b></div>
+  </div>`;
+  const footBlockHtml=`
+  <div class="ft">
+    <div class="fl2">
+      <div class="notes">
+        <div class="nh">簽收確認</div>
+        <div class="nb">請確認到貨品項與數量無誤後簽名；如有品項瑕疵或數量不符，可掃描右側 QR 線上回報，我們會盡快處理。</div>
+      </div>
+      <div style="margin-top:18px;display:flex;gap:28px">
+        <div style="flex:1;border-top:1px solid #c7ac6e;padding-top:6px;font-size:10px;color:#9a9689">客戶簽名</div>
+        <div style="flex:1;border-top:1px solid #c7ac6e;padding-top:6px;font-size:10px;color:#9a9689">簽收日期</div>
+      </div>
+    </div>
+    <div class="qr">${qrSvg||''}<div class="cap">掃碼線上驗收回報</div><div class="cap2">Scan to confirm</div></div>
+  </div>`;
+  const pages=buildVerifyPages({headerBlockHtml, theadCols, rowsHtml, footBlockHtml});
+  return `<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8"><title>寄售鋪貨驗收單_${escHtml(d.client||'')}_${escHtml(d.shipDate||'')}</title>
+<style>${verifyDocStyleBlock()}</style></head><body>
+<div class="noprint">${isPreview?'<span class="pvtag">預覽・尚未留底</span>':''}<button onclick="window.print()">列印 / 另存 PDF</button></div>
+${pages}
+${isPreview?'':'<script>window.onload=function(){setTimeout(function(){try{window.print()}catch(e){}},350)}<\/script>'}
+</body></html>`;
+}
+function previewConsignVerifyPdf(){
+  const d=csVfCollect(); if(!d||!d.rows.length){ toast('請至少填一項酒款與數量','err'); return; }
+  const w=window.open('','_blank');
+  if(!w){ toast('請允許彈出視窗，才能預覽','err'); return; }
+  w.document.open(); w.document.write(buildConsignVerifyDocHtml(d,{preview:true})); w.document.close();
+  toast('這只是預覽，不會留底；要正式送出請按「產生驗收單」','ok');
+}
+function generateConsignVerifyPdf(){
+  const d=csVfCollect(); if(!d||!d.rows.length){ toast('請至少填一項酒款與數量','err'); return; }
+  const w=window.open('','_blank');
+  if(!w){ toast('請允許彈出視窗，才能列印／存成 PDF','err'); return; }
+  w.document.open(); w.document.write(buildConsignVerifyDocHtml(d)); w.document.close();
+  saveConsignVerifyFormRecord(d);
+  closeConsignVerifyForm();
+  toast('已開啟驗收單，於列印視窗選「另存為 PDF」','ok');
+}
+/* 存留底：跟報價單那套一樣存進「驗收單紀錄」（saveVerifyForm），額外多存 client 欄
+   （報價單那套的客戶是靠單號查報價單歸戶，寄售這批沒有報價單可查，直接存客戶名）。
+   編輯模式（CONSIGN_VF_EDIT_ID 有值）＝取代：先存新的，成功後刪舊的那筆。 */
+function saveConsignVerifyFormRecord(d){
+  try{
+    if(!AUTH_TOKEN) return;
+    const editId=CONSIGN_VF_EDIT_ID; CONSIGN_VF_EDIT_ID=null;
+    const record={ no:d.no, lot:'', shipDate:d.shipDate, pm:d.handler||'', boxes:'', client:d.client,
+      items:(d.rows||[]).map(r=>({ name:r.name, lot:'', vol:r.vol, mfg:'', thisShip:parseFloat(r.qty)||0, ordered:parseFloat(r.qty)||0, shipped:0 })) };
+    apiCall({action:'saveVerifyForm', token:AUTH_TOKEN, record}).then(res=>{
+      if(!(res&&res.ok)||!editId) return;
+      return apiCall({action:'deleteVerifyForm', token:AUTH_TOKEN, id:editId})
+        .then(()=>{ toast('驗收單留底已更新（新版已取代舊紀錄）','ok'); })
+        .catch(()=>{ toast('新留底已存，但舊紀錄刪除失敗，請到「驗收單留底」手動刪掉舊的那筆','err'); })
+        .then(()=>{ try{ if(typeof loadVerifyMgmt==='function') loadVerifyMgmt(true); }catch(_){} });
+    }).catch(()=>{});
+  }catch(_){}
+}
+
