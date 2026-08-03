@@ -1277,6 +1277,14 @@ function appendHeader_(body, quote) {
 }
 
 function appendClientInfo_(body, quote) {
+  // 批次標籤（前端存在 taglabel 特殊品項列）：與網頁預覽一致，印成客戶資料上方的一行小金字
+  const tg = (quote.items || []).find(function (i) { return i.itemType === 'taglabel'; });
+  if (tg && (tg.lot || tg.flavorList)) {
+    const parts = [];
+    if (tg.lot) parts.push(String(tg.lot));
+    if (tg.flavorList) parts.push(String(tg.flavorList));
+    body.appendParagraph(parts.join('　・　')).editAsText().setFontSize(9).setBold(true).setForegroundColor('#A6824A');
+  }
   if (quote.quoteType === 'banquet' && quote.venue) {
     const line = '佈置地點：' + quote.venue + (quote.serviceTime ? '　供酒時間：' + quote.serviceTime : '');
     body.appendParagraph(line).editAsText().setFontSize(9).setForegroundColor('#6B6B63');
@@ -1369,15 +1377,29 @@ function appendBanquetTable_(body, quote) {
   });
 
   items.filter(i => i.itemType === 'banquet_free').forEach(it => {
+    // 免費列（noCharge='Y'）：與網頁預覽一致，印「免費（原價 $X）」而不是 $0；原價借放在 deduction 欄。
+    // 備註借放在 flavorList 欄，接在品名下一行。
+    const isFree = String(it.noCharge || '').toUpperCase() === 'Y';
+    const orig = Number(it.deduction) || 0;
+    const nameCell = (it.name || '-') + (it.flavorList ? ('\n' + it.flavorList) : '');
     rows.push([
-      it.name || '-', String(it.qty || 0), it.unit || '-',
-      it.unitPrice ? fmtMoney_(it.unitPrice) : '-', fmtMoney_(it.subtotal)
+      nameCell, String(it.qty || 0), it.unit || '-',
+      it.unitPrice ? fmtMoney_(it.unitPrice) : '-',
+      isFree ? ('免費' + (orig ? ('（原價 ' + fmtMoney_(orig) + '）') : '')) : fmtMoney_(it.subtotal)
     ]);
   });
 
   if (quote.svcMode) {
+    // 服務費拆項（svcdetail 特殊列）：有存拆項就照「單價（調酒師費＋車馬費）× 人數」印，與網頁預覽一致；沒有就退回舊的一筆總額
     const label = SVC_LABEL_MAP_[quote.svcMode] || '調酒師服務費';
-    rows.push([label, '1', '-', fmtMoney_(quote.svcAmount), fmtMoney_(quote.svcAmount)]);
+    const sd = items.find(function (i) { return i.itemType === 'svcdetail'; });
+    if (sd) {
+      const a1 = Number(sd.unitPrice) || 0, a2 = Number(sd.deduction) || 0, q = Number(sd.qty) || 1;
+      const per = a1 + (quote.svcMode === 'travel' ? a2 : 0);
+      rows.push([label, String(q), '位', fmtMoney_(per), fmtMoney_(quote.svcAmount)]);
+    } else {
+      rows.push([label, '1', '-', fmtMoney_(quote.svcAmount), fmtMoney_(quote.svcAmount)]);
+    }
   }
 
   items.filter(i => i.itemType === 'banquet_addon').forEach(it => {
@@ -1416,8 +1438,17 @@ function appendTotals_(body, quote) {
     addTotalLine_(body, taxLabel, quote.taxAmount, false);
   }
 
-  if (quote.quoteType === 'bottle' && Number(quote.extrasTotal)) {
+  if (Number(quote.extrasTotal)) {   // 原本只有 quoteType==='bottle' 會印，公版買斷/客製標/寄售單的額外費用合計會漏印
     addTotalLine_(body, '額外費用', quote.extrasTotal, false);
+  }
+
+  // 免運優惠（前端存在 freeship 特殊品項列，金額放 deduction）：顯示用、不計入總計，與網頁預覽一致
+  const fs = (quote.items || []).find(function (i) { return i.itemType === 'freeship'; });
+  const fsAmt = fs ? (Number(fs.deduction) || Number(fs.unitPrice) || 0) : 0;
+  if (fsAmt > 0) {
+    const p = body.appendParagraph('免運優惠：' + fmtMoney_(fsAmt) + '（本次免收運費，不列入應付）');
+    p.setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
+    p.editAsText().setFontSize(10).setForegroundColor('#A6824A');
   }
 
   addTotalLine_(body, '總計', quote.grandTotal, true);
