@@ -1,13 +1,12 @@
 # GAS 後端原始碼備份
 
-> **⚠️ 待部署（2026-07-31 v32 改動）**：本機的 `v2_extensions.gs`（order_status 新欄 `cust_lot`、有效狀態 `effOrdStatus_`、結案日自動填修正）與 `v33_digest.gs`（今日待辦改用有效狀態）已更新，**尚未**部署到線上。部署步驟：貼上這兩個檔案 → 建立新版本部署 → 在編輯器手動執行一次 `setupOrderStatusV30Columns()`（幫 order_status 表補上 cust_lot 欄）。部署完成後請把本段刪除並更新下方版本資訊。
-
 來源：Apps Script 專案「Quote System API」
 專案 ID: 1ULEfHbKEkBrnttftDah9wz_d3dAViqRoS-vflWxp34xIe_65GyaM-o7e
-線上部署版本：**v40**（2026-07-26 21:59 部署，客戶主檔 customers 四個 action；v39＝同一次請求共用試算表連線；v38＝登入一併回傳今日待辦；v37＝batch）
+線上部署版本：**v43**（2026-08-03 11:12 部署，對話A：驗收回報公式注入防護＋標準/自訂單同日單號互撞修正＋createQuote 品項寫入移進鎖內＋order_status 表頭自動補欄——cust_lot 之後不用再手動跑 setupOrderStatusV30Columns）
+（v42＝2026-07-31 對話B：cust_lot＋有效狀態＋結案日修正；v41＝寄售修正；v40＝客戶主檔；v39＝共用試算表連線）
 部署作業 ID: AKfycbytSqCF0St1Gu8F_u8KW9rcKJnkkGAfrdaHYyrQ6wDKa19Z3TxZd-GRRi_3Ii3Ijv4i
 
-本次快照時間：2026-07-26（v40；本機與線上以「字元數＋SHA-256」逐檔比對一致：程式碼.gs 54396／175d0e81e199、v2_extensions.gs 61484／859d74152fd3）
+本次快照時間：2026-08-03（v43＝repo commit b687e5b；線上三檔以「字元數＋SHA-256」比對一致：程式碼.gs 55296／a35dfdb14f4932c9、v2_extensions.gs 62776／7cc5de8d65b13e54、c_verify.gs 22938／289813371f55b895；v33_digest.gs 15425／73c643b5781fa556 線上原本就與 repo 一致）
 
 ## 檔案
 
