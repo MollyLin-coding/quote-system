@@ -344,7 +344,7 @@ async function saveOrdEdit(){
   if(btn){ btn.disabled=true; btn.textContent='儲存中…'; }
   try{
     const d=await apiCall({ action:'updateOrderStatus', token:AUTH_TOKEN, quote_no:no, fields });
-    if(!d.ok){ toast(d.error||'儲存失敗','err'); return; }
+    if(!d.ok){ if(snap&&!ORDERS_CACHE) ORDERS_CACHE=snap; toast(d.error||'儲存失敗','err'); return; }   // 失敗要把快照放回去，不然清單會卡死在空狀態
     // 先把改好的值直接更新到畫面（0 秒），背景再跟後端要最新的
     if(snap){
       ORDERS_CACHE=snap;
@@ -355,7 +355,7 @@ async function saveOrdEdit(){
     }
     toast(bumped?`進度已儲存，狀態自動更新為「${bumped}」`:'進度已儲存','ok'); closeOrdEdit();
     loadOrders().catch(()=>{});
-  }catch(e){ toast(e.message||'儲存失敗','err'); }
+  }catch(e){ if(snap&&!ORDERS_CACHE) ORDERS_CACHE=snap; toast(e.message||'儲存失敗','err'); }
   finally{ _busy.ordEdit=false; if(btn){ btn.disabled=false; btn.textContent='儲存進度'; } }
 }
 
@@ -386,14 +386,16 @@ async function invPhotosPicked(ev){
   const prev=document.getElementById('oe-invphoto-prev');
   prev.innerHTML=arr.map(i=>`<img src="${i.url}" style="width:52px;height:52px;object-fit:cover;border-radius:6px;border:1px solid var(--bd);opacity:.6">`).join('');
   hint.textContent=`上傳中…（${arr.length} 張）`;
+  const snap=ORDERS_CACHE;   // 寫入會清空 ORDERS_CACHE，留一份
   try{
     const d=await apiCall({ action:'saveInvoicePhotos', token:AUTH_TOKEN, quote_no:ORD_EDITING,
       images: arr.map(i=>({name:i.name, mime:i.mime, data:i.data})) });
+    if(snap&&!ORDERS_CACHE) ORDERS_CACHE=snap;
     if(!d.ok){ toast(d.error||'上傳失敗','err'); hint.textContent='上傳失敗，請再試一次'; return; }
     toast(`已上傳 ${arr.length} 張發票照片`,'ok');
     hint.textContent=''; prev.innerHTML='';
     await refreshInvPhotoLinks();             // 重新讀 order_status，避免之後儲存進度用舊值蓋掉
-  }catch(e){ toast(e.message||'上傳失敗','err'); hint.textContent='上傳失敗，請再試一次'; }
+  }catch(e){ if(snap&&!ORDERS_CACHE) ORDERS_CACHE=snap; toast(e.message||'上傳失敗','err'); hint.textContent='上傳失敗，請再試一次'; }
   finally{ _busy.invUpload=false; }
 }
 async function refreshInvPhotoLinks(){
@@ -470,14 +472,17 @@ async function shpSaveRow(btn){
   tr.querySelectorAll('input[data-f]').forEach(inp=>{ fields[inp.getAttribute('data-f')]=inp.value; });
   if(fields.invoice_last5 && !/^\d{5}$/.test(fields.invoice_last5)){ toast('發票末五碼需為 5 位數字','err'); _busy.shpSave=false; return; }
   btn.disabled=true; btn.textContent='…';
+  const snap=ORDERS_CACHE;   // 寫入會清空 ORDERS_CACHE，留一份，避免關窗後訂單列表卡死在空狀態
   try{
     let d;
     if(id){ d=await apiCall({ action:'updateShipment', token:AUTH_TOKEN, id, fields }); }
     else  { d=await apiCall(Object.assign({ action:'addShipment', token:AUTH_TOKEN, quote_no:ORD_EDITING, fields }, fields)); }  // 扁平＋fields 都給，相容兩種後端寫法
+    if(snap&&!ORDERS_CACHE) ORDERS_CACHE=snap;
     if(!d.ok){ toast(d.error||'儲存失敗','err'); return; }
     toast(id?'這一批已更新':'已新增一批','ok');
     await loadShipments();
-  }catch(e){ toast(e.message||'儲存失敗','err'); }
+    loadOrders().catch(()=>{});   // 背景刷新訂單彙總
+  }catch(e){ if(snap&&!ORDERS_CACHE) ORDERS_CACHE=snap; toast(e.message||'儲存失敗','err'); }
   finally{ btn.disabled=false; btn.textContent='儲存'; _busy.shpSave=false; }
 }
 async function shpDelRow(btn){
@@ -491,13 +496,15 @@ async function shpDelRow(btn){
   if(!confirm('確定刪除這一批出貨紀錄？\n只刪這筆分批紀錄，訂單本身的出貨資料不受影響。刪除後無法復原。')) return;
   if(_busy.shpDel) return; _busy.shpDel=true;
   btn.disabled=true; btn.textContent='…';
+  const snap=ORDERS_CACHE;   // 寫入會清空 ORDERS_CACHE，留一份
   try{
     const d=await apiCall({ action:'deleteShipment', token:AUTH_TOKEN, id });
+    if(snap&&!ORDERS_CACHE) ORDERS_CACHE=snap;
     if(!d.ok){ toast(d.error||'刪除失敗','err'); return; }
     toast('已刪除這一批','ok');
     await loadShipments();
     loadShipmentBadges();                    // 順手刷新訂單列的「分批×N」徽章
-  }catch(e){ toast(e.message||'刪除失敗','err'); }
+  }catch(e){ if(snap&&!ORDERS_CACHE) ORDERS_CACHE=snap; toast(e.message||'刪除失敗','err'); }
   finally{ btn.disabled=false; btn.textContent='刪除'; _busy.shpDel=false; }
 }
 /* 訂單列「分批×N」徽章：試打不帶 quote_no 的 listShipments，後端若回全部就能顯示；不支援就靜默略過 */
@@ -656,7 +663,7 @@ function renderReport(){
         const fde=s.final_date_est;
         let fdeTxt='—';
         if(fde){ const d=daysBetween(fde); fdeTxt=(d!=null&&d<0)?`<span style="color:#B03A2E;font-weight:600">${escHtml(fde.slice(5))}（逾期${-d}天）</span>`:escHtml(fde.slice(5)); }
-        return `<tr style="cursor:pointer" onclick="openOrdEdit('${escHtml(o.no)}')">
+        return `<tr style="cursor:pointer" onclick="openOrdEdit(decodeURIComponent('${encodeURIComponent(o.no)}'))">
           <td class="mc-main"><b>${escHtml(o.no)}</b></td>
           <td data-l="客戶">${escHtml(o.client.split('｜')[0])}</td>
           <td data-l="尾款金額" style="text-align:right">${money(r.amt)}${r.est?'<span style="color:#B5541F;font-size:10.5px;margin-left:4px">推估</span>':''}</td>
@@ -673,7 +680,7 @@ function renderReport(){
         const sd=o.st?.ship_date_actual;
         const d=sd?daysBetween(sd):null;
         const days=d==null?null:-d;
-        return `<tr style="cursor:pointer" onclick="openOrdEdit('${escHtml(o.no)}')">
+        return `<tr style="cursor:pointer" onclick="openOrdEdit(decodeURIComponent('${encodeURIComponent(o.no)}'))">
           <td class="mc-main"><b>${escHtml(o.no)}</b></td>
           <td data-l="客戶">${escHtml(o.client.split('｜')[0])}</td>
           <td data-l="實際出貨日" style="text-align:center">${sd?escHtml(sd.slice(5)):'—'}</td>

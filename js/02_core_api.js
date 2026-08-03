@@ -39,6 +39,18 @@ async function apiCall(payload){
     showLogin();
     throw new Error('登入已過期，請重新登入');
   }
+  // batch 的子回應也要攔 UNAUTHORIZED（batch 頂層 ok:true，會繞過上面的檢查；不攔的話頁面會把
+  // 「token 無效」當一般錯誤印在表格裡，還會再平行打一輪注定失敗的個別請求才彈登入）
+  if(payload && payload.action==='batch' && data && data.ok && Array.isArray(data.results)
+     && data.results.some(d=>d && d.ok===false && d.error && String(d.error).indexOf('UNAUTHORIZED')===0)){
+    AUTH_TOKEN = null;
+    sessionStorage.removeItem('quote_token');
+    rememberClear();
+    if(typeof tdCacheClear==='function') tdCacheClear();
+    rcClear();
+    showLogin();
+    throw new Error('登入已過期，請重新登入');
+  }
   // 只要不是「純讀取」（存單／改進度／刪除／登入…），一律把讀取快取清掉，
   // 下一次進任何頁面都會拿到最新資料，不會出現「明明存好了卻還顯示舊的」。
   if(!rcIsRead(payload && payload.action)) rcClear();
@@ -266,6 +278,9 @@ function collectQuote(){
   let svcAmount=0;
   if(svcMode){
     svcAmount=(svcAmt1+(svcMode==='travel'?svcAmt2:0))*svcQty;
+    // 服務費拆項：後端主表只存 svcMode/svcAmount，拆項（調酒師費/車馬費/人數）存成特殊列供重開還原
+    // unitPrice=svcAmt1、deduction=svcAmt2（借欄）、qty=svcQty；subtotal=0 不影響金額
+    items.push({ itemType:'svcdetail', name:'服務費拆項', lot:'', volume:'', unitPrice:svcAmt1, deduction:svcAmt2, logoFee:0, qty:svcQty, unit:'', subtotal:0, flavorList:'' });
   }
 
   return {
@@ -296,7 +311,8 @@ function collectQuote(){
 /* 判斷標準報價單是否至少有一筆品項（含瓶裝列／宴會自訂列／宴會加購列／宴會兩組數量）*/
 function quoteHasItems(){
   // 排除 checkbox（其 .value 恆為 'on'，會把空列誤判成有內容）
-  const check=(ids,pfx)=>ids.some(id=>{ const r=document.getElementById(pfx+'-'+id); return r&&Array.from(r.querySelectorAll('[data-f]')).some(i=>i.type!=='checkbox'&&i.value&&i.value.trim()!==''); });
+  // 排除 checkbox（.value 恆為 'on'）與批次欄的預填字「Lot 」（新空列自動塞的，不算有內容）
+  const check=(ids,pfx)=>ids.some(id=>{ const r=document.getElementById(pfx+'-'+id); return r&&Array.from(r.querySelectorAll('[data-f]')).some(i=>{ if(i.type==='checkbox') return false; const v=(i.value||'').trim(); if(!v) return false; if(i.dataset.f==='lot'&&v==='Lot') return false; return true; }); });
   if(check(botItems,'r')) return true;
   if(check(banFreeItems,'bf')) return true;
   if(check(banAddonItems,'ba')) return true;
@@ -543,6 +559,9 @@ function loadQuoteIntoForm(q){
   { const box=document.getElementById('qf-detail'); if(box) box.style.display='none'; }
   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v||''};
   setType(q.quoteType||'bottle');
+  // 服務費殘留清除：先清空，宴會分支若有存 svcMode 再還原——否則上一張單的服務費會混進這張的總計
+  set('svc-mode',''); set('svc-amt1',''); set('svc-amt2',''); set('svc-qty','');
+  if(typeof onSvcModeChange==='function') onSvcModeChange();
   set('f-cli',q.clientName); set('f-con',q.contactName); set('f-tax',q.clientTaxId);
   set('f-inv',q.invoiceTitle);
   set('f-ph',q.contactPhone); set('f-ad',q.clientAddress);
@@ -563,7 +582,7 @@ function loadQuoteIntoForm(q){
   { const _fs=(q.items||[]).find(it=>it.itemType==='freeship'); const fe=document.getElementById('f-freeship'); if(fe) fe.value=_fs?((+_fs.deduction||+_fs.unitPrice||'')||''):''; }
   { const sd=document.getElementById('f-shipdate'); if(sd) sd.value=q.expectedShipDate||''; }
   { const ss=document.getElementById('f-shipdate-show'); if(ss) ss.checked=(q.showShipDate!=='N'); } // 預設顯示；後端尚未存此欄前一律視為顯示
-  { const _tr=document.getElementById('taxrate'); if(_tr) _tr.value=(q.taxRate==null?5:q.taxRate); } // 稅率填 0（免稅）要保留 0，不能被 ||5 改回 5%
+  { const _tr=document.getElementById('taxrate'); if(_tr) _tr.value=((q.taxRate==null||q.taxRate==='')?5:q.taxRate); } // 稅率填 0（免稅）要保留 0，不能被 ||5 改回 5%；舊單空白（''）視為預設 5%，不能變 0%
   // 先把流水號從單號尾碼還原，onDate() 會用它重算單號，避免顯示/PDF 變成 -01
   if(q.quoteNo){ const m=String(q.quoteNo).match(/-(\d+)\s*$/); if(m){ const s=document.getElementById('f-ser'); if(s) s.value=parseInt(m[1],10)||1; } }
   setTaxMode(q.priceMode||'inc');
@@ -574,9 +593,10 @@ function loadQuoteIntoForm(q){
   if(q.quoteType==='bottle'||q.quoteType==='ownbrand'||q.quoteType==='ownlabel'||q.quoteType==='consign'){
     document.getElementById('itbody-bot').innerHTML=''; botItems=[];
     extras=[];
-    const realItems = items.filter(it=>it.itemType!=='extra'&&it.itemType!=='freeship'&&it.itemType!=='taglabel');
-    // 贈品／不計價 還原：後端有存 noCharge 用它；沒存則以「有單價有瓶數但小計為0」判定（subtotal 是後端固定欄位，一定會回來）
-    const isGiftItem = it => (String(it.noCharge||'').toUpperCase()==='Y') || (parseFloat(it.unitPrice)>0 && parseFloat(it.qty)>0 && !(parseFloat(it.subtotal)>0));
+    const realItems = items.filter(it=>it.itemType!=='extra'&&it.itemType!=='freeship'&&it.itemType!=='taglabel'&&it.itemType!=='svcdetail');
+    // 贈品／不計價 還原：後端有明確存 noCharge（Y/N）就以它為準；沒存（舊資料空白）才用「有單價有瓶數但小計為0」推斷
+    const isGiftItem = it => { const nc=String(it.noCharge||'').toUpperCase(); if(nc==='Y') return true; if(nc==='N') return false;
+      return (parseFloat(it.unitPrice)>0 && parseFloat(it.qty)>0 && !(parseFloat(it.subtotal)>0)); };
     colLot = realItems.some(it=>it.lot);
     colDed = realItems.some(it=>it.deduction);
     colLogo = realItems.some(it=>it.logoFee);
@@ -591,6 +611,7 @@ function loadQuoteIntoForm(q){
       if(it.itemType==='extra'){ extras.push({id:`ext${++_extSeq}`,n:it.name,a:it.unitPrice||it.subtotal||0}); }
       else if(it.itemType==='freeship'){ /* 免運優惠已於上方共用區還原到 f-freeship，不建品項列 */ }
       else if(it.itemType==='taglabel'){ /* 批次標籤已於上方共用區還原到 f-tag-lot / f-tag-cli，不建品項列 */ }
+      else if(it.itemType==='svcdetail'){ /* 服務費拆項＝宴會用特殊列，瓶裝型不會有；防呆跳過不建品項列 */ }
       else { addBotRow({name:it.name,lot:it.lot,vol:it.volume,price:it.unitPrice,ded:it.deduction,logo:it.logoFee,qty:it.qty,mark:((it.is_oem==='Y'||it.is_label==='Y')?1:0), gift:(isGiftItem(it)?1:0),
         lp:((it.listPrice!=null&&it.listPrice!=='')?it.listPrice:it.unitPrice), disc:(it.discount!=null?it.discount:''), discManual:((it.discount!=null&&it.discount!=='')?1:0), listprice:(it.listPrice||it.unitPrice)}); }
     });
@@ -639,9 +660,12 @@ function loadQuoteIntoForm(q){
     if(banAddonItems.length===0) addBanAddonRow();
     if(q.svcMode){
       set('svc-mode',q.svcMode); onSvcModeChange();
-      // 還原調酒師服務費金額（優先用存下的原始輸入，舊資料沒存則用合計金額回填）
+      // 還原調酒師服務費金額：優先用物件裡的原始輸入 → 其次 svcdetail 特殊列（後端主表沒存拆項）→ 最後才用合計金額回填
+      const _sd=(q.items||[]).find(it=>it.itemType==='svcdetail');
       if(q.svcAmt1!=null || q.svcAmt2!=null || q.svcQty!=null){
         set('svc-amt1', q.svcAmt1||''); set('svc-amt2', q.svcAmt2||''); set('svc-qty', (q.svcQty!=null&&q.svcQty!=='')?q.svcQty:1);
+      } else if(_sd){
+        set('svc-amt1', _sd.unitPrice||''); set('svc-amt2', _sd.deduction||''); set('svc-qty', (_sd.qty!=null&&_sd.qty!=='')?_sd.qty:1);
       } else if(q.svcAmount){
         set('svc-amt1', q.svcAmount); set('svc-qty', 1);
       }
@@ -660,7 +684,7 @@ function loadQuoteIntoForm(q){
 
 /* ---- 開新（清空編輯狀態）---- */
 function isFormDirty(){
-  if(editingQuoteNo) return true;
+  if(editingQuoteNo) return FORM_DIRTY;   // 載入舊單後沒改過任何欄位＝乾淨，切單不用再跳「未儲存」警告
   if(document.getElementById('f-cli').value.trim()) return true;
   if(document.getElementById('f-con').value.trim()) return true;
   if(extras.length>0) return true;
@@ -680,12 +704,13 @@ function isFormDirty(){
 }
 function newQuote(){
   if(isFormDirty()){
-    if(!confirm('目前表單尚有未儲存的資料，確定要清除並開立新報價單？')) return;
+    if(!confirm('目前表單尚有未儲存的資料，確定要清除並開立新報價單？')) return false;   // 回傳 false 讓呼叫端（如 cusNewQuote）知道使用者取消了
   }
   editingQuoteNo=null;
   resetAll(true);
   gotoPage('new');
   autoNextSerial();   // 依今天已用單號自動帶下一個流水號，避免同一天重複
+  return true;
 }
 /* 依今天已存在的單號，把流水號帶到下一個未使用值（best-effort，失敗就維持預設 1） */
 async function autoNextSerial(){

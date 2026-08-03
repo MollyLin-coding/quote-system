@@ -164,7 +164,8 @@ function cusMatch(c, kw){
       || c.quotes.some(q=>String(q.no||'').toLowerCase().includes(k));
 }
 function cusSorted(){
-  const list=(CUS_DATA||[]).filter(c=>cusMatch(c, CUS_KW));
+  // 已停用（主檔 active=N）的客戶不列在清單上——與停用時的提示「清單上會看不到」一致；歷史單據仍在報價紀錄查得到
+  const list=(CUS_DATA||[]).filter(c=>!(c.master&&String(c.master.active||'').toUpperCase()==='N')).filter(c=>cusMatch(c, CUS_KW));
   const by={
     last:  (a,b)=> String(b.lastDate||'').localeCompare(String(a.lastDate||'')),
     amount:(a,b)=> b.dealSum-a.dealSum,
@@ -202,7 +203,7 @@ function renderCustomers(){
     body.innerHTML=list.map(c=>{
       const d=daysBetween(c.lastDate);
       const ago=(d==null)?'—':(d===0?'今天':(-d)+' 天前');
-      return `<tr class="clickable${CUS_SEL===c.key?' cus-on':''}" onclick="cusOpen('${escAttr(c.key)}')">
+      return `<tr class="clickable${CUS_SEL===c.key?' cus-on':''}" onclick="cusOpen(decodeURIComponent('${encodeURIComponent(c.key)}'))">
         <td class="mc-main" style="font-weight:600">${escHtml(c.name)}${c.pending?`<span class="ob warn" style="margin-left:6px">客訴 ${c.pending}</span>`:''}${
           cusTagsHtml(c)}${c.master?'':'<span class="ob grey" style="margin-left:6px">未建主檔</span>'}</td>
         <td data-l="聯絡">${escHtml(c.contact||'—')}${c.phone?'<span style="color:#A8A69C"> ／ </span>'+escHtml(c.phone):''}</td>
@@ -211,9 +212,9 @@ function renderCustomers(){
         <td data-l="未收尾款" style="text-align:right;${c.unpaid?'color:#B03A2E;font-weight:600':'color:#A8A69C'}">${c.unpaid?money(c.unpaid):'—'}</td>
         <td data-l="最後往來" style="text-align:center;white-space:nowrap">${escHtml(c.lastDate||'—')}<span style="font-size:10.5px;color:#A8A69C">　${ago}</span></td>
         <td class="rec-actions" data-l="操作" onclick="event.stopPropagation()">
-          <button class="rec-act-btn" onclick="cusOpen('${escAttr(c.key)}')">${CUS_SEL===c.key?'收起':'明細'}</button>
-          <button class="rec-act-btn" onclick="openCusEdit('${escAttr(c.key)}')">編輯</button>
-          <button class="rec-act-btn" onclick="cusNewQuote('${escAttr(c.key)}')">開新單</button>
+          <button class="rec-act-btn" onclick="cusOpen(decodeURIComponent('${encodeURIComponent(c.key)}'))">${CUS_SEL===c.key?'收起':'明細'}</button>
+          <button class="rec-act-btn" onclick="openCusEdit(decodeURIComponent('${encodeURIComponent(c.key)}'))">編輯</button>
+          <button class="rec-act-btn" onclick="cusNewQuote(decodeURIComponent('${encodeURIComponent(c.key)}'))">開新單</button>
         </td>
       </tr>`;
     }).join('');
@@ -231,7 +232,7 @@ function cusCloseDetail(){ CUS_SEL=null; renderCustomers(); }
 function cusKv(label, val, copy){
   const v=String(val==null?'':val).trim();
   return `<div class="cus-kv"><div class="k">${escHtml(label)}</div><div class="v">${v?escHtml(v):'<span style="color:#C4C2B8">—</span>'}${
-    (v&&copy!==false)?`<button class="cus-copy" title="複製" onclick="cusCopy('${escAttr(v)}')"><i class="ti ti-copy"></i></button>`:''}</div></div>`;
+    (v&&copy!==false)?`<button class="cus-copy" title="複製" onclick="cusCopy(decodeURIComponent('${encodeURIComponent(v)}'))"><i class="ti ti-copy"></i></button>`:''}</div></div>`;
 }
 function cusCopy(t){
   const done=()=>{ if(typeof toast==='function') toast('已複製：'+t,'ok'); };
@@ -272,7 +273,7 @@ function renderCusDetail(){
   const qRows=c.quotes.map(q=>{
     const s=q.st?effOrdStatus(q.st):'';
     const pill=s?`<span class="ob ${s==='cancelled'?'grey':(s==='closed'||s==='paid')?'':'info'}">${escHtml(stageLabel(s))}</span>`:'<span class="ob grey">未建進度</span>';
-    return `<tr class="clickable" onclick="cusOpenQuote('${escAttr(q.no)}','${escAttr(q.src)}')">
+    return `<tr class="clickable" onclick="cusOpenQuote(decodeURIComponent('${encodeURIComponent(q.no)}'),'${escAttr(q.src)}')">
       <td class="mc-main" style="font-weight:600">${escHtml(q.no||'—')}</td>
       <td data-l="日期">${escHtml(q.date||'—')}</td>
       <td data-l="類型">${escHtml(cusTypeLabel(q.typeKey))}${q.tag?'<span style="color:#A8A69C">｜'+escHtml(q.tag)+'</span>':''}</td>
@@ -288,7 +289,7 @@ function renderCusDetail(){
     const owe=(stat==='shipped'||stat==='invoiced')&&!s.final_date;
     const fde=s.final_date_est; let fdeTxt='—';
     if(fde){ const d=daysBetween(fde); fdeTxt=(d!=null&&d<0)?`<span style="color:#B03A2E;font-weight:600">${escHtml(String(fde).slice(5))}（逾期${-d}天）</span>`:escHtml(String(fde).slice(5)); }
-    return `<tr class="clickable" onclick="cusGotoOrder('${escAttr(q.no)}')">
+    return `<tr class="clickable" onclick="cusGotoOrder(decodeURIComponent('${encodeURIComponent(q.no)}'))">
       <td class="mc-main" style="font-weight:600">${escHtml(q.no)}</td>
       <td data-l="進度">${escHtml(stageLabel(stat))}</td>
       <td data-l="出貨日" style="text-align:center">${escHtml(s.ship_date_actual||s.ship_date_est||'—')}${(!s.ship_date_actual&&s.ship_date_est)?'<span style="color:#A8A69C;font-size:10.5px">（預計）</span>':''}</td>
@@ -313,8 +314,8 @@ function renderCusDetail(){
   el.innerHTML=`<div class="card cus-detail">
     <div class="ch"><i class="ti ti-user"></i><span>${escHtml(c.name)}</span>${cusTagsHtml(c)}
       <span class="ch-opt">
-        <button class="rec-act-btn" onclick="openCusEdit('${escAttr(c.key)}')"><i class="ti ti-edit"></i> ${c.master?'編輯客戶資料':'建立客戶主檔'}</button>
-        <button class="rec-act-btn" onclick="cusNewQuote('${escAttr(c.key)}')"><i class="ti ti-file-plus"></i> 用這客戶開新報價單</button>
+        <button class="rec-act-btn" onclick="openCusEdit(decodeURIComponent('${encodeURIComponent(c.key)}'))"><i class="ti ti-edit"></i> ${c.master?'編輯客戶資料':'建立客戶主檔'}</button>
+        <button class="rec-act-btn" onclick="cusNewQuote(decodeURIComponent('${encodeURIComponent(c.key)}'))"><i class="ti ti-file-plus"></i> 用這客戶開新報價單</button>
         <button class="rec-act-btn" onclick="cusCloseDetail()">收起</button>
       </span></div>
     <div class="cb">
@@ -354,7 +355,7 @@ function cusGotoOrder(no){
 /* 用這個客戶的資料開一張新報價單（只帶客戶欄位，品項自己填） */
 function cusNewQuote(key){
   const c=cusFind(key); if(!c) return;
-  newQuote();                                    // 沿用既有流程（會問未儲存、清表單、帶下一個流水號）
+  if(newQuote()===false) return;                 // 沿用既有流程（會問未儲存、清表單、帶下一個流水號）；使用者按取消就不能覆寫表單
   const set=(id,v)=>{ const e=document.getElementById(id); if(e && v) e.value=v; };
   set('f-cli', c.name); set('f-con', c.contact); set('f-tax', c.taxId);
   set('f-inv', c.invoiceTitle); set('f-ph', c.phone); set('f-ad', c.address);
@@ -467,7 +468,8 @@ async function cusSeedFromQuotes(){
 function cusFillPickSelect(){
   const sel=document.getElementById('f-cuspick'); if(!sel) return;
   const cur=sel.value;
-  const list=CUS_MASTER.slice().sort((a,b)=>String(a.name).localeCompare(String(b.name),'zh-Hant'));
+  const list=CUS_MASTER.filter(m=>String(m.active||'').toUpperCase()!=='N')   // 停用的客戶不進「選既有客戶」下拉
+    .sort((a,b)=>String(a.name).localeCompare(String(b.name),'zh-Hant'));
   sel.innerHTML='<option value="">— 不帶入，手動填 —</option>'+
     list.map(m=>`<option value="${escAttr(m.customer_id)}">${escHtml(m.name)}${m.contact?'（'+escHtml(m.contact)+'）':''}</option>`).join('')+
     (list.length?'':'<option value="" disabled>（客戶主檔還沒有資料，可到客戶管理按「從報價單匯入」）</option>');

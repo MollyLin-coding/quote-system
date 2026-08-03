@@ -11,6 +11,8 @@ let TD_FROM_CACHE = false;  // 現在顯示的是不是快取（尚未拿到新�
 let TD_CACHED_AT = null;    // 快取寫入時間（ISO 字串）
 let TD_BUSY = false;
 let TD_LAST_FETCH = 0;      // 上次真的打後端的時間（節流用）
+// 任何寫入（apiCall 非讀取 action）都會清讀取快取；今日待辦跟著解除 90 秒節流，回到本頁時重抓最新（畫面仍先顯示舊資料不閃空）
+if(typeof onCacheClear==='function') onCacheClear(function(){ TD_LAST_FETCH=0; });
 const TD_MIN_GAP_MS = 90000; // 90 秒內在頁面之間來回切，不重複打後端（按「重新整理」不受限）
 /* 門檻：與後端 v35 的 DIGEST_FINAL_AHEAD_DAYS_ / DIGEST_NOINVOICE_DAYS_ 一致，
    fallback 自己組時要用同一組數字，兩條路顯示的筆數才會一樣 */
@@ -152,7 +154,7 @@ async function tdBuildFallback(){
 
   // C. 掃碼未回報：直接沿用出貨驗收管理那份現成邏輯
   try{
-    (vmNoReportList()||[]).forEach(x=>out.no_scan.push({ quote_no:x.no, client:x.client, ship_date:x.shipDate, days_since:x.days, urgent:true }));
+    (vmNoReportList()||[]).forEach(x=>out.no_scan.push({ quote_no:x.no, client:x.client, ship_date:x.shipDate, days_since:x.days, lot:x.lot||'', urgent:true }));
   }catch(e){ out.warnings.push('未回報清單讀取失敗'); }
 
   // E. 今天的行事曆（備忘＋重複行程，比照行事曆頁的判定）

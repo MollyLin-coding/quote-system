@@ -456,6 +456,7 @@ function consignMonthlyToQuote(){
   if(csMonthlyStale()){ toast('請先按「產生月結」（客戶或月份換過了）','err'); return; }
   if(!CS_MONTHLY||!(CS_MONTHLY.lines&&CS_MONTHLY.lines.length)){ toast('請先「產生月結」再轉為報價單','err'); return; }
   if(CS_MONTHLY.settled && !confirm('這個月已經在 '+(CS_MONTHLY.settled.quoteDate||'')+' 轉出過報價單 '+CS_MONTHLY.settled.quoteNo+'。\n再轉一次會出現兩張同月份的請款單，確定要繼續嗎？')) return;
+  if(typeof isFormDirty==='function' && isFormDirty() && !confirm('報價單表單還有未儲存的內容，轉出月結報價單會把它清掉，確定要繼續？')) return;
   const c=CS_MONTHLY.customer||{};
   const period=(CS_MONTHLY.period&&CS_MONTHLY.period.from)?`${CS_MONTHLY.period.from} ～ ${CS_MONTHLY.period.to}`:`${CS_MONTHLY.year}年${CS_MONTHLY.month}月`;
   resetAll(true);

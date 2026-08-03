@@ -89,11 +89,13 @@ function vmNoReportList(){
   const reported={};
   (VM_DATA.reports||[]).forEach(r=>{ if(r.no) reported[r.no]=true; });
   Object.keys(VM_DATA.repSum||{}).forEach(no=>{ reported[no]=true; });
+  const lotOf={};   // 每張單最新一張驗收單的 Lot（今日待辦 fallback 顯示用，與 digest 版對齊）
+  (VM_DATA.forms||[]).forEach(f=>{ if(f.no && f.lot && lotOf[f.no]==null) lotOf[f.no]=f.lot; });
   const list=[];
   Object.keys(shipped).forEach(no=>{
     if(reported[no]) return;
     const d=vmDaysSince(shipped[no]);
-    if(d==null||d>=VM_NOREPORT_DAYS) list.push({no, shipDate:vmLocalYmd(shipped[no]), days:d, client:vmClientOf(no)});
+    if(d==null||d>=VM_NOREPORT_DAYS) list.push({no, shipDate:vmLocalYmd(shipped[no]), days:d, client:vmClientOf(no), lot:lotOf[no]||''});
   });
   list.sort((a,b)=>(b.days||0)-(a.days||0));
   return list;
@@ -370,7 +372,7 @@ async function loadMyCustomQuotes(){
   try{
     const d=await readCall({ action:'listCustomQuotes', token:AUTH_TOKEN });
     if(!d.ok){ box.innerHTML=`<div class="rec-empty">${d.error||'載入失敗'}</div>`; return; }
-    const qs=(d.quotes||[]).sort((a,b)=>(b.updated_at||'').localeCompare(a.updated_at||''));
+    const qs=(d.quotes||[]).slice().sort((a,b)=>(b.updated_at||'').localeCompare(a.updated_at||''));   // slice()：readCall 回的是快取本尊，不能就地排序污染快取
     window._CQ_CACHE=qs;
     if(!qs.length){ box.innerHTML='<div class="rec-empty">尚無已備份的自訂單</div>'; return; }
     box.innerHTML=`<div class="tbl-scroll"><table class="rec-table mcard"><thead><tr><th>單號 / 案名</th><th>客戶</th><th style="text-align:right">總計</th><th>更新</th><th>操作</th></tr></thead><tbody>`+
@@ -379,8 +381,8 @@ async function loadMyCustomQuotes(){
         return `<tr><td><b>${escHtml(q.quote_no||'—')}</b><br><span style="color:#6B6B63;font-size:11.5px">${escHtml(q.tag||'')}</span></td>
         <td>${escHtml(q.client||'—')}</td><td style="text-align:right;font-weight:600">${money(tot)}</td>
         <td>${(q.updated_at||'').slice(0,10)}</td>
-        <td class="rec-actions"><button class="rec-act-btn" onclick="loadCustomQuoteByNo('${escHtml(q.quote_no)}',false)">載入編輯</button>
-        <button class="rec-act-btn" onclick="loadCustomQuoteByNo('${escHtml(q.quote_no)}',true)">複製成新單</button></td></tr>`;
+        <td class="rec-actions"><button class="rec-act-btn" onclick="loadCustomQuoteByNo(decodeURIComponent('${encodeURIComponent(q.quote_no||'')}'),false)">載入編輯</button>
+        <button class="rec-act-btn" onclick="loadCustomQuoteByNo(decodeURIComponent('${encodeURIComponent(q.quote_no||'')}'),true)">複製成新單</button></td></tr>`;
       }).join('')+'</tbody></table></div>';
   }catch(e){ box.innerHTML=`<div class="rec-empty">${e.message||'載入失敗'}</div>`; }
 }
@@ -391,6 +393,11 @@ async function loadCustomQuoteByNo(no, asCopy){
     q=(d.quotes||[]).find(x=>x.quote_no===no);
   }
   if(!q){ toast('找不到 '+no,'err'); return; }
+  // 自訂單頁若已有打到一半的內容（且不是同一張單），先問過再覆蓋，避免誤點清掉未儲存的單
+  { const curNo=(document.getElementById('c-no')?.value||'').trim();
+    const curCli=(document.getElementById('c-cli')?.value||'').trim();
+    const hasRows=(typeof customItems!=='undefined') && customItems.some(id=>{ const r=document.getElementById('cr-'+id); return r&&Array.from(r.querySelectorAll('input,textarea')).some(i=>i.type!=='checkbox'&&(i.value||'').trim()!==''); });
+    if((curCli||hasRows) && curNo!==String(no||'') && !confirm('自訂報價單頁還有未儲存的內容，載入「'+no+'」會把它清掉，確定要繼續？')) return; }
   resetCustom(true);
   const set=(id,v)=>{ document.getElementById(id).value=v==null?'':v; };
   set('c-tag',q.tag); set('c-cli',q.client); set('c-con',q.contact);

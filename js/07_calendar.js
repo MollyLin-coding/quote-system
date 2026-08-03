@@ -35,7 +35,7 @@ function eventsOn(dstr){
   const d=new Date(dstr+'T00:00:00');
   if(CAL_KINDS.order){
     (ORDERS_CACHE||[]).forEach(o=>{
-      const s=o.st?.status||'quoted';
+      const s=(typeof effOrdStatus==='function')?effOrdStatus(o.st):(o.st?.status||'quoted');   // 用有效狀態：已收訂金但狀態欄沒改的單，不再誤報「報價到期」
       if(s==='cancelled') return;
       if(o.st?.ship_date_est===dstr && !o.st?.ship_date_actual) evs.push({t:'ship', txt:'🚚 '+o.client.split('｜')[0]+' 出貨', no:o.no});
       if(o.st?.ship_date_actual===dstr) evs.push({t:'ship', txt:'🚚 '+o.client.split('｜')[0]+' 出貨 ✓', no:o.no});
@@ -178,15 +178,16 @@ async function toggleTodoDone(id){
   it.done = it.done==='Y'?'N':'Y';
   it.done_date = it.done==='Y'?fmtD(new Date()):'';
   renderCalendar();
-  const snap=CAL_ITEMS;                            // apiCall（寫入類）會清空 CAL_ITEMS，先留一份
+  const snap=CAL_ITEMS, osnap=ORDERS_CACHE;        // apiCall（寫入類）會清空 CAL_ITEMS 與 ORDERS_CACHE，先各留一份
   try{
     const d=await apiCall({ action:'saveCalendarItem', token:AUTH_TOKEN, item:it });
     if(!d.ok) throw new Error(d.error||'儲存失敗');
-    CAL_ITEMS=snap; renderCalendar();              // 畫面即刻反映（這筆已是改好的），背景再同步
+    CAL_ITEMS=snap; if(osnap&&!ORDERS_CACHE) ORDERS_CACHE=osnap;   // 出貨/到期事件不消失
+    renderCalendar();                              // 畫面即刻反映（這筆已是改好的），背景再同步
     loadCalendar().catch(()=>{});
   }
   catch(e){
-    CAL_ITEMS=snap;
+    CAL_ITEMS=snap; if(osnap&&!ORDERS_CACHE) ORDERS_CACHE=osnap;
     it.done=prevDone; it.done_date=prevDate; renderCalendar();   // 回復畫面，避免以為打勾了其實沒存到
     toast('同步失敗，已還原：'+e.message,'err');
   }
@@ -277,7 +278,7 @@ function calSnap5(v){
   const m=String(v||'').match(/^(\d{1,2}):(\d{2})/);
   if(!m) return '';
   let h=parseInt(m[1],10), mi=Math.round(parseInt(m[2],10)/5)*5;
-  if(mi===60){ mi=0; h=(h+1)%24; }
+  if(mi===60){ if(h>=23){ h=23; mi=55; } else { mi=0; h=h+1; } }   // 23:58 不能繞回 00:00（會被「結束要晚於開始」擋住），夾在 23:55
   return String(h).padStart(2,'0')+':'+String(mi).padStart(2,'0');
 }
 function onCalCategoryChange(){
@@ -351,32 +352,34 @@ async function saveCalItem(){
       if(nv!==item.done){ item.done=nv; item.done_date = nv==='Y'?fmtD(new Date()):''; }
     }
   }
-  const snap=CAL_ITEMS;                       // apiCall（寫入類）會把 CAL_ITEMS 清空，先留一份
+  const snap=CAL_ITEMS, osnap=ORDERS_CACHE;   // apiCall（寫入類）會把 CAL_ITEMS/ORDERS_CACHE 清空，先各留一份
   const saveBtn=document.getElementById('ce-save');
   if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent='儲存中…'; }
   try{
     const d=await apiCall({ action:'saveCalendarItem', token:AUTH_TOKEN, item });
-    if(!d.ok){ toast(d.error||'儲存失敗','err'); return; }
+    if(osnap&&!ORDERS_CACHE) ORDERS_CACHE=osnap;   // 出貨/到期事件不消失
+    if(!d.ok){ CAL_ITEMS=snap; toast(d.error||'儲存失敗','err'); return; }   // 失敗一定要把快照放回去，不然整個行事曆會被清空
     // 先把存好的這筆直接放進畫面（0 秒），背景再跟後端要最新的
     CAL_ITEMS=(snap||[]).filter(x=>String(x.item_id)!==String(item.item_id)).concat([item]);
     closeCalEdit(); toast('已儲存','ok');
     renderCalendar();
     loadCalendar().catch(()=>{});
-  }catch(e){ toast(e.message||'儲存失敗','err'); }
+  }catch(e){ CAL_ITEMS=snap; if(osnap&&!ORDERS_CACHE) ORDERS_CACHE=osnap; toast(e.message||'儲存失敗','err'); }
   finally{ _busy.calSave=false; if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='儲存'; } }
 }
 async function deleteCalItem(){
   if(!CAL_EDIT_ID) return;
   if(!confirm('確定刪除這個事項？')) return;
-  const delId=CAL_EDIT_ID, snap=CAL_ITEMS;   // apiCall（寫入類）會把 CAL_ITEMS 清空，先留一份
+  const delId=CAL_EDIT_ID, snap=CAL_ITEMS, osnap=ORDERS_CACHE;   // apiCall（寫入類）會把 CAL_ITEMS/ORDERS_CACHE 清空，先各留一份
   try{
     const d=await apiCall({ action:'deleteCalendarItem', token:AUTH_TOKEN, item_id:delId });
-    if(!d.ok){ toast(d.error||'刪除失敗','err'); return; }
+    if(osnap&&!ORDERS_CACHE) ORDERS_CACHE=osnap;
+    if(!d.ok){ CAL_ITEMS=snap; toast(d.error||'刪除失敗','err'); return; }   // 失敗要把快照放回去
     CAL_ITEMS=(snap||[]).filter(x=>String(x.item_id)!==String(delId));   // 畫面即刻拿掉，背景再更新
     closeCalEdit(); toast('已刪除','ok');
     renderCalendar();
     loadCalendar().catch(()=>{});
-  }catch(e){ toast(e.message||'刪除失敗','err'); }
+  }catch(e){ CAL_ITEMS=snap; if(osnap&&!ORDERS_CACHE) ORDERS_CACHE=osnap; toast(e.message||'刪除失敗','err'); }
 }
 async function syncGCal(){
   const b=document.getElementById('gcal-sync-btn');

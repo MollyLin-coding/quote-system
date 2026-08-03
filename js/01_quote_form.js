@@ -37,6 +37,12 @@ function onDate(){
 }
 
 function upNo(){
+  // 編輯既有單時單號固定＝原單號：改報價日/流水號不得重排單號，否則預覽/PDF 印的單號會跟後台存的對不上
+  if(typeof editingQuoteNo!=='undefined' && editingQuoteNo){
+    document.getElementById('f-no').value=editingQuoteNo;
+    document.getElementById('pl-no').textContent=editingQuoteNo;
+    return;
+  }
   const v=document.getElementById('f-dt').value; if(!v) return;
   const d=new Date(v);
   const base=`${d.getFullYear()}${s2(d.getMonth()+1)}${s2(d.getDate())}`;
@@ -194,7 +200,7 @@ function addBotRow(prefill){
   let discVal = (prefill && prefill.disc!=null) ? prefill.disc : '';
   let h = `
     <textarea rows="1" placeholder="品名（Enter新增下一筆／Shift+Enter換行／可貼上多行自動拆成多筆）" oninput="calc()" onkeydown="handleNameKeydown(event,${id})" onpaste="handleNamePaste(event,${id})" data-f="name">${escHtml(prefill?.name||'')}</textarea>`;
-  if(colLot) h += `<input placeholder="Lot31" oninput="calc()" data-f="lot" value="${lotVal}">`;
+  if(colLot) h += `<input placeholder="Lot31" oninput="calc()" data-f="lot" value="${escAttr(lotVal)}">`;
   h += `
     <input type="number" min="0" placeholder="500" list="vol-options" oninput="calc()" data-f="vol" value="${prefill?.vol||''}">`;
   if(colOwn){
@@ -404,9 +410,9 @@ function addBanAddonRow(prefill){
   div.className='itr';
   div.style.gridTemplateColumns='3fr 60px 56px 86px 86px 26px';
   div.innerHTML=`
-    <input placeholder="${prefill?.ph||'加購項目名稱'}" oninput="calc()" data-f="name" value="${prefill?.name||''}">
+    <input placeholder="${escAttr(prefill?.ph||'加購項目名稱')}" oninput="calc()" data-f="name" value="${escAttr(prefill?.name||'')}">
     <input type="number" placeholder="1" oninput="calc()" data-f="qty" value="${prefill?.qty||''}">
-    <input placeholder="式" oninput="calc()" data-f="unit" value="${prefill?.unit||''}">
+    <input placeholder="式" oninput="calc()" data-f="unit" value="${escAttr(prefill?.unit||'')}">
     <input type="number" placeholder="0" oninput="calc()" data-f="price" value="${prefill?.price||''}">
     <div class="sub" id="bas-${id}">—</div>
     <button class="del" onclick="delBanAddonRow(${id})">✕</button>`;
@@ -448,7 +454,7 @@ function removeFlavor(g,idx){
 }
 function renderFlavors(g){
   document.getElementById(`ban-${g}-flavors`).innerHTML = flavors[g].map((f,i)=>
-    `<div class="flavor-tag">${f}<button onclick="removeFlavor('${g}',${i})">✕</button></div>`
+    `<div class="flavor-tag">${escHtml(f)}<button onclick="removeFlavor('${g}',${i})">✕</button></div>`
   ).join('') || `<span style="font-size:11px;color:var(--hint);font-style:italic">尚未新增品名（選填，可不填）</span>`;
 }
 renderFlavors('g1'); renderFlavors('g2');
@@ -721,7 +727,7 @@ function pushExt(n,a){
 function removeExt(id){runHooks('beforeRemoveExt', id);extras=extras.filter(e=>String(e.id)!==String(id));renderExt();calc();}
 function renderExt(){
   document.getElementById('ext-list').innerHTML=extras.map(e=>
-    `<div class="etag">${e.n}${e.a?'：'+fmtMoney(e.a):''}<button onclick="removeExt('${e.id}')">✕</button></div>`
+    `<div class="etag">${escHtml(e.n)}${e.a?'：'+fmtMoney(e.a):''}<button onclick="removeExt('${e.id}')">✕</button></div>`
   ).join('');
 }
 
@@ -768,7 +774,7 @@ async function handleImg(ev){
 function removeImg(i){imgs.splice(i,1);renderImgs();FORM_DIRTY=true;}
 function renderImgs(){
   document.getElementById('uprev').innerHTML=imgs.map((img,i)=>
-    `<div class="uth"><img src="${img.url}" alt="${img.name}"><button class="rm" onclick="removeImg(${i})">✕</button></div>`
+    `<div class="uth"><img src="${img.url}" alt="${escAttr(img.name||'')}"><button class="rm" onclick="removeImg(${i})">✕</button></div>`
   ).join('');
 }
 
@@ -813,7 +819,10 @@ function resetAll(skipConfirm){
   addBotRow();
   if(qType==='banquet'){ addBanFreeRow(); addBanAddonRow(); }
   setPay(0);
+  // 「清除」＝回到全新單：一定要斷開編輯中的舊單號，否則下一次儲存會用 updateQuote 把先前開啟的舊單整張蓋掉
+  if(typeof editingQuoteNo!=='undefined') editingQuoteNo=null;
   calc(); onDate(); upNo();
+  FORM_DIRTY=false;   // 清空後視為乾淨狀態，關頁/切單不再誤跳「未儲存」警告
   runHooks('afterReset', skipConfirm);   // 清掉公司選擇／發票抬頭等登記在這（見 08_ownbrand.js 檔尾）
 }
 
