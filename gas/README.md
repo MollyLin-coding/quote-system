@@ -2,11 +2,11 @@
 
 來源：Apps Script 專案「Quote System API」
 專案 ID: 1ULEfHbKEkBrnttftDah9wz_d3dAViqRoS-vflWxp34xIe_65GyaM-o7e
-線上部署版本：**v44**（2026-08-03 13:16 部署，對話A：正式文件 generateQuoteDocument 對齊網頁預覽——批次標籤頁首、免運優惠列、宴會免費列印「免費（原價）」＋備註、服務費拆項單價×人數、額外費用合計不再只限 bottle 型）
-（v43＝2026-08-03 公式注入/單號互撞/鎖內寫品項/表頭自動補欄；v42＝2026-07-31 cust_lot＋有效狀態；v41＝寄售修正；v40＝客戶主檔）
+線上部署版本：**v45**（2026-08-03 17:37 部署，對話A：寄售鋪貨一次登記多酒款 `addConsignMovements`＋簡化版出貨驗收單——驗收單紀錄表新增「客戶」欄（表頭自動補）、`verifyFindQuoteRow_`／`verifyGetItemNames_` 查無報價單時改查驗收單留底，讓 `CS-` 開頭單號也能掃碼回報）
+（v44＝2026-08-03 正式文件 generateQuoteDocument 對齊網頁預覽；v43＝2026-08-03 公式注入/單號互撞/鎖內寫品項/表頭自動補欄；v42＝2026-07-31 cust_lot＋有效狀態；v41＝寄售修正；v40＝客戶主檔）
 部署作業 ID: AKfycbytSqCF0St1Gu8F_u8KW9rcKJnkkGAfrdaHYyrQ6wDKa19Z3TxZd-GRRi_3Ii3Ijv4i
 
-本次快照時間：2026-08-03（v44＝repo commit 608d4ef；線上程式碼.gs 以「字元數＋SHA-256」比對一致：57026／ddfe3913ebe0306c；其餘檔與 v43 相同：v2_extensions.gs 62776／7cc5de8d65b13e54、c_verify.gs 22938／289813371f55b895、v33_digest.gs 15425／73c643b5781fa556、v3_ownbrand.gs 28384／33bb4197e1d36369）
+本次快照時間：2026-08-03（v45＝repo commit a7f5148；線上以「字元數＋SHA-256」比對一致：程式碼.gs 57156／62fd57e3fe729c87、v3_ownbrand.gs 31796／bbb20458706bc487、c_verify.gs 24989／830ff40c533de84e；其餘檔與 v44 相同：v2_extensions.gs 62776／7cc5de8d65b13e54、v33_digest.gs 15425／73c643b5781fa556）
 
 ## 檔案
 
