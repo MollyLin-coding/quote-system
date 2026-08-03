@@ -254,6 +254,24 @@ function generateQuoteNo_(dateStr) {
       }
     });
   }
+  // 自訂單（custom_quotes）也用同一種單號格式，且 generateV2QuoteNo_ 會掃「主表＋自訂單」兩邊；
+  // 這裡原本只掃主表，同一天「先存自訂單、再存標準單」會發出重複單號（order_status／驗收／PDF 歷史都以單號為鍵，會互相污染）。
+  // 補掃自訂單表，兩邊發號從此對稱。
+  try {
+    if (typeof SHEET_CUSTOM_QUOTES !== 'undefined') {
+      const csh = ss.getSheetByName(SHEET_CUSTOM_QUOTES);
+      if (csh && csh.getLastRow() > 1) {
+        const cNos = csh.getRange(2, 1, csh.getLastRow() - 1, 1).getValues();
+        cNos.forEach(row => {
+          const qn = String(row[0] || '');
+          if (qn.indexOf(datePart + '-') === 0) {
+            const serial = parseInt(qn.split('-')[1], 10);
+            if (serial > maxSerial) maxSerial = serial;
+          }
+        });
+      }
+    }
+  } catch (e) { /* 自訂單表不存在時照舊只看主表 */ }
   const nextSerial = String(maxSerial + 1).padStart(2, '0');
   return datePart + '-' + nextSerial;
 }
@@ -639,9 +657,11 @@ function handleCreateQuote_(params) {
   row[MAIN_COLS.showShipDate - 1] = quote.showShipDate || '';
 
   mainSheet.appendRow(row);
-  lock.releaseLock();
 
-  // 寫入品項
+  // 寫入品項 —— 一定要在鎖內做完（原本在 releaseLock 之後）：
+  // 與 updateQuote 的「品項整表清掉重寫」並發時，這裡的 getLastRow()+1 可能落在對方即將覆寫的範圍，
+  // 品項會被蓋掉或黏到錯的位置；兩個並發 createQuote 也會搶到同一個起始列互相覆寫。
+  try {
   if (quote.items && quote.items.length > 0) {
     const itemRows = quote.items.map(function (item) {
       var r = new Array(effW_(itemSheet, ITEM_HEADERS)).fill('');
@@ -666,6 +686,9 @@ function handleCreateQuote_(params) {
     });
     itemSheet.getRange(itemSheet.getLastRow() + 1, 1, itemRows.length, effW_(itemSheet, ITEM_HEADERS))
       .setValues(itemRows);
+  }
+  } finally {
+    lock.releaseLock();
   }
 
   return { ok: true, quoteNo: quoteNo };

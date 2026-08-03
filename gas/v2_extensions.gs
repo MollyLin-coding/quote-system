@@ -132,6 +132,16 @@ function v2Sheet_(name, headers) {
       .setBackground('#1B4D2E')
       .setFontColor('#FFFFFF');
     sh.setFrozenRows(1);
+  } else if (String(sh.getRange(1, headers.length).getValue()) === '') {
+    // 表頭比程式的欄位清單短（例如 v32 新加的 cust_lot）→ 自動補上缺的表頭標籤，
+    // 不用再手動跑 setupOrderStatusV30Columns()；只在「最後一欄表頭是空的」時才多讀這一列。
+    const cur = sh.getRange(1, 1, 1, headers.length).getValues()[0];
+    for (let i = 0; i < headers.length; i++) {
+      if (String(cur[i]) === '') {
+        sh.getRange(1, i + 1).setValue(headers[i])
+          .setFontWeight('bold').setBackground('#1B4D2E').setFontColor('#FFFFFF');
+      }
+    }
   }
   return sh;
 }

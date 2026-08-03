@@ -30,6 +30,10 @@ const VERIFY_MAX_IMG_BYTES = 8 * 1024 * 1024; // 單張解碼後上限
 function verifyClean_(s, max) {
   var out = String(s == null ? '' : s).replace(/[\u0000-\u001F\u007F]/g, ' ').trim();
   if (max && out.length > max) out = out.slice(0, max);
+  // 公式注入防護：submitVerification 是免 token 的公開端點，開頭 = 或 + 的字串
+  // 經 appendRow/setValue 會被 Sheets 存成「活公式」（可被拿來外洩整份試算表資料）。
+  // 前置撇號（'）＝Sheets 的「當文字」標記：儲存格顯示內容不變，但絕不會被當公式執行。
+  if (/^[=+]/.test(out)) out = "'" + out;
   return out;
 }
 function verifyGenId_() {
