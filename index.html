@@ -419,24 +419,26 @@
           <button class="ptab" onclick="setPay(2)">隔月指定日付款</button>
           <button class="ptab" onclick="setPay(3)">自訂</button>
           <button class="ptab" onclick="setPay(4)">不顯示此欄位</button>
-          <button class="ptab" onclick="setPay(5)">酒款訂金＋其他費用</button>
         </div>
         <div class="pay-panel on" id="pp0">
+          <div style="font-size:12px;color:var(--hint);margin-bottom:12px">訂金比例只套用在「酒款金額」（品項表小計）上；額外費用列裡的正數項目（如 SGS 檢驗費、GS1 條碼費）100% 併入訂金，負數項目（如運費折抵）從尾款扣除。營業稅按比例分攤，訂金＋尾款必等於總計。</div>
           <div class="fg fg3" style="margin-bottom:14px">
             <div class="fl">
-              <label>訂金比例</label>
+              <label>訂金比例 <span class="opt">只算酒款</span></label>
               <div style="display:flex;align-items:center;gap:7px">
-                <input class="fi" type="number" id="dep-pct" value="30" min="0" max="100" style="width:70px" oninput="calcPay()">
+                <input class="fi" type="number" id="dep-pct" value="50" min="0" max="100" style="width:70px" oninput="calcPay()">
                 <span style="color:var(--hint);font-size:13px">%</span>
               </div>
             </div>
             <div class="pc"><div class="pl">訂金金額</div><div class="pv" id="dep-amt">$0</div></div>
             <div class="pc"><div class="pl">尾款金額</div><div class="pv" id="dep-bal">$0</div></div>
           </div>
-          <div class="fg fg2">
-            <div class="fl"><label>驗收寬限（天）<span class="opt">選填</span></label><input class="fi" id="dep-days" type="number" placeholder="7" min="1"></div>
-            <div class="fl"><label>付款條件備註 <span class="opt">選填</span></label><input class="fi" id="dep-ded" placeholder="請輸入備註說明（選填）"></div>
+          <div class="fg fg3" style="margin-bottom:14px">
+            <div class="fl"><label>製造前幾日內付訂金</label><input class="fi" id="dep-days1" type="number" value="15" min="0" oninput="calcPay()"></div>
+            <div class="fl"><label>到貨後幾日內驗收</label><input class="fi" id="dep-days" type="number" value="7" min="0" oninput="calcPay()"></div>
+            <div class="fl"><label>驗收後幾日內付尾款</label><input class="fi" id="dep-fdays" type="number" value="30" min="0" oninput="calcPay()"></div>
           </div>
+          <div class="fl"><label>付款條件備註 <span class="opt">選填</span></label><input class="fi" id="dep-ded" placeholder="請輸入備註說明（選填）"></div>
         </div>
         <div class="pay-panel" id="pp1">
           <div class="fg fg3">
@@ -463,18 +465,6 @@
         </div>
         <div class="pay-panel" id="pp4">
           <div style="font-size:12px;color:var(--hint);font-style:italic;padding:6px 2px">已選擇不顯示，這張報價單列印/匯出時將完全不會出現「付款條件」這個區塊。</div>
-        </div>
-        <div class="pay-panel" id="pp5">
-          <div style="font-size:12px;color:var(--hint);margin-bottom:12px">瓶裝／OEM代工單預設規則：訂金＝額外費用（如檢驗費、條碼費，取「額外費用」列裡金額為正的項目）全額＋酒款金額 50%；尾款＝酒款金額剩餘 50%（額外費用列裡若有負數，如運費折抵，會從尾款扣除）。</div>
-          <div class="fg fg3" style="margin-bottom:14px">
-            <div class="fl"><label>製造前幾日內付訂金</label><input class="fi" type="number" id="p5-days1" value="15" min="0" oninput="calcPay5()"></div>
-            <div class="fl"><label>到貨後幾日內驗收</label><input class="fi" type="number" id="p5-vdays" value="7" min="0" oninput="calcPay5()"></div>
-            <div class="fl"><label>驗收後幾日內付尾款</label><input class="fi" type="number" id="p5-fdays" value="30" min="0" oninput="calcPay5()"></div>
-          </div>
-          <div class="fg fg3">
-            <div class="pc"><div class="pl">訂金金額</div><div class="pv" id="dep5-amt">$0</div></div>
-            <div class="pc"><div class="pl">尾款金額</div><div class="pv" id="dep5-bal">$0</div></div>
-          </div>
         </div>
       </div>
     </div>
