@@ -2,6 +2,7 @@ let qType='bottle', taxMode='inc', payTab=0;
 let LOADED_PAY_DETAIL=null; // 載入舊單時記住已存的付款條件文字，未重新編輯付款前直接沿用，避免重算改掉客戶看到的條件
 let FORM_DIRTY=false; // 標準報價單是否有「使用者實際輸入、尚未儲存」的內容（供離開頁面前提醒；程式帶入值不算）
 let botItems=[],banFreeItems=[],banAddonItems=[],extras=[],imgs=[],rowId=0;
+let LAST_WINE_SUB=0; // 瓶裝／OEM單「訂金：酒款＋其他費用」（付款方式 Tab5）用；calc() 算完 rawSub 後存一份供 Tab5 取用
 let customItems=[],previewKind='std';
 let colDed=false, colLogo=false, colLot=false, colMark=false, colOwn=false, colGift=false;
 let flavors={g1:[],g2:[]};
@@ -10,6 +11,7 @@ let flavors={g1:[],g2:[]};
 (()=>{
   document.getElementById('f-dt').value=todayStr();
   onDate(); upNo(); addBotRow(); rebuildBotHeader();
+  if(qType==='bottle') setPay(5);   // 頁面剛載入時預設就是瓶裝單，付款方式跟著預設走 Tab5（酒款訂金＋其他費用）
 })();
 
 /* 出貨資訊是否與聯絡/發票地址相同；prefix='f'（瓶裝/宴會）或 'c'（自訂） */
@@ -557,6 +559,7 @@ function calc(){
     });
   }
 
+  LAST_WINE_SUB = rawSub;   // Tab5（酒款訂金＋其他費用）計算用：只有 qType==='bottle' 時有意義，其他類型不會用到這個值
   /* 額外費用一併計稅；顯示統一為發票格式：合計（未稅）／營業稅／總計（含稅、未稅模式皆同） */
   const extTotal = (qType==='bottle'||qType==='ownbrand'||qType==='ownlabel'||qType==='consign') ? extras.reduce((s,e)=>s+e.a,0) : 0;
   const base = rawSub + extTotal;   // inc＝含稅總額、exc＝未稅總額
@@ -583,6 +586,7 @@ function calc(){
   document.getElementById('t-tot').textContent='$'+Math.round(grandTotal).toLocaleString();
   try{ updateObMoqWarn(); }catch(e){}
   calcPay();
+  calcPay5();
   runHooks('afterCalc');    // 公司報價檔的自動規則／MOQ 提醒登記在這（見 04_company.js 檔尾）
 }
 
@@ -620,6 +624,28 @@ function calcPay(){
   const db=document.getElementById('dep-bal'); if(db) db.textContent='$'+bal.toLocaleString();
 }
 
+/* 瓶裝／OEM代工單專用付款規則（付款方式 Tab5，2026-08-05 依 Molly 指示訂為全系統瓶裝單預設）：
+   訂金＝其他費用（額外費用列裡金額為正的，如檢驗費／條碼費）全額＋酒款金額 50%；
+   尾款＝酒款金額剩餘 50%，若額外費用列裡有負數（如運費折抵）就從尾款扣掉。
+   酒款金額＝品項表小計（LAST_WINE_SUB，calc() 裡的 rawSub，不含額外費用）。 */
+function pay5Breakdown(){
+  const wine=LAST_WINE_SUB||0;
+  const posEx=extras.filter(e=>e.a>0);
+  const negEx=extras.filter(e=>e.a<0);
+  const posTotal=posEx.reduce((s,e)=>s+e.a,0);
+  const negTotal=negEx.reduce((s,e)=>s+Math.abs(e.a),0);
+  const depWine=Math.round(wine*0.5);
+  const finalWine=wine-depWine;
+  const dep=posTotal+depWine;
+  const bal=finalWine-negTotal;
+  return {wine,posEx,negEx,posTotal,negTotal,depWine,finalWine,dep,bal};
+}
+function calcPay5(){
+  const b=pay5Breakdown();
+  const da=document.getElementById('dep5-amt'); if(da) da.textContent='$'+Math.round(b.dep).toLocaleString();
+  const db=document.getElementById('dep5-bal'); if(db) db.textContent='$'+Math.round(b.bal).toLocaleString();
+}
+
 function estPayDay(){
   const dt=document.getElementById('f-dt').value; if(!dt) return;
   const mon=parseInt(document.getElementById('p2-mon')?.value)||1;
@@ -636,7 +662,7 @@ document.addEventListener('input',e=>{ if(e.target.id==='p2-mon'||e.target.id===
 // 使用者一旦編輯任一付款欄位，就取消「沿用已存文字」，改回即時計算並刷新預覽
 document.addEventListener('input',e=>{
   if(LOADED_PAY_DETAIL==null) return;
-  const PAY_FIELDS=['dep-pct','dep-days','dep-ded','p1-vdays','p1-pct','p1-note','p2-mon','p2-day','p3-txt'];
+  const PAY_FIELDS=['dep-pct','dep-days','dep-ded','p1-vdays','p1-pct','p1-note','p2-mon','p2-day','p3-txt','p5-days1','p5-vdays','p5-fdays'];
   if(PAY_FIELDS.includes(e.target.id)){ LOADED_PAY_DETAIL=null; if(typeof calc==='function') calc(); }
 });
 // 滾輪滑過「聚焦中的數字欄」時讓它失焦，避免不小心把金額/數量滾掉
@@ -786,6 +812,9 @@ function resetAll(skipConfirm){
     else if(el.type==='number'&&el.id==='dep-pct') el.value='30';
     else if(el.type==='number'&&el.id==='taxrate') el.value='5';
     else if(el.type==='number'&&el.id==='p2-mon') el.value='1';
+    else if(el.type==='number'&&el.id==='p5-days1') el.value='15';
+    else if(el.type==='number'&&el.id==='p5-vdays') el.value='7';
+    else if(el.type==='number'&&el.id==='p5-fdays') el.value='30';
     else if(el.id==='f-dt') el.value=todayStr();
     else if(el.tagName==='SELECT') el.value='';
     else if(!el.readOnly) el.value='';
@@ -818,7 +847,7 @@ function resetAll(skipConfirm){
   document.getElementById('svc-detail-wrap').classList.remove('on');
   addBotRow();
   if(qType==='banquet'){ addBanFreeRow(); addBanAddonRow(); }
-  setPay(0);
+  setPay(qType==='bottle'?5:0);   // 瓶裝／OEM代工單預設走 Tab5（酒款訂金＋其他費用）；其他類型維持原本 Tab0
   // 「清除」＝回到全新單：一定要斷開編輯中的舊單號，否則下一次儲存會用 updateQuote 把先前開啟的舊單整張蓋掉
   if(typeof editingQuoteNo!=='undefined') editingQuoteNo=null;
   calc(); onDate(); upNo();
@@ -856,5 +885,23 @@ function getPayTerms(){
   }
   if(payTab===3) return document.getElementById('p3-txt')?.value||'（請填寫自訂付款條款）';
   if(payTab===4) return '';
+  if(payTab===5){
+    const b=pay5Breakdown();
+    const d1=document.getElementById('p5-days1')?.value||'15';
+    const vd=document.getElementById('p5-vdays')?.value||'7';
+    const fd=document.getElementById('p5-fdays')?.value||'30';
+    const depTxt='$'+Math.round(b.dep).toLocaleString();
+    const balTxt='$'+Math.round(b.bal).toLocaleString();
+    const depWineTxt='$'+Math.round(b.depWine).toLocaleString();
+    const feesTxt=b.posEx.length ? '內含'+b.posEx.map(e=>`${e.n} $${Math.round(e.a).toLocaleString()}`).join('、')+'，及' : '';
+    let t=`訂金支付：甲方於乙方製造前 ${d1} 日內，支付訂金總計新台幣 ${depTxt} 元整（${feesTxt}酒水總價 50% 之訂金 ${depWineTxt} 元整），作為乙方啟動生產之依據。`;
+    t+=`<br>驗收與尾款：乙方完成商品製作並全數交付後，甲方應於到貨後 ${vd} 日內完成驗收。驗收無誤後，甲方應於 ${fd} 日內支付尾款新台幣 ${balTxt} 元整（即酒水總價剩餘之 50%`;
+    if(b.negTotal>0){
+      const dTxt=b.negEx.map(e=>`${e.n}${Math.round(Math.abs(e.a)).toLocaleString()}元`).join('、');
+      t+=`減去${dTxt}`;
+    }
+    t+=`）。`;
+    return t;
+  }
   return '';
 }

@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260803b">
-<script src="js/00_qrcode.js?v=20260803b"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260805a">
+<script src="js/00_qrcode.js?v=20260805a"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -419,6 +419,7 @@
           <button class="ptab" onclick="setPay(2)">隔月指定日付款</button>
           <button class="ptab" onclick="setPay(3)">自訂</button>
           <button class="ptab" onclick="setPay(4)">不顯示此欄位</button>
+          <button class="ptab" onclick="setPay(5)">酒款訂金＋其他費用</button>
         </div>
         <div class="pay-panel on" id="pp0">
           <div class="fg fg3" style="margin-bottom:14px">
@@ -462,6 +463,18 @@
         </div>
         <div class="pay-panel" id="pp4">
           <div style="font-size:12px;color:var(--hint);font-style:italic;padding:6px 2px">已選擇不顯示，這張報價單列印/匯出時將完全不會出現「付款條件」這個區塊。</div>
+        </div>
+        <div class="pay-panel" id="pp5">
+          <div style="font-size:12px;color:var(--hint);margin-bottom:12px">瓶裝／OEM代工單預設規則：訂金＝額外費用（如檢驗費、條碼費，取「額外費用」列裡金額為正的項目）全額＋酒款金額 50%；尾款＝酒款金額剩餘 50%（額外費用列裡若有負數，如運費折抵，會從尾款扣除）。</div>
+          <div class="fg fg3" style="margin-bottom:14px">
+            <div class="fl"><label>製造前幾日內付訂金</label><input class="fi" type="number" id="p5-days1" value="15" min="0" oninput="calcPay5()"></div>
+            <div class="fl"><label>到貨後幾日內驗收</label><input class="fi" type="number" id="p5-vdays" value="7" min="0" oninput="calcPay5()"></div>
+            <div class="fl"><label>驗收後幾日內付尾款</label><input class="fi" type="number" id="p5-fdays" value="30" min="0" oninput="calcPay5()"></div>
+          </div>
+          <div class="fg fg3">
+            <div class="pc"><div class="pl">訂金金額</div><div class="pv" id="dep5-amt">$0</div></div>
+            <div class="pc"><div class="pl">尾款金額</div><div class="pv" id="dep5-bal">$0</div></div>
+          </div>
         </div>
       </div>
     </div>
@@ -1092,19 +1105,19 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260803b"></script>
-<script src="js/01_quote_form.js?v=20260803b"></script>
-<script src="js/01b_quote_preview.js?v=20260803b"></script>
-<script src="js/02_core_api.js?v=20260803b"></script>
-<script src="js/03_quote_custom.js?v=20260803b"></script>
-<script src="js/04_company.js?v=20260803b"></script>
-<script src="js/05_orders.js?v=20260803b"></script>
-<script src="js/06_verify_mgmt.js?v=20260803b"></script>
-<script src="js/07_calendar.js?v=20260803b"></script>
-<script src="js/08_ownbrand.js?v=20260803b"></script>
-<script src="js/09_verify_form.js?v=20260803b"></script>
-<script src="js/10_today.js?v=20260803b"></script>
-<script src="js/11_customers.js?v=20260803b"></script>
-<script src="js/99_boot.js?v=20260803b"></script>
+<script src="js/00_utils.js?v=20260805a"></script>
+<script src="js/01_quote_form.js?v=20260805a"></script>
+<script src="js/01b_quote_preview.js?v=20260805a"></script>
+<script src="js/02_core_api.js?v=20260805a"></script>
+<script src="js/03_quote_custom.js?v=20260805a"></script>
+<script src="js/04_company.js?v=20260805a"></script>
+<script src="js/05_orders.js?v=20260805a"></script>
+<script src="js/06_verify_mgmt.js?v=20260805a"></script>
+<script src="js/07_calendar.js?v=20260805a"></script>
+<script src="js/08_ownbrand.js?v=20260805a"></script>
+<script src="js/09_verify_form.js?v=20260805a"></script>
+<script src="js/10_today.js?v=20260805a"></script>
+<script src="js/11_customers.js?v=20260805a"></script>
+<script src="js/99_boot.js?v=20260805a"></script>
 </body>
 </html>
