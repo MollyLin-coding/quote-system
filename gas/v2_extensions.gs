@@ -297,9 +297,17 @@ function handleUpdateOrderStatus_(params) {
       var _depEmpty = (fields.deposit_amt === undefined || fields.deposit_amt === '');
       var _finEmpty = (fields.final_amt === undefined || fields.final_amt === '');
       if (_depEmpty && _finEmpty) {
-        var _dep = Math.round(_gt * 0.5);
-        fields.deposit_amt = _dep;
-        fields.final_amt = _gt - _dep;
+        // 複檢 2026-08-06 #3：先讀報價單付款條款上實際印的訂金/尾款
+        // （2026-08-05 起訂金＝酒款×比例＋其他費用全額，不再是總計的一半），讀不到才退回各半。
+        var _pay = orderPayFromQuote_(quoteNo, _gt);
+        if (_pay) {
+          fields.deposit_amt = _pay.dep;
+          fields.final_amt = _pay.bal;
+        } else {
+          var _dep = Math.round(_gt * 0.5);
+          fields.deposit_amt = _dep;
+          fields.final_amt = _gt - _dep;
+        }
       }
     }
   }
@@ -355,6 +363,38 @@ function orderGrandTotal_(quoteNo) {
     }
     return 0;
   } catch (e) { return 0; }
+}
+
+/* 複檢 2026-08-06 #3：從報價單存好的付款條款文字讀出訂金/尾款實際金額。
+   前端 05_orders.js 的 ordPayFromQuote() 是同一套規則，兩邊要一起改。
+   讀不到、或加起來跟總額對不上就回 null，由呼叫端退回舊的各半算法。 */
+function orderPayFromQuote_(quoteNo, gt) {
+  try {
+    var ss = ssApp_();
+    var sh = ss.getSheetByName(SHEET_MAIN);
+    if (!sh) return null;
+    var last = sh.getLastRow();
+    if (last < 2) return null;
+    var w = effW_(sh, MAIN_HEADERS);
+    var data = sh.getRange(2, 1, last - 1, w).getValues();
+    var qi = MAIN_COLS.quoteNo - 1, di = MAIN_COLS.paymentDetail - 1;
+    var detail = '';
+    for (var r = 0; r < data.length; r++) {
+      if (String(data[r][qi]) === String(quoteNo)) { detail = String(data[r][di] || ''); break; }
+    }
+    if (!detail) return null;
+    var s = detail.replace(/<br\s*\/?>/gi, '\n');
+    var mDep = s.match(/支付訂金(?:總計)?新台幣\s*\$?([\d,]+(?:\.\d+)?)\s*元整/);
+    if (!mDep) return null;
+    var dep = Math.round(parseFloat(String(mDep[1]).replace(/,/g, '')) || 0);
+    var mBal = s.match(/支付尾款新台幣\s*\$?([\d,]+(?:\.\d+)?)\s*元整/);
+    var bal;
+    if (mBal) bal = Math.round(parseFloat(String(mBal[1]).replace(/,/g, '')) || 0);
+    else if (/無須另付尾款/.test(s)) bal = 0;
+    else return null;
+    if (gt > 0 && (dep + bal) !== Math.round(gt)) return null;
+    return { dep: dep, bal: bal };
+  } catch (e) { return null; }
 }
 
 function setupOrderStatusV30Columns() {
