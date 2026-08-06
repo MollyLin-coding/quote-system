@@ -600,6 +600,7 @@ function calc(){
   document.getElementById('t-ext').textContent=(extTotal<0?'-$':'$')+Math.round(Math.abs(extTotal)).toLocaleString();
   document.getElementById('t-tot').textContent='$'+Math.round(grandTotal).toLocaleString();
   LAST_BASE = base; LAST_GRAND = grandTotal;   // 付款條件 Tab0 用：稅金按 訂金/尾款 佔比分攤，確保兩者相加＝總計
+  syncLoadedPayDetail();   // 載入舊單後若金額被改動 → 解除付款文字凍結、重新計算（見該函式說明）
   try{ updateObMoqWarn(); }catch(e){}
   calcPay();
   runHooks('afterCalc');    // 公司報價檔的自動規則／MOQ 提醒登記在這（見 04_company.js 檔尾）
@@ -623,7 +624,7 @@ function setTaxMode(m){
 }
 
 function setPay(n){
-  LOADED_PAY_DETAIL=null; // 切換付款方式視為重新設定，恢復即時計算
+  LOADED_PAY_DETAIL=null; LOADED_PAY_SIG=null; // 切換付款方式視為重新設定，恢復即時計算
   payTab=n;
   document.querySelectorAll('.ptab').forEach((b,i)=>b.classList.toggle('on',i===n));
   document.querySelectorAll('.pay-panel').forEach((p,i)=>p.classList.toggle('on',i===n));
@@ -662,6 +663,52 @@ function payBreakdown(){
 }
 /* 額外費用名稱在品項表會帶「（1款 × $4,000）」這種數量註記，合約條款只要品名，去掉尾巴的括號 */
 function cleanFeeName(n){ return String(n||'').replace(/[（(][^（()）]*[)）]\s*$/,'').trim()||String(n||''); }
+
+/* ── 載入舊單後「改了金額，付款條件卻沒跟著改」的修正（2026-08-06，Molly 回報）──────────
+   背景：載入舊單時 LOADED_PAY_DETAIL 會存住當初存檔的付款文字，getPayTerms() 直接回傳它，
+   目的是避免重算把客戶已經看過的條件改掉（天數/比例這些細節欄沒有存進資料庫，重算會失真）。
+   問題：解除凍結的條件原本只有「使用者動到付款欄位」，所以改單價／瓶數／容量／額外費用時，
+   金額變了但條款文字還停在舊數字——預覽和列印出來的訂金尾款是錯的。
+   作法：記住載入當下的金額組合（總計＋酒款＋各項額外費用），一旦不一樣就
+   ①從舊文字把天數與比例解析回欄位（盡量不遺失原本設定）②解除凍結讓條款重算 ③跳提示。
+   金額沒動的話行為完全不變，舊單重印仍然是一字不差的原文。 */
+let LOADED_PAY_SIG=null;
+function payAmountSignature(){
+  const amt=e=>Math.round(e.a);
+  return [Math.round(LAST_GRAND||0), Math.round(LAST_WINE_SUB||0),
+          (LAST_EXT_POS||[]).map(amt).join(','), (LAST_EXT_NEG||[]).map(amt).join(',')].join('|');
+}
+function syncLoadedPayDetail(){
+  if(LOADED_PAY_DETAIL==null){ LOADED_PAY_SIG=null; return; }
+  const sig=payAmountSignature();
+  if(LOADED_PAY_SIG==null){ LOADED_PAY_SIG=sig; return; }   // 載入後第一次 calc：記錄基準，不動作
+  if(sig===LOADED_PAY_SIG) return;                          // 金額沒變 → 維持沿用原文
+  restorePayFieldsFromText(LOADED_PAY_DETAIL);
+  LOADED_PAY_DETAIL=null; LOADED_PAY_SIG=null;
+  try{ toast('金額有異動，付款條件已重新計算（天數與比例沿用原單設定，請確認一次）','ok'); }catch(e){}
+}
+/* 把已存的付款文字裡的天數/比例/備註解析回輸入欄，讓重算出來的條款盡量貼近原單設定。
+   解析不到就維持欄位現值（HTML 預設 50%／15／7／30）。新舊兩種條款寫法都吃。 */
+function restorePayFieldsFromText(txt){
+  const s=String(txt||'').replace(/<br\s*\/?>/gi,'\n');
+  const put=(id,m)=>{ if(!m) return; const el=document.getElementById(id); if(el) el.value=m[1]; };
+  const note=s.match(/付款條件備註：([\s\S]+)$/);
+  if(payTab===0){
+    put('dep-pct', s.match(/酒水總價\s*(\d+)\s*%/) || s.match(/酒款金額之\s*(\d+)\s*%/) || s.match(/總價之\s*(\d+)\s*%/));
+    put('dep-days1', s.match(/製造前\s*(\d+)\s*日/));
+    put('dep-days',  s.match(/到貨後\s*(\d+)\s*日/));
+    put('dep-fdays', s.match(/(\d+)\s*日內支付尾款/));
+    put('dep-ded', note);
+  } else if(payTab===1){
+    put('p1-vdays', s.match(/應於\s*(\d+)\s*日內完成驗收/));
+    put('p1-pct',   s.match(/元整之\s*(\d+)\s*%/));
+    put('p1-note', note);
+  } else if(payTab===2){
+    put('p2-mon', s.match(/第\s*(\d+)\s*個月/));
+    put('p2-day', s.match(/(\d+)\s*號/));
+    if(typeof estPayDay==='function') estPayDay();
+  }
+}
 function calcPay(){
   const b=payBreakdown();
   const da=document.getElementById('dep-amt'); if(da) da.textContent='$'+b.dep.toLocaleString();
@@ -685,7 +732,7 @@ document.addEventListener('input',e=>{ if(e.target.id==='p2-mon'||e.target.id===
 document.addEventListener('input',e=>{
   if(LOADED_PAY_DETAIL==null) return;
   const PAY_FIELDS=['dep-pct','dep-days1','dep-days','dep-fdays','dep-ded','p1-vdays','p1-pct','p1-note','p2-mon','p2-day','p3-txt'];
-  if(PAY_FIELDS.includes(e.target.id)){ LOADED_PAY_DETAIL=null; if(typeof calc==='function') calc(); }
+  if(PAY_FIELDS.includes(e.target.id)){ LOADED_PAY_DETAIL=null; LOADED_PAY_SIG=null; if(typeof calc==='function') calc(); }
 });
 // 滾輪滑過「聚焦中的數字欄」時讓它失焦，避免不小心把金額/數量滾掉
 document.addEventListener('wheel',function(e){
