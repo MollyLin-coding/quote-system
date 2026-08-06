@@ -535,24 +535,39 @@ function handleUpdateShipment_(params) {
 
 function handleSaveCustomQuote_(params) {
   const q = params.quote || params;
-  let quoteNo = q.quote_no;
-  if (!quoteNo) {
-    quoteNo = generateV2QuoteNo_(q.quote_date);
-  }
-
+  /* 複檢 2026-08-06 #13：標準單發號有包在 ScriptLock 裡，自訂單這條路徑卻沒有。
+     兩張表共用同一組 YYYYMMDD-NN 單號，同時存「一張自訂單＋一張標準單」（或兩台裝置
+     各存一張自訂單）時，兩邊會掃到同一個最大流水號而發出重複單號——order_status、
+     驗收單、PDF 歷史都以單號為鍵，重號會讓兩張單互相污染。
+     發號＋寫入必須在同一把鎖裡完成；已帶 quote_no 的更新不需要發號，不用等鎖。 */
   const sh = v2Sheet_(SHEET_CUSTOM_QUOTES, CUSTOM_QUOTES_HEADERS);
   const now = tpeNow_();
-  let rowNum = v2FindRow_(SHEET_CUSTOM_QUOTES, CUSTOM_QUOTES_HEADERS, 'quote_no', quoteNo);
+  let quoteNo = q.quote_no;
+  let rowNum, appended = false;
+  let lock = null;
+  if (!quoteNo) {                       // 只有「要發新號」時才需要等鎖；更新既有單不用
+    lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+  }
+  try {
+    if (!quoteNo) quoteNo = generateV2QuoteNo_(q.quote_date);
+    rowNum = v2FindRow_(SHEET_CUSTOM_QUOTES, CUSTOM_QUOTES_HEADERS, 'quote_no', quoteNo);
+    if (rowNum === -1) {
+      const newRow = CUSTOM_QUOTES_HEADERS.map(function (h) {
+        if (h === 'quote_no') return quoteNo;
+        if (h === 'created_at' || h === 'updated_at') return now;
+        return v2AsCell_(q[h]);
+      });
+      sh.appendRow(newRow);
+      rowNum = sh.getLastRow();
+      appended = true;
+      SpreadsheetApp.flush();   // 新列確實落地後才放鎖，下一個等鎖的人才掃得到這個號
+    }
+  } finally {
+    if (lock) lock.releaseLock();
+  }
 
-  if (rowNum === -1) {
-    const newRow = CUSTOM_QUOTES_HEADERS.map(function (h) {
-      if (h === 'quote_no') return quoteNo;
-      if (h === 'created_at' || h === 'updated_at') return now;
-      return v2AsCell_(q[h]);
-    });
-    sh.appendRow(newRow);
-    rowNum = sh.getLastRow();
-  } else {
+  if (!appended) {
     CUSTOM_QUOTES_HEADERS.forEach(function (h, i) {
       if (h === 'quote_no' || h === 'created_at' || h === 'updated_at') return;
       if (q[h] !== undefined) {

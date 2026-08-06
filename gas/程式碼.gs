@@ -910,11 +910,19 @@ function handleUpdateQuote_(params) {
     if (quote.items) {
       const itemSheet = ss.getSheetByName(SHEET_ITEMS);
       const itemLastRow = itemSheet.getLastRow();
-      let kept = [];
+      /* 複檢 2026-08-06 #4：原本的做法是「把品項表全部資料列 clearContent()，再把
+         別張單的舊列＋這張單的新列一次 setValues 寫回」。清空到寫回之間只要出事
+         （Sheets 暫時性錯誤、insertRowsAfter 失敗、執行逾時被中止），**全部報價單的品項
+         會一次消失**，只能靠備份救。改成只刪這張單自己的列（由下往上 deleteRow，
+         避免刪一列後後面的列號整個位移）再 append 新列——別張單的資料從頭到尾不會被碰到。 */
+      const myRows = [];
       if (itemLastRow >= 2) {
-        const itemData = itemSheet.getRange(2, 1, itemLastRow - 1, effW_(itemSheet, ITEM_HEADERS)).getValues();
-        kept = itemData.filter(function (r) { return r[ITEM_COLS.quoteNo - 1] !== quoteNo; });
+        const qnoCol = itemSheet.getRange(2, ITEM_COLS.quoteNo, itemLastRow - 1, 1).getValues();
+        for (var i = 0; i < qnoCol.length; i++) {
+          if (String(qnoCol[i][0]) === String(quoteNo)) myRows.push(i + 2);   // 實際列號
+        }
       }
+      for (var d = myRows.length - 1; d >= 0; d--) itemSheet.deleteRow(myRows[d]);
       const newItemRows = quote.items.map(function (item) {
         var r = new Array(effW_(itemSheet, ITEM_HEADERS)).fill('');
         r[ITEM_COLS.quoteNo - 1] = quoteNo;
@@ -936,17 +944,13 @@ function handleUpdateQuote_(params) {
         r[ITEM_COLS.noCharge - 1] = item.noCharge || 'N';
         return r;
       });
-      const finalRows = kept.concat(newItemRows);
-      const oldCount = (itemLastRow >= 2) ? (itemLastRow - 1) : 0;
-      if (oldCount > 0) {
-        itemSheet.getRange(2, 1, oldCount, effW_(itemSheet, ITEM_HEADERS)).clearContent();
-      }
-      if (finalRows.length > 0) {
-        const needRows = finalRows.length + 1;
+      if (newItemRows.length > 0) {
+        const startRow = itemSheet.getLastRow() + 1;        // 刪完之後的實際最後一列
+        const needRows = startRow + newItemRows.length - 1;
         if (itemSheet.getMaxRows() < needRows) {
           itemSheet.insertRowsAfter(itemSheet.getMaxRows(), needRows - itemSheet.getMaxRows());
         }
-        itemSheet.getRange(2, 1, finalRows.length, effW_(itemSheet, ITEM_HEADERS)).setValues(finalRows);
+        itemSheet.getRange(startRow, 1, newItemRows.length, effW_(itemSheet, ITEM_HEADERS)).setValues(newItemRows);
       }
     }
 
