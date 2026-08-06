@@ -65,19 +65,26 @@ async function openVerifyForm(no){
     const priorForms=(formsData&&formsData.ok&&Array.isArray(formsData.records))
       ? formsData.records.filter(r=>String(r.no||'').trim()===String(no).trim()) : [];
     const priorCount=priorForms.length;
-    const shippedSum={};
+    /* 複檢 2026-08-06 #8：原本用「品名｜容量」當鍵加總已出貨量後，同一張單若有兩列
+       同品名同容量（例如同酒款兩個 LOT），每一列都會拿到「合計值」→ 已出貨變兩倍、
+       待出貨變負數，印出來的分批驗收單是錯的。改成同鍵的多列依序分配：先把已出貨量
+       分給第一列（最多分到它的訂購量），剩下的再給下一列，總量守恆也不重複計。 */
+    const shippedSum={}, keyOf=(n,v)=>String(n||'').trim()+'|'+String(v==null?'':v).trim();
     priorForms.forEach(f=>{
       const its=Array.isArray(f.items)?f.items:parseJsonSafe(f.items_json,[]);
       (its||[]).forEach(pi=>{
-        const k=String(pi.name||'').trim()+'|'+String(pi.vol==null?'':pi.vol).trim();
+        const k=keyOf(pi.name, pi.vol);
         shippedSum[k]=(shippedSum[k]||0)+(parseFloat(pi.thisShip)||0);
       });
     });
+    const poolLeft=Object.assign({}, shippedSum);   // 每個鍵還沒分配掉的已出貨量
     VERIFY_DATA={ no:q.quoteNo, client:q.clientName||'', priorCount,
       rows:items.map(it=>{
         const ordered=parseFloat(it.qty)||0;
-        const k=String(it.name||'').trim()+'|'+String(it.volume==null?'':it.volume).trim();
-        const shipped=shippedSum[k]||0;
+        const k=keyOf(it.name, it.volume);
+        const avail=poolLeft[k]||0;
+        const shipped=(ordered>0)?Math.min(avail, ordered):avail;   // 這一列最多只認到自己的訂購量
+        poolLeft[k]=avail-shipped;
         const remain=ordered-shipped;
         return { name:it.name||'', lot:it.lot||'', vol:it.volume||'', ordered, mfg:'',
           thisShip: shipped>0 ? (remain>0?remain:0) : ordered, shipped };

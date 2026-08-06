@@ -339,6 +339,16 @@ async function saveQuote(){
     }
     if(data.ok){
       editingQuoteNo=data.quoteNo;
+      /* 複檢 2026-08-06 #10：後端會自己發號（會同時掃標準單與自訂單），前端 autoNextSerial
+         只掃標準單，同一天先存過自訂單時兩邊會不一樣。存檔後必須把後端實際發的單號寫回
+         畫面，否則接著用瀏覽器列印/匯出 PDF，客戶拿到的單號跟資料庫（訂單追蹤、驗收單
+         都以單號為鍵）對不上。 */
+      if(data.quoteNo){
+        const _fn=document.getElementById('f-no'); if(_fn) _fn.value=data.quoteNo;
+        const _pn=document.getElementById('pl-no'); if(_pn) _pn.textContent=data.quoteNo;
+        const _m=String(data.quoteNo).match(/-(\d+)\s*$/);
+        if(_m){ const _s=document.getElementById('f-ser'); if(_s) _s.value=parseInt(_m[1],10)||1; }
+      }
       FORM_DIRTY=false;
       toast('已儲存：'+data.quoteNo,'ok');
       runHooks('afterSaveQuote', quote);   // 客戶主檔比對提醒登記在 11_customers.js
@@ -359,6 +369,11 @@ function generateOfficialDocument(){
   if(!editingQuoteNo){
     toast('請先「儲存」報價單後再產生正式文件','err');
     return;
+  }
+  /* 複檢 2026-08-06 #11：正式文件是後端拿「資料庫裡已存的資料」產的，畫面上改了沒存
+     就按下去，會拿到改之前的舊金額而且完全沒有提示。這裡先擋一下。 */
+  if(typeof FORM_DIRTY!=='undefined' && FORM_DIRTY && currentPage==='new'){
+    if(!confirm('這張單有修改還沒儲存。\n\n正式文件是依「後台已儲存的資料」產生的，現在產出來會是修改前的版本。\n\n建議先按「儲存」再產生。仍要繼續嗎？')) return;
   }
   document.getElementById('gd-title').textContent='產生正式文件 — '+editingQuoteNo;
   const keep=document.querySelector('input[name="gd-ow"][value="keep"]'); if(keep) keep.checked=true;
@@ -631,6 +646,12 @@ function loadQuoteIntoForm(q){
     if(botItems.length===0) addBotRow();
     renderExt();
   } else {
+    /* 複檢 2026-08-06 #9：宴會分支原本只清宴會自己的欄位，上一張瓶裝單的品項列與
+       額外費用會整批留在畫面上（雖然宴會不計入總計，但只要在這張單切回瓶裝型就會
+       全部冒出來並算進金額，接著被存進這張宴會單）。這裡比照瓶裝分支一併清乾淨。 */
+    document.getElementById('itbody-bot').innerHTML=''; botItems=[];
+    extras=[]; renderExt();
+    botDedCache={}; botLogoCache={}; botLotCache={};
     flavors={g1:[],g2:[]};
     document.getElementById('ban-free-body').innerHTML=''; banFreeItems=[];
     document.getElementById('ban-addon-body').innerHTML=''; banAddonItems=[];
@@ -737,11 +758,18 @@ async function autoNextSerial(){
   if(!AUTH_TOKEN) return;
   try{
     const today=todayStr().replace(/-/g,'');
-    // 改用讀取快取（登入後預抓早就抓好了）：開新單不用再等一趟後端
-    const lst=await readCall(withLimit({ action:'getQuotes', token:AUTH_TOKEN, filters:{} }));
+    /* 改用讀取快取（登入後預抓早就抓好了）：開新單不用再等一趟後端。
+       複檢 2026-08-06 #10：自訂報價單也會占用同一組單號（後端 generateQuoteNo_ 兩張表都掃），
+       這裡只掃標準單的話，同一天存過自訂單就會帶出已被占用的流水號。 */
+    const [lst, cst]=await Promise.all([
+      readCall(withLimit({ action:'getQuotes', token:AUTH_TOKEN, filters:{} })),
+      readCall({ action:'listCustomQuotes', token:AUTH_TOKEN }).catch(()=>null)
+    ]);
     if(!lst.ok || !Array.isArray(lst.quotes)) return;
     let mx=0;
-    lst.quotes.forEach(x=>{ const m=String(x.quoteNo||'').match(new RegExp('^'+today+'-(\\d+)$')); if(m){ const n=parseInt(m[1],10); if(n>mx) mx=n; } });
+    const bump=no=>{ const m=String(no||'').match(new RegExp('^'+today+'-(\\d+)$')); if(m){ const n=parseInt(m[1],10); if(n>mx) mx=n; } };
+    lst.quotes.forEach(x=>bump(x.quoteNo));
+    if(cst && cst.ok && Array.isArray(cst.quotes)) cst.quotes.forEach(x=>bump(x.quote_no));
     if(mx>0 && !editingQuoteNo){ const s=document.getElementById('f-ser'); if(s){ s.value=mx+1; upNo(); } }
   }catch(_){}
 }

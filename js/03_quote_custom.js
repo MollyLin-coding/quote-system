@@ -17,15 +17,15 @@ function addCustomRow(prefill){
   const manual = !!prefill.manual;
   div.innerHTML = `
     <div class="crow-top">
-      <input placeholder="品名" data-f="name" value="${escHtml(prefill.name||'')}" oninput="calcCustom()">
+      <input placeholder="品名" data-f="name" value="${escAttr(prefill.name||'')}" oninput="calcCustom()">
       <input type="number" placeholder="—" data-f="qty" value="${prefill.qty!=null?prefill.qty:''}" oninput="calcCustom()">
-      <input placeholder="—" data-f="unit" value="${escHtml(prefill.unit||'')}" oninput="calcCustom()">
+      <input placeholder="—" data-f="unit" value="${escAttr(prefill.unit||'')}" oninput="calcCustom()">
       <input type="number" placeholder="—" data-f="price" value="${prefill.price!=null?prefill.price:''}" oninput="calcCustom()">
       <input type="number" placeholder="—" data-f="subval" value="${prefill.subval!=null?prefill.subval:''}" oninput="calcCustom()" ${manual?'':'readonly'}>
       <button class="del" onclick="delCustomRow(${id})">✕</button>
     </div>
     <div class="crow-bottom">
-      <div class="crow-note"><input placeholder="備註說明（選填，顯示於品名下方小字）" data-f="note" value="${escHtml(prefill.note||'')}" oninput="calcCustom()"></div>
+      <div class="crow-note"><input placeholder="備註說明（選填，顯示於品名下方小字）" data-f="note" value="${escAttr(prefill.note||'')}" oninput="calcCustom()"></div>
       <div class="crow-flags">
         <label><input type="checkbox" data-f="manual" ${manual?'checked':''} onchange="toggleCustomManual(${id})">手動小計</label>
         <label><input type="checkbox" data-f="free" ${prefill.free?'checked':''} onchange="calcCustom()">免費</label>
