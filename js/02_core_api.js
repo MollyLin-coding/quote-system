@@ -553,6 +553,11 @@ async function deleteRecord(quoteNo, cliName){
 /* ---- 把 quote 物件灌回表單 ---- */
 function loadQuoteIntoForm(q){
   editingQuoteNo=q.quoteNo;
+  /* 複檢 2026-08-06 #2：凍結狀態必須在載入流程「最前面」清掉。
+     下面的 setType/setTaxMode/onSvcModeChange 都會觸發 calc()，若上一張單的
+     LOADED_PAY_DETAIL/SIG 還掛著，指紋比對會誤判「金額有異動」——
+     誤跳提示不說，還會把上一張單的比例/天數解析進這張單的付款欄位。 */
+  LOADED_PAY_DETAIL=null; LOADED_PAY_SIG=null;
   // 載入舊單前先清掉「已選公司」狀態，避免殘留規則污染這張單的金額
   SELECTED_COMPANY=null; RULE_SUPPRESS={};
   { const csel=document.getElementById('qf-company'); if(csel) csel.value=''; }
@@ -681,6 +686,10 @@ function loadQuoteIntoForm(q){
   if(pt===3 && q.paymentDetail){ const e=document.getElementById('p3-txt'); if(e)e.value=q.paymentDetail; }
   // 沿用存檔當下算好的付款文字，避免重載重算改掉客戶看到的條件（setPay 已把 LOADED_PAY_DETAIL 清為 null，這裡在其後設定）
   LOADED_PAY_DETAIL=(q.paymentDetail!=null&&q.paymentDetail!=='')?q.paymentDetail:null;
+  /* 複檢 2026-08-06 #1：載入當下就把原單的比例/天數/備註從凍結文字解析回付款欄位。
+     這樣付款面板顯示的就是原單設定（而不是預設 50%/15/7/30），之後不管從哪條路解除凍結
+     （改金額、直接編輯付款欄位、點付款分頁），重算用的都是原單的值，不會被預設值蓋掉。 */
+  if(LOADED_PAY_DETAIL!=null){ try{ restorePayFieldsFromText(LOADED_PAY_DETAIL); }catch(e){} }
   calc();
   FORM_DIRTY=false; // 剛載入的舊單視為已儲存狀態
 }

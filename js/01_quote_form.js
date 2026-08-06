@@ -650,6 +650,11 @@ function payBreakdown(){
   const base=LAST_BASE||0, grand=Math.round(LAST_GRAND||0);
   let dep=0, bal=0;
   if(base!==0){ dep=Math.round(grand*(depBase/base)); bal=grand-dep; }
+  /* 折抵（負數額外費用）超過尾款額度時封頂：訂金最多收到總計、尾款不得為負，
+     否則條款會印出「支付尾款 $-2,100 元整」這種不能給客戶看的句子（複檢 2026-08-06 #12）。
+     缺口視為折抵吃進訂金端，訂金＋尾款仍恆等於總計。 */
+  const clamped=(bal<0);
+  if(clamped){ dep=grand; bal=0; }
   /* 條款文字要逐項列出金額，這些明細必須跟訂金/尾款站在同一個稅基（未稅模式下 dep 已含稅），
      否則客戶會看到「內含 4,000＋45,000」卻對不上訂金總額。做法：各項費用先按同比例換算，
      酒款那一塊用「訂金減掉各項費用」當餘數，確保括號裡的數字加起來剛好等於括號外的總額。 */
@@ -658,7 +663,7 @@ function payBreakdown(){
   const negExShown=negEx.map(e=>({n:cleanFeeName(e.n), a:scale(Math.abs(e.a))}));
   const depWineShown=dep-posExShown.reduce((s,e)=>s+e.a,0);
   const balWineShown=bal+negExShown.reduce((s,e)=>s+e.a,0);
-  return {pctNum, wine, posEx, negEx, posTotal, negTotal, depWine, depBase, dep, bal,
+  return {pctNum, wine, posEx, negEx, posTotal, negTotal, depWine, depBase, dep, bal, clamped,
           posExShown, negExShown, depWineShown, balWineShown};
 }
 /* 額外費用名稱在品項表會帶「（1款 × $4,000）」這種數量註記，合約條款只要品名，去掉尾巴的括號 */
@@ -694,14 +699,14 @@ function restorePayFieldsFromText(txt){
   const put=(id,m)=>{ if(!m) return; const el=document.getElementById(id); if(el) el.value=m[1]; };
   const note=s.match(/付款條件備註：([\s\S]+)$/);
   if(payTab===0){
-    put('dep-pct', s.match(/酒水總價\s*(\d+)\s*%/) || s.match(/酒款金額之\s*(\d+)\s*%/) || s.match(/總價之\s*(\d+)\s*%/));
+    put('dep-pct', s.match(/酒水總價\s*(\d+(?:\.\d+)?)\s*%/) || s.match(/酒款金額之\s*(\d+(?:\.\d+)?)\s*%/) || s.match(/總價之\s*(\d+(?:\.\d+)?)\s*%/));   // (?:\.\d+)? 支援小數比例如 12.5%（複檢 #16）
     put('dep-days1', s.match(/製造前\s*(\d+)\s*日/));
     put('dep-days',  s.match(/到貨後\s*(\d+)\s*日/));
     put('dep-fdays', s.match(/(\d+)\s*日內支付尾款/));
     put('dep-ded', note);
   } else if(payTab===1){
     put('p1-vdays', s.match(/應於\s*(\d+)\s*日內完成驗收/));
-    put('p1-pct',   s.match(/元整之\s*(\d+)\s*%/));
+    put('p1-pct',   s.match(/元整之\s*(\d+(?:\.\d+)?)\s*%/));
     put('p1-note', note);
   } else if(payTab===2){
     put('p2-mon', s.match(/第\s*(\d+)\s*個月/));
@@ -936,10 +941,19 @@ function getPayTerms(){
     const vd=document.getElementById('dep-days')?.value||'7';     // 到貨後幾日內驗收
     const fd=document.getElementById('dep-fdays')?.value||'30';   // 驗收後幾日內付尾款
     const note=document.getElementById('dep-ded')?.value;
-    const money=n=>'$'+Math.round(n).toLocaleString();
+    const money=n=>{const v=Math.round(n);return (v<0?'-$':'$')+Math.abs(v).toLocaleString();};   // 負數印 -$1,000 而非 $-1,000
     /* 條款格式依 Molly 2026-08-05 指定：訂金支付／驗收與尾款兩段，括號內逐項列出其他費用，
        其餘為「酒水總價 X% 之訂金」。括號裡的數字加總必等於括號外的訂金總額。 */
     const fees=b.posExShown.length ? `內含${b.posExShown.map(e=>`${e.n} ${money(e.a)}`).join('、')}，及` : '';
+    if(b.clamped){
+      /* 折抵超過尾款額度（複檢 #12）：尾款封頂 $0，改寫成「無須另付尾款」的版本，
+         不能印出負數尾款，也不能再宣稱「X% 之訂金」（封頂後百分比已對不上） */
+      const dedTxt=b.negExShown.length? b.negExShown.map(e=>`${e.n} ${money(e.a)}`).join('、') : '折抵項目';
+      let tc=`訂金支付：甲方於乙方製造前 ${d1} 日內，支付訂金總計新台幣 ${dep} 元整（${fees}酒水款項 ${money(b.depWineShown)} 元整），作為乙方啟動生產之依據。`;
+      tc+=`<br>驗收與尾款：乙方完成商品製作並全數交付後，甲方應於到貨後 ${vd} 日內完成驗收。驗收無誤後無須另付尾款（酒水總價剩餘款項已由${dedTxt}全數抵銷）。`;
+      if(note) tc+=`<br>付款條件備註：${note}`;
+      return tc;
+    }
     let t=`訂金支付：甲方於乙方製造前 ${d1} 日內，支付訂金總計新台幣 ${dep} 元整（${fees}酒水總價 ${pct}% 之訂金 ${money(b.depWineShown)} 元整），作為乙方啟動生產之依據。`;
     t+=`<br>驗收與尾款：乙方完成商品製作並全數交付後，甲方應於到貨後 ${vd} 日內完成驗收。驗收無誤後，甲方應於 ${fd} 日內支付尾款新台幣 ${bal} 元整（即酒水總價剩餘之 ${100-pct}%`;
     if(b.negExShown.length) t+=`，減去${b.negExShown.map(e=>`${e.n} ${money(e.a)}`).join('、')}`;
