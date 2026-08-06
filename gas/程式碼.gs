@@ -1476,11 +1476,20 @@ function appendPaymentSection_(body, quote) {
   if (!detail) return;
   body.appendParagraph('');
   body.appendParagraph('付款條件').editAsText().setBold(true).setForegroundColor('#7C5E32').setFontSize(11);
-  String(detail).split('<br>').forEach(line => {
-    line = line.trim();
-    if (!line) return;
-    body.appendParagraph(line).editAsText().setFontSize(10);
-  });
+  /* 複檢 2026-08-06 #27：原本只 split('<br>') 這一種寫法。自訂條款（Tab3）或公司主檔的
+     default_pay_terms 若手填了 <br/>、<BR>、<p> 之類，會照字面印進正式 PDF（網頁預覽走
+     innerHTML 看不出來）。這裡改成容忍各種換行標籤，並把殘留的其他標籤與常見 HTML 實體
+     清掉，正式文件不會出現裸標籤。 */
+  String(detail)
+    .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+    .replace(/<\s*\/?\s*(p|div|li)\s*>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+    .split('\n').forEach(line => {
+      line = line.trim();
+      if (!line) return;
+      body.appendParagraph(line).editAsText().setFontSize(10);
+    });
 }
 
 function appendNotesSection_(body, quote) {

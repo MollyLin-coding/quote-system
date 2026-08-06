@@ -81,29 +81,57 @@ function setupV2Sheets() {
   // 測試資料：只在分頁還沒有任何資料列時寫入（避免重複執行時塞重複資料）
   const now = tpeNow_();
 
+  /* 複檢 2026-08-06 #25：種子資料原本是「照當年欄位順序」寫死的固定長度陣列，但 headers
+     後來陸續加欄（companies 11→17、products 11→14、calendar 12→16），v2Append_ 會用
+     headers.length 開範圍，setValues 直接丟「columns does not match」讓 setupV2Sheets 整個中斷；
+     而且值也早就錯位（'測試聯絡人' 落在 brand、'exc' 落在 phone、'測試品牌' 落在 active，
+     active 不是 'Y' 還會被 getCompanyData 當停用濾掉）。
+     改成用「欄名→值」的物件組列，欄位再怎麼加都不會錯位、也不會長度不符。 */
+  const seedRow_ = function (headers, obj) {
+    return headers.map(function (h) { return (obj[h] !== undefined ? obj[h] : ''); });
+  };
   if (v2IsEmpty_(SHEET_COMPANIES)) {
     v2Append_(SHEET_COMPANIES, COMPANIES_HEADERS, [
-      ['TESTCO','測試公司（請照此格式填正式資料）','12345678','台北市測試路1號','測試聯絡人','0912-345-678','exc','月結30天','這整列是測試資料，可直接刪除','Y','測試品牌']
+      seedRow_(COMPANIES_HEADERS, {
+        company_id:'TESTCO', name:'測試公司（請照此格式填正式資料）', tax_id:'12345678',
+        address:'台北市測試路1號', brand:'測試品牌', contact:'測試聯絡人', phone:'0912-345-678',
+        default_tax_mode:'exc', default_pay_terms:'月結30天',
+        note:'這整列是測試資料，可直接刪除', active:'Y'
+      })
     ]);
     created.push('companies 測試公司 x1');
   }
   if (v2IsEmpty_(SHEET_PRODUCTS)) {
     v2Append_(SHEET_PRODUCTS, PRODUCTS_HEADERS, [
-      ['TESTCO-P1','TESTCO','測試琴酒（瓶裝）','750','',520,'[{"min":0,"max":299,"price":520},{"min":300,"price":480}]',3.5,10,'測試品項：瓶裝＋數量級距價','Y'],
-      ['TESTCO-P2','TESTCO','宴會基礎方案','40,000ml','式',25000,'','','','測試品項：宴會/自訂通用','Y']
+      seedRow_(PRODUCTS_HEADERS, {
+        product_id:'TESTCO-P1', company_id:'TESTCO', name:'測試琴酒（瓶裝）', spec:'750', unit:'瓶',
+        unit_price:520, tier_json:'[{"min":0,"max":299,"price":520},{"min":300,"price":480}]',
+        label_fee:3.5, logo_fee:10, note:'測試品項：瓶裝＋數量級距價', active:'Y'
+      }),
+      seedRow_(PRODUCTS_HEADERS, {
+        product_id:'TESTCO-P2', company_id:'TESTCO', name:'宴會基礎方案', spec:'40000', unit:'式',
+        unit_price:25000, note:'測試品項：宴會/自訂通用', active:'Y'
+      })
     ]);
     created.push('products 測試品項 x2');
   }
   if (v2IsEmpty_(SHEET_RULES)) {
     v2Append_(SHEET_RULES, RULES_HEADERS, [
-      ['TESTCO-R1','TESTCO','free_ship_threshold','{"min_qty":600,"ship_fee":1500}','整批出貨免運（600瓶以上）','Y']
+      seedRow_(RULES_HEADERS, {
+        rule_id:'TESTCO-R1', company_id:'TESTCO', rule_type:'free_ship_threshold',
+        params_json:'{"min_qty":600,"ship_fee":1500}', display_text:'整批出貨免運（600瓶以上）', active:'Y'
+      })
     ]);
     created.push('rules 免運規則 x1');
   }
   if (v2IsEmpty_(SHEET_CALENDAR)) {
     v2Append_(SHEET_CALENDAR, CALENDAR_HEADERS, [
-      ['test-memo-001','memo','2026-07-20','','測試備忘：檢查酒標到貨','這是測試資料，可直接刪除','工作','','N','',now,now],
-      ['test-todo-001','todo','','','測試待辦：回覆客戶報價','這是測試資料，可直接刪除','工作','high','N','',now,now]
+      seedRow_(CALENDAR_HEADERS, { item_id:'test-memo-001', kind:'memo', date:'2026-07-20',
+        title:'測試備忘：檢查酒標到貨', detail:'這是測試資料，可直接刪除', category:'工作',
+        done:'N', created_at:now, updated_at:now }),
+      seedRow_(CALENDAR_HEADERS, { item_id:'test-todo-001', kind:'todo',
+        title:'測試待辦：回覆客戶報價', detail:'這是測試資料，可直接刪除', category:'工作',
+        priority:'high', done:'N', created_at:now, updated_at:now })
     ]);
     created.push('calendar_items 測試項目 x2');
   }
@@ -282,6 +310,12 @@ function handleUpdateOrderStatus_(params) {
 
   const sh = v2Sheet_(SHEET_ORDER_STATUS, ORDER_STATUS_HEADERS);
   const now = tpeNow_();
+  /* 複檢 2026-08-06 #26：這支是 find→append 的 upsert，沒上鎖。兩台裝置（或網路重送）
+     同時對同一張單寫入時，兩邊都找不到列 → 各 append 一列，order_status 出現同單號兩列。
+     之後 v2FindRow_ 永遠只改到第一列，清單卻顯示兩列，進度會分裂。整段包進 ScriptLock。 */
+  const _lock = LockService.getScriptLock();
+  _lock.waitLock(20000);
+  try {
   let rowNum = v2FindRow_(SHEET_ORDER_STATUS, ORDER_STATUS_HEADERS, 'quote_no', quoteNo);
 
   // v30: 結案時自動填結案日（未帶 closed_at 時）；v32 修正：前端存的是 'closed' 不是中文
@@ -340,6 +374,9 @@ function handleUpdateOrderStatus_(params) {
 
   logChange_('updateOrderStatus', quoteNo, order);
   return { ok: true, order: order };
+  } finally {
+    _lock.releaseLock();
+  }
 }
 
 // ===================================================================

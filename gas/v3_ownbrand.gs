@@ -411,11 +411,21 @@ function handleAddConsignMovement_(params) {
 
   const now = new Date();
   const dateStr = m.date || Utilities.formatDate(now, 'Asia/Taipei', 'yyyy-MM-dd');
-  const movementId = generateConsignMovementId_(dateStr);
-
   const sh = v2Sheet_(SHEET_CONSIGN_LEDGER, CONSIGN_LEDGER_HEADERS);
-  const rowVals = [movementId, dateStr, customerId, skuId, type, qty, unitPrice, m.note || '', Utilities.formatDate(now, 'Asia/Taipei', "yyyy-MM-dd'T'HH:mm:ss'+08:00'")];
-  sh.appendRow(rowVals);
+  /* 複檢 2026-08-06 #26：複數版 handleAddConsignMovements_ 有包 ScriptLock，單筆這支沒有
+     （原註解寫「流量低，維持原樣」）。但 movement_id 是掃現有列編號來的，兩台裝置同時登記
+     會撞號；寄售異動一旦重複寫入就直接重複計庫存與月結金額，代價太高，補上鎖。 */
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  let movementId, rowVals;
+  try {
+    movementId = generateConsignMovementId_(dateStr);
+    rowVals = [movementId, dateStr, customerId, skuId, type, qty, unitPrice, m.note || '', Utilities.formatDate(now, 'Asia/Taipei', "yyyy-MM-dd'T'HH:mm:ss'+08:00'")];
+    sh.appendRow(rowVals);
+    SpreadsheetApp.flush();   // 落地後才放鎖，下一個等鎖的人才掃得到這個號
+  } finally {
+    lock.releaseLock();
+  }
 
   const saved = {};
   CONSIGN_LEDGER_HEADERS.forEach(function (h, i) { saved[h] = rowVals[i]; });
