@@ -66,6 +66,7 @@ function buildOrders(qs, cq, os){
   ((qs&&qs.quotes)||[]).filter(q=>q.status!=='已刪除').forEach(q=>{
     list.push({ no:q.quoteNo, client:q.clientName||'—', type:q.quoteType==='banquet'?'宴會':'瓶裝',
       typeKey:q.quoteType, total:q.grandTotal||0, quoteDate:q.quoteDate||'', expiry:q.expiryDate||'',
+      payDetail:q.paymentDetail||'',   // 複檢 #3：訂金/尾款要以報價單條款上的實際金額為準
       st: stMap[q.quoteNo]||null, src:'std' });
   });
   ((cq&&cq.quotes)||[]).forEach(q=>{
@@ -277,10 +278,10 @@ function openOrdEdit(no){
   if(!st.updated_at && !String(g('deposit_amt')).trim() && !String(g('final_amt')).trim()){
     const _gt=Math.round(parseFloat(document.getElementById('oe-grand_total').value)||0);
     if(_gt>0){
-      const _pct=ordDepositPct(o.client);
-      const _dep=Math.round(_gt*_pct/100);
+      const _fromQuote=ordPayFromQuote(o,_gt);   // 複檢 #3：先用報價單條款上的實際金額
+      const _dep=_fromQuote?_fromQuote.dep:Math.round(_gt*ordDepositPct(o.client)/100);
       document.getElementById('oe-deposit_amt').value=_dep;
-      document.getElementById('oe-final_amt').value=_gt-_dep;
+      document.getElementById('oe-final_amt').value=_fromQuote?_fromQuote.bal:(_gt-_dep);
     }
   }
   document.getElementById('oe-closed_at').value = g('closed_at');
@@ -292,6 +293,24 @@ function openOrdEdit(no){
   // v31 分批出貨：每次開單重置為收合、未載入
   shpReset();
   document.getElementById('oe-overlay').style.display='flex';
+}
+/* ── 複檢 2026-08-06 #3：訂金/尾款以「報價單條款上實際印的金額」為準 ──────────────
+   2026-08-05 付款條件改版後，訂金＝酒款×比例＋其他費用全額（不再是總計×比例），
+   但訂單追蹤一直還在用總計×比例，兩邊對不上（例：報價單印訂金 $50,500、這裡帶 $47,750）。
+   報價單存檔時已經把算好的條款文字存進 paymentDetail，直接從那段文字把金額讀回來最準——
+   不管付款方式怎麼改、將來條款算法再變，這裡都會跟著對。
+   讀不到（自訂條款、舊單沒存、金額對不上總額）就退回原本的比例算法。 */
+function ordPayFromQuote(o, gt){
+  const s=String((o&&o.payDetail)||'').replace(/<br\s*\/?>/gi,'\n');
+  if(!s) return null;
+  const num=m=>m?Math.round(parseFloat(String(m[1]).replace(/[$,]/g,''))||0):null;
+  const dep=num(s.match(/支付訂金(?:總計)?新台幣\s*\$?([\d,]+(?:\.\d+)?)\s*元整/));
+  if(dep==null) return null;
+  let bal=num(s.match(/支付尾款新台幣\s*\$?([\d,]+(?:\.\d+)?)\s*元整/));
+  if(bal==null && /無須另付尾款/.test(s)) bal=0;   // 折抵把尾款抵光的情況（複檢 #12 的條款寫法）
+  if(bal==null) return null;
+  if(gt>0 && dep+bal!==Math.round(gt)) return null;   // 跟訂單總額對不上就不要硬套
+  return {dep, bal};
 }
 /* 訂金比例（%）：預設 50；客戶主檔「付款習慣」寫「訂金30%」之類就用那個數字。
    用客戶名稱（或發票抬頭）比對客戶主檔；主檔還沒載入就從讀取快取拿。 */
@@ -318,6 +337,13 @@ function fillHalf(){
   const gt=Math.round(parseFloat(document.getElementById('oe-grand_total').value)||0);
   if(!gt){ toast('請先填訂單總額','err'); return; }
   const o=(typeof ORDERS_CACHE!=='undefined'&&ORDERS_CACHE)?ORDERS_CACHE.find(x=>x.no===ORD_EDITING):null;
+  const fromQuote=o?ordPayFromQuote(o,gt):null;   // 複檢 #3：優先用報價單條款上的實際金額
+  if(fromQuote){
+    document.getElementById('oe-deposit_amt').value=fromQuote.dep;
+    document.getElementById('oe-final_amt').value=fromQuote.bal;
+    toast(`已依報價單付款條件帶入：訂金 ${money(fromQuote.dep)}／尾款 ${money(fromQuote.bal)}`,'ok');
+    return;
+  }
   const pct=ordDepositPct(o?o.client:'');
   const dep=Math.round(gt*pct/100);
   document.getElementById('oe-deposit_amt').value=dep;

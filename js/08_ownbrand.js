@@ -632,7 +632,10 @@ onHook('afterReset', function(){
 });
 /* 使用者手動移除自動規則列 → 記住不要再自動加回 */
 onHook('beforeRemoveExt', function(id){
-  const e = extras.find(x=>x.id===id);
+  // 複檢 2026-08-06 #14：UI 的 onclick 傳進來的是字串（`removeExt('7')`），
+  // 自動列的 id 卻是數字（04_company.js 的 ++rowId），嚴格等號永遠比不中 →
+  // RULE_SUPPRESS 設不進去 → 刪掉後 afterCalc 立刻又把同一列加回來，看起來「刪不掉」。
+  const e = extras.find(x=>String(x.id)===String(id));
   if(e && e.auto) RULE_SUPPRESS[e.auto]=true;
 });
 

@@ -273,16 +273,25 @@ function applyAutoRules(){
   if(qType!=='bottle') return false;
   let changed=false;
   const want=[]; // 期望存在的自動列
+  /* 複檢 2026-08-06 #5：2026-08-06 之前存的舊單，extras 還原回來時沒有 auto 標記，
+     重選公司會被當成「不存在」而再長一列重複的運費。這裡用「規則參數組出來的完整名稱」
+     去認領那些孤兒列。名稱必須是規則自己會產生的那幾種，不能只用開頭字比對——
+     否則使用者手動加的「運費折抵」之類會被誤認成自動列，接著被規則同步邏輯刪掉。 */
+  const adoptable={};
   if(SELECTED_COMPANY){
     const rs=rulesOf(SELECTED_COMPANY.company_id);
     const qty=totalBottleQty();
     rs.forEach(r=>{
       const p=parseJsonSafe(r.params_json,{});
       if(r.rule_type==='free_ship_threshold' && !RULE_SUPPRESS['ship']){
-        if(qty>=(p.min_qty||0) && qty>0) want.push({auto:'ship', n:(r.display_text||'整批出貨免運'), a:0});
-        else if(qty>0) want.push({auto:'ship', n:'運費（未達 '+(p.min_qty||0)+' 瓶免運門檻）', a:p.ship_fee||0});
+        const freeName=(r.display_text||'整批出貨免運');
+        const feeName='運費（未達 '+(p.min_qty||0)+' 瓶免運門檻）';
+        adoptable['ship']=n=>(n===freeName||n===feeName);
+        if(qty>=(p.min_qty||0) && qty>0) want.push({auto:'ship', n:freeName, a:0});
+        else if(qty>0) want.push({auto:'ship', n:feeName, a:p.ship_fee||0});
       }
       if(r.rule_type==='label_deduct' && !RULE_SUPPRESS['label']){
+        adoptable['label']=n=>n.indexOf('客戶自備酒標 — 每瓶扣酒標費')===0;
         const on=document.getElementById('qf-ownlabel')?.checked;
         if(on && qty>0){
           let per=parseFloat(document.getElementById('qf-labelamt')?.value);
@@ -294,8 +303,13 @@ function applyAutoRules(){
   }
   // 同步 extras 中的 auto 列（使用者手動改過金額的 locked 列不動）
   ['ship','label'].forEach(k=>{
-    const cur=extras.find(e=>e.auto===k);
+    let cur=extras.find(e=>e.auto===k);
     const w=want.find(e=>e.auto===k);
+    // 只有在規則這輪確實要長這一列時才認領，避免誤動使用者自己加的費用列
+    if(!cur && w && adoptable[k]){
+      const orphan=extras.find(e=>!e.auto && adoptable[k](String(e.n||'').trim()));
+      if(orphan){ orphan.auto=k; cur=orphan; }
+    }
     if(w && !cur){ extras.push({id:++rowId, n:w.n, a:w.a, auto:k}); changed=true; }
     else if(!w && cur && !cur.locked){ extras=extras.filter(e=>e!==cur); changed=true; }
     else if(w && cur && !cur.locked && (cur.n!==w.n || cur.a!==w.a)){ cur.n=w.n; cur.a=w.a; changed=true; }

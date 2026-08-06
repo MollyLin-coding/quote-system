@@ -126,7 +126,12 @@ function toggleCol(which){
     if(dedEl) botDedCache[id]=dedEl.value;
     if(logoEl) botLogoCache[id]=logoEl.value;
     if(lotEl) botLotCache[id]=lotEl.value;
-    return {id,name:gs(row,'name'),lot:lotEl?lotEl.value:(botLotCache[id]||''),vol:gs(row,'vol'),price:gs(row,'price'),ded:botDedCache[id]||'',logo:botLogoCache[id]||'',qty:gs(row,'qty'),lp:lpEl?lpEl.value:'',disc:diEl?diEl.value:'',discManual:(diEl&&diEl.dataset.manual==='1')?1:0,gift:(giftEl&&giftEl.checked)?1:0,mark:(markEl&&markEl.checked)?1:0};
+    /* 複檢 2026-08-06 #6：pid / 價格的 src 與手改旗標一定要一起帶走。
+       少了 pid，重建後的列就跟公司報價檔脫鉤——級距價不再隨瓶數換、MOQ 提醒也消失。 */
+    const priceEl=row.querySelector('[data-f="price"]');
+    return {id,name:gs(row,'name'),lot:lotEl?lotEl.value:(botLotCache[id]||''),vol:gs(row,'vol'),price:gs(row,'price'),ded:botDedCache[id]||'',logo:botLogoCache[id]||'',qty:gs(row,'qty'),lp:lpEl?lpEl.value:'',disc:diEl?diEl.value:'',discManual:(diEl&&diEl.dataset.manual==='1')?1:0,gift:(giftEl&&giftEl.checked)?1:0,mark:(markEl&&markEl.checked)?1:0,
+      pid:row.dataset.pid||'', sku:row.dataset.sku||'', listprice:row.dataset.listprice||'',
+      priceSrc:(priceEl&&priceEl.dataset.src!=null)?priceEl.dataset.src:'', manual:(priceEl&&priceEl.dataset.manual==='1')?1:0};
   }).filter(Boolean);
   document.getElementById('itbody-bot').innerHTML='';
   botItems=[];
@@ -249,6 +254,20 @@ function addBotRow(prefill){
   } else if(prefill && (prefill.sku || prefill.listprice)){
     if(prefill.sku) div.dataset.sku=prefill.sku;
     if(prefill.listprice) div.dataset.listprice=prefill.listprice;
+  }
+  /* 複檢 2026-08-06 #6：還原「這一列是從公司報價檔帶入的」關聯。
+     toggleCol（切換前標費/LOGO/批次/贈品欄）會整批重建列，沒有這段的話 pid 就掉了，
+     級距價與 MOQ 提醒全部失效。同時把 hand-edit 標示與手改監聽一併接回去。 */
+  if(prefill && prefill.pid){
+    div.dataset.pid=prefill.pid;
+    const pi=div.querySelector('[data-f="price"]');
+    if(pi){
+      if(prefill.priceSrc!=='' && prefill.priceSrc!=null) pi.dataset.src=prefill.priceSrc;
+      if(prefill.manual) pi.dataset.manual='1';
+      pi.removeAttribute('oninput');
+      pi.addEventListener('input',()=>{ pi.dataset.manual='1'; if(typeof markHand==='function') markHand(pi); calc(); });
+      if(typeof markHand==='function') markHand(pi);
+    }
   }
 }
 /* OEM／貼牌 勾選變動：公版模式（貼牌）確保套級距折，並更新 MOQ 提示與總額 */

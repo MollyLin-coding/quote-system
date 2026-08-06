@@ -258,8 +258,11 @@ function collectQuote(){
   // bottle / 公版買斷 extras 也放進 items
   if(qType==='bottle'||qType==='ownbrand'||qType==='ownlabel'||qType==='consign'){
     extras.forEach(e=>{
+      // 複檢 2026-08-06 #5：自動規則列（運費/扣標）的 auto 標記要一起存，
+      // 否則載入舊單再重選公司時 applyAutoRules 認不得它，會再長出一列重複的運費。
+      // 借用 extras 用不到的 unit 欄位存 auto key（'ship'/'label'），不動資料庫結構。
       items.push({ itemType:'extra', name:e.n, lot:'', volume:'', unitPrice:e.a,
-        deduction:0, logoFee:0, qty:1, unit:'', subtotal:e.a, flavorList:'' });
+        deduction:0, logoFee:0, qty:1, unit:e.auto||'', subtotal:e.a, flavorList:'' });
     });
   }
   // 免運優惠（顯示用、不計價）：以特殊品項存進 items_json，適用所有單型；金額放 deduction，unitPrice/subtotal=0 不影響總計
@@ -613,7 +616,12 @@ function loadQuoteIntoForm(q){
     document.getElementById('ctg-logo').classList.toggle('on',colLogo);
     rebuildBotHeader();
     items.forEach(it=>{
-      if(it.itemType==='extra'){ extras.push({id:`ext${++_extSeq}`,n:it.name,a:it.unitPrice||it.subtotal||0}); }
+      if(it.itemType==='extra'){
+        const _auto=(it.unit==='ship'||it.unit==='label')?it.unit:null;   // 複檢 #5：還原自動規則標記
+        const _e={id:`ext${++_extSeq}`,n:it.name,a:it.unitPrice||it.subtotal||0};
+        if(_auto) _e.auto=_auto;
+        extras.push(_e);
+      }
       else if(it.itemType==='freeship'){ /* 免運優惠已於上方共用區還原到 f-freeship，不建品項列 */ }
       else if(it.itemType==='taglabel'){ /* 批次標籤已於上方共用區還原到 f-tag-lot / f-tag-cli，不建品項列 */ }
       else if(it.itemType==='svcdetail'){ /* 服務費拆項＝宴會用特殊列，瓶裝型不會有；防呆跳過不建品項列 */ }
