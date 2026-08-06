@@ -21,14 +21,21 @@ async function apiCall(payload){
     });
   } catch(err) {
     clearTimeout(timer);
-    if(err && err.name==='AbortError') throw new Error('連線逾時，請檢查網路後再試一次');
+    /* 複檢 2026-08-06 #21：寫入類請求拋錯時（GAS 冷啟動 >25 秒逾時、斷線）原本會直接 throw，
+       跳過下面的 rcClear()。但後端很可能其實已經寫入成功——快取沒清的話，90 秒內進報價紀錄
+       看不到剛存的單，使用者照提示「再試一次」就會存出重複單。結果未知時寧可清掉快取。 */
+    if(!rcIsRead(payload && payload.action)) rcClear();
+    if(err && err.name==='AbortError') throw new Error('連線逾時，請檢查網路後再試一次（後台可能已經存好了，請先重新整理列表確認，不要直接重存）');
     throw new Error('無法連線到後台，請確認網路後再試一次');
   }
   clearTimeout(timer);
   const text = await res.text();
   let data;
   try { data = JSON.parse(text); }
-  catch(e){ throw new Error('無法連線到後台（伺服器回應異常），請稍後再試'); }
+  catch(e){
+    if(!rcIsRead(payload && payload.action)) rcClear();   // 同上：回應壞掉也可能已經寫入成功
+    throw new Error('無法連線到後台（伺服器回應異常），請稍後再試');
+  }
   if(data.ok === false && data.error && data.error.indexOf('UNAUTHORIZED') === 0){
     // token 失效，回登入頁
     AUTH_TOKEN = null;

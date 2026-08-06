@@ -91,7 +91,13 @@ async function openVerifyForm(no){
       }) };
     buildVerifyModal('');
     document.getElementById('vf-overlay').style.display='flex';
-    if(priorCount>0 && VERIFY_DATA.rows.some(r=>r.shipped>0)){
+    /* 複檢 2026-08-06 #24：留底是用「品名＋容量」跟報價單品項比對的，報價單存檔後若改過
+       品名或容量（例如 500→550），舊留底就對不上任何一列 → 已出貨全部歸零、本次出貨又帶
+       成全部訂購量，但「第幾次出貨」還是照算，會印出矛盾的單。這種情況要明講，不能默默帶錯。 */
+    const _leftover=Object.keys(poolLeft).reduce((s,k)=>s+(poolLeft[k]||0),0);
+    if(priorCount>0 && _leftover>0){
+      toast(`⚠ 這是第 ${priorCount+1} 次出貨，但有 ${Math.round(_leftover)} 個單位的舊出貨紀錄對不上目前的品項（報價單的品名或容量改過？）。「已出貨」可能少算，請自行核對後手動修正數量再產生。`,'err');
+    } else if(priorCount>0 && VERIFY_DATA.rows.some(r=>r.shipped>0)){
       toast(`已帶入前 ${priorCount} 張驗收單的出貨數量：「已出貨」＝之前出過的、「本次出貨」＝剩餘量（都可以再改）`,'ok');
     }
   }catch(e){ toast(e.message||'讀取失敗','err'); }
@@ -207,13 +213,18 @@ function saveVerifyFormRecord(d){
     const editId=VF_EDIT_ID; VF_EDIT_ID=null;
     const record={ no:d.no, lot:d.lot, shipDate:d.shipDate, pm:d.shipper, boxes:d.boxes,
       items:(d.rows||[]).map(r=>({ name:r.name, lot:r.lot, vol:r.vol, mfg:r.mfg, thisShip:r.thisShip, ordered:r.ordered, shipped:r.shipped })) };
+    /* 複檢 2026-08-06 #23：留底存檔原本失敗完全不出聲，使用者不會知道這批沒留底——
+       下次開驗收單就算不到這批，「已出貨」歸零、「本次出貨」又帶成全部數量。改成明確提示。 */
     apiCall({action:'saveVerifyForm', token:AUTH_TOKEN, record}).then(res=>{
-      if(!(res&&res.ok)||!editId) return;
+      if(!(res&&res.ok)){ toast('⚠ 這批的驗收單留底沒有存成功，下次開驗收單不會算到這批出貨量，請再產生一次','err'); return; }
+      if(!editId) return;
       return apiCall({action:'deleteVerifyForm', token:AUTH_TOKEN, id:editId})
         .then(()=>{ toast('驗收單留底已更新（新版已取代舊紀錄）','ok'); })
         .catch(()=>{ toast('新留底已存，但舊紀錄刪除失敗，請到「驗收單留底」手動刪掉舊的那筆','err'); })
         .then(()=>{ try{ if(typeof loadVerifyMgmt==='function') loadVerifyMgmt(true); }catch(_){} });
-    }).catch(()=>{});
+    }).catch(()=>{
+      toast('⚠ 這批的驗收單留底沒有存成功（連線問題），下次開驗收單不會算到這批出貨量，請確認後再產生一次','err');
+    });
   }catch(_){}
 }
 
@@ -579,13 +590,18 @@ function saveConsignVerifyFormRecord(d){
     const editId=CONSIGN_VF_EDIT_ID; CONSIGN_VF_EDIT_ID=null;
     const record={ no:d.no, lot:'', shipDate:d.shipDate, pm:d.handler||'', boxes:'', client:d.client,
       items:(d.rows||[]).map(r=>({ name:r.name, lot:'', vol:r.vol, mfg:'', thisShip:parseFloat(r.qty)||0, ordered:parseFloat(r.qty)||0, shipped:0 })) };
+    /* 複檢 2026-08-06 #23：留底存檔原本失敗完全不出聲，使用者不會知道這批沒留底——
+       下次開驗收單就算不到這批，「已出貨」歸零、「本次出貨」又帶成全部數量。改成明確提示。 */
     apiCall({action:'saveVerifyForm', token:AUTH_TOKEN, record}).then(res=>{
-      if(!(res&&res.ok)||!editId) return;
+      if(!(res&&res.ok)){ toast('⚠ 這批的驗收單留底沒有存成功，下次開驗收單不會算到這批出貨量，請再產生一次','err'); return; }
+      if(!editId) return;
       return apiCall({action:'deleteVerifyForm', token:AUTH_TOKEN, id:editId})
         .then(()=>{ toast('驗收單留底已更新（新版已取代舊紀錄）','ok'); })
         .catch(()=>{ toast('新留底已存，但舊紀錄刪除失敗，請到「驗收單留底」手動刪掉舊的那筆','err'); })
         .then(()=>{ try{ if(typeof loadVerifyMgmt==='function') loadVerifyMgmt(true); }catch(_){} });
-    }).catch(()=>{});
+    }).catch(()=>{
+      toast('⚠ 這批的驗收單留底沒有存成功（連線問題），下次開驗收單不會算到這批出貨量，請確認後再產生一次','err');
+    });
   }catch(_){}
 }
 

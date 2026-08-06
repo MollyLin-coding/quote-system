@@ -115,9 +115,14 @@ async function readCallMany(payloads, force){
       one.catch(()=>{});
       RC_INFLIGHT[keys[idx]] = one;
     });
-    let r = null;
-    try{ r = await bp; }catch(e){ r = null; }
+    /* 複檢 2026-08-06 #22：登入過期時 apiCall 會攔到 batch 子回應裡的 UNAUTHORIZED 並 throw，
+       原本一律被當成「後端不支援 batch」→ BATCH_OK 永久關閉、還會再平行重打一輪注定失敗的
+       個別請求（正是 apiCall 那段註解想避免的行為），重新登入後也不會恢復。
+       認證問題要直接往外丟（讓 apiCall 那邊的流程去彈登入），不要動 BATCH_OK。 */
+    let r = null, authErr = null;
+    try{ r = await bp; }catch(e){ r = null; if(e && /登入已過期|UNAUTHORIZED/.test(String(e.message||e))) authErr = e; }
     group.forEach(idx => { delete RC_INFLIGHT[keys[idx]]; });
+    if(authErr) throw authErr;
     if(!r || !r.ok || !Array.isArray(r.results) || r.results.length !== calls.length){
       BATCH_OK = false;                             // 後端不支援就別再試了
       batchFailed = true;

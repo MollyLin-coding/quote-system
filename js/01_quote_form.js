@@ -38,7 +38,12 @@ function onDate(){
   const v=document.getElementById('f-dt').value; if(!v) return;
   const d=new Date(v);
   const disp=`${d.getFullYear()}/${s2(d.getMonth()+1)}/${s2(d.getDate())}`;
-  const e=new Date(d); e.setMonth(e.getMonth()+1);
+  /* 有效日期＝報價日 +1 個月。複檢 2026-08-06 #17：原本用 setMonth(+1)，1/31 會溢位成 3/3
+     （2 月沒有 31 號）。改成直接建構目標月份並把日夾在該月最後一天——同檔 estPayDay()
+     早就修過同一個問題，這裡漏修。 */
+  const _y=d.getFullYear(), _m=d.getMonth()+1;
+  const _last=new Date(_y, _m+1, 0).getDate();
+  const e=new Date(_y, _m, Math.min(d.getDate(), _last));
   const estr=`${e.getFullYear()}/${s2(e.getMonth()+1)}/${s2(e.getDate())}`;
   document.getElementById('f-ex').value=estr;
   document.getElementById('pl-dt').textContent=disp;
@@ -715,7 +720,9 @@ function syncLoadedPayDetail(){
    解析不到就維持欄位現值（HTML 預設 50%／15／7／30）。新舊兩種條款寫法都吃。 */
 function restorePayFieldsFromText(txt){
   const s=String(txt||'').replace(/<br\s*\/?>/gi,'\n');
-  const put=(id,m)=>{ if(!m) return; const el=document.getElementById(id); if(el) el.value=m[1]; };
+  // 條款文字裡的備註是跳脫過的（複檢 #15），還原回輸入欄時要解回原字，否則反覆存讀會越積越多 &amp;
+  const unesc=v=>String(v==null?'':v).replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
+  const put=(id,m)=>{ if(!m) return; const el=document.getElementById(id); if(el) el.value=unesc(m[1]); };
   const note=s.match(/付款條件備註：([\s\S]+)$/);
   if(payTab===0){
     put('dep-pct', s.match(/酒水總價\s*(\d+(?:\.\d+)?)\s*%/) || s.match(/酒款金額之\s*(\d+(?:\.\d+)?)\s*%/) || s.match(/總價之\s*(\d+(?:\.\d+)?)\s*%/));   // (?:\.\d+)? 支援小數比例如 12.5%（複檢 #16）
@@ -959,15 +966,19 @@ function getPayTerms(){
     const d1=document.getElementById('dep-days1')?.value||'15';   // 製造前幾日內付訂金
     const vd=document.getElementById('dep-days')?.value||'7';     // 到貨後幾日內驗收
     const fd=document.getElementById('dep-fdays')?.value||'30';   // 驗收後幾日內付尾款
-    const note=document.getElementById('dep-ded')?.value;
+    /* 複檢 2026-08-06 #15：備註與費用名稱都是使用者輸入，條款字串會以 innerHTML 塞進
+       預覽/列印，沒跳脫的話輸入「<」開頭的內容會被當標籤吃掉（或被注入）。這裡統一跳脫。
+       條款自己的 <br> 是程式產生的、不受影響。 */
+    const esc=s=>(typeof escHtml==='function')?escHtml(String(s==null?'':s)):String(s==null?'':s);
+    const note=esc(document.getElementById('dep-ded')?.value);
     const money=n=>{const v=Math.round(n);return (v<0?'-$':'$')+Math.abs(v).toLocaleString();};   // 負數印 -$1,000 而非 $-1,000
     /* 條款格式依 Molly 2026-08-05 指定：訂金支付／驗收與尾款兩段，括號內逐項列出其他費用，
        其餘為「酒水總價 X% 之訂金」。括號裡的數字加總必等於括號外的訂金總額。 */
-    const fees=b.posExShown.length ? `內含${b.posExShown.map(e=>`${e.n} ${money(e.a)}`).join('、')}，及` : '';
+    const fees=b.posExShown.length ? `內含${b.posExShown.map(e=>`${esc(e.n)} ${money(e.a)}`).join('、')}，及` : '';
     if(b.clamped){
       /* 折抵超過尾款額度（複檢 #12）：尾款封頂 $0，改寫成「無須另付尾款」的版本，
          不能印出負數尾款，也不能再宣稱「X% 之訂金」（封頂後百分比已對不上） */
-      const dedTxt=b.negExShown.length? b.negExShown.map(e=>`${e.n} ${money(e.a)}`).join('、') : '折抵項目';
+      const dedTxt=b.negExShown.length? b.negExShown.map(e=>`${esc(e.n)} ${money(e.a)}`).join('、') : '折抵項目';
       let tc=`訂金支付：甲方於乙方製造前 ${d1} 日內，支付訂金總計新台幣 ${dep} 元整（${fees}酒水款項 ${money(b.depWineShown)} 元整），作為乙方啟動生產之依據。`;
       tc+=`<br>驗收與尾款：乙方完成商品製作並全數交付後，甲方應於到貨後 ${vd} 日內完成驗收。驗收無誤後無須另付尾款（酒水總價剩餘款項已由${dedTxt}全數抵銷）。`;
       if(note) tc+=`<br>付款條件備註：${note}`;
@@ -975,7 +986,7 @@ function getPayTerms(){
     }
     let t=`訂金支付：甲方於乙方製造前 ${d1} 日內，支付訂金總計新台幣 ${dep} 元整（${fees}酒水總價 ${pct}% 之訂金 ${money(b.depWineShown)} 元整），作為乙方啟動生產之依據。`;
     t+=`<br>驗收與尾款：乙方完成商品製作並全數交付後，甲方應於到貨後 ${vd} 日內完成驗收。驗收無誤後，甲方應於 ${fd} 日內支付尾款新台幣 ${bal} 元整（即酒水總價剩餘之 ${100-pct}%`;
-    if(b.negExShown.length) t+=`，減去${b.negExShown.map(e=>`${e.n} ${money(e.a)}`).join('、')}`;
+    if(b.negExShown.length) t+=`，減去${b.negExShown.map(e=>`${esc(e.n)} ${money(e.a)}`).join('、')}`;
     t+=`）。`;
     if(note) t+=`<br>付款條件備註：${note}`;
     return t;
@@ -983,7 +994,7 @@ function getPayTerms(){
   if(payTab===1){
     const v=document.getElementById('p1-vdays')?.value||'7';
     const pct=document.getElementById('p1-pct')?.value||'100';
-    const n=document.getElementById('p1-note')?.value;
+    const n=(typeof escHtml==='function')?escHtml(String(document.getElementById('p1-note')?.value||'')):(document.getElementById('p1-note')?.value||'');   // 複檢 #15
     let t=`乙方交付商品後，甲方應於 ${v} 日內完成驗收，驗收無誤後即應支付款項新台幣 ${tot} 元整之 ${pct}%。`;
     if(n) t+=`<br>付款條件備註：${n}`;
     return t;

@@ -240,7 +240,11 @@ function quickAddProduct(){
   const pid=document.getElementById('qf-product').value; if(!pid) return;
   const p=(COMPANY_DATA?.products||[]).find(x=>String(x.product_id)===String(pid)); if(!p) return;
   if(qType==='bottle'){
-    const vol=String(p.spec||'').match(/^\d+$/)?parseFloat(p.spec):'';
+    /* 複檢 2026-08-06 #18：原本只認純數字的 spec，主檔填「500ml」「500 ml」就帶不進容量
+       （報價單/PDF 不顯示容量、ml 型 MOQ 提醒也不會動）。改成把數字撈出來用，
+       做法比照 08_ownbrand.js 的公版酒帶入。 */
+    const _volDigits=String(p.spec==null?'':p.spec).replace(/[^\d]/g,'');
+    const vol=_volDigits?parseFloat(_volDigits):'';
     addBotRow({ name:p.name, vol:vol, price:p.unit_price, ded:(colDed&&p.label_fee!==''&&p.label_fee!=null)?p.label_fee:'', logo:(colLogo&&p.logo_fee!==''&&p.logo_fee!=null)?p.logo_fee:'', qty:'' });
     const id=rowId, row=document.getElementById(`r-${id}`);
     if(row){
@@ -291,12 +295,30 @@ function applyAutoRules(){
         else if(qty>0) want.push({auto:'ship', n:feeName, a:p.ship_fee||0});
       }
       if(r.rule_type==='label_deduct' && !RULE_SUPPRESS['label']){
-        adoptable['label']=n=>n.indexOf('客戶自備酒標 — 每瓶扣酒標費')===0;
+        adoptable['label']=n=>n.indexOf('客戶自備酒標 — ')===0;   // 固定單價版與依品項計算版兩種名稱都認
         const on=document.getElementById('qf-ownlabel')?.checked;
         if(on && qty>0){
           let per=parseFloat(document.getElementById('qf-labelamt')?.value);
+          /* 複檢 2026-08-06 #20：規則參數 use_product_label_fee 從來沒被實作——設了它金額欄
+             會留空，per 變 NaN → 退回 per_bottle（通常也沒填）→ 長出「每瓶扣 $0」的無效列。
+             這裡補上：依每一列品項自己的主檔 label_fee × 該列瓶數逐列加總。
+             使用者若手動在金額欄填了數字，仍以手填的為準（照舊覆蓋規則）。 */
+          if(isNaN(per) && p.use_product_label_fee){
+            let sum=0, seen=0;
+            botItems.forEach(id=>{
+              const row=document.getElementById(`r-${id}`); if(!row||!row.dataset.pid) return;
+              const prod=(COMPANY_DATA?.products||[]).find(x=>String(x.product_id)===String(row.dataset.pid));
+              if(!prod||prod.label_fee===''||prod.label_fee==null) return;
+              const fee=parseFloat(prod.label_fee)||0, rq=gv(row,'qty')||0;
+              if(rq>0){ sum+=fee*rq; seen++; }
+            });
+            if(seen>0){
+              want.push({auto:'label', n:`客戶自備酒標 — 依品項酒標費逐列計算（共 ${qty} 瓶）`, a:-sum});
+              return;   // 這條規則已處理完，不要再走下面的固定單價版本
+            }
+          }
           if(isNaN(per)) per=p.per_bottle||0;
-          want.push({auto:'label', n:`客戶自備酒標 — 每瓶扣酒標費 $${per} × ${qty}瓶`, a:-(per*qty)});
+          if(per>0) want.push({auto:'label', n:`客戶自備酒標 — 每瓶扣酒標費 $${per} × ${qty}瓶`, a:-(per*qty)});
         }
       }
     });
@@ -321,8 +343,14 @@ function applyAutoRules(){
     const pi=row.querySelector('[data-f="price"]'); if(!pi||pi.dataset.manual==='1') return;
     const q=gv(row,'qty'); if(!q) return;
     const tiers=parseJsonSafe(prod.tier_json,[]);
-    const t=tiers.find(t=> q>=(t.min||0) && (t.max==null || q<=t.max));
-    if(t && parseFloat(pi.value)!==t.price){ pi.value=t.price; pi.dataset.src=t.price; changed=true; }
+    /* 複檢 2026-08-06 #19：
+       (a) max 填成空字串時 `t.max==null` 為 false、`q<=''` 恆假，該級距永遠比不中 → 一併當「沒有上限」。
+       (b) 級距沒涵蓋低量區間時（例如只填 min:100），瓶數從 150 改回 50 會找不到級距，
+           原本就「維持現價」不動，等於停在低量卻收高量的優惠價（少收）。改成回退到主檔 unit_price。 */
+    const noMax=v=>(v==null||v===''||isNaN(parseFloat(v)));
+    const t=tiers.find(t=> q>=(parseFloat(t.min)||0) && (noMax(t.max) || q<=parseFloat(t.max)));
+    const target=t ? t.price : ((prod.unit_price!=null&&prod.unit_price!=='')?prod.unit_price:null);
+    if(target!=null && parseFloat(pi.value)!==parseFloat(target)){ pi.value=target; pi.dataset.src=target; changed=true; }
   });
   return changed;
 }
