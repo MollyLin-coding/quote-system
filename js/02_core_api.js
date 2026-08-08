@@ -168,8 +168,30 @@ function doLogout(){
 }
 
 /* ---- 登入 ---- */
+/* v51：登入頁的使用者下拉。這支不需要通行證（登入前就要用），
+   後端只回名字，不回密碼也不回角色。抓不到就留一個預設值，不擋登入。 */
+async function loadLoginUsers(){
+  const sel = document.getElementById('login-user');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">載入中…</option>';
+  try{
+    const d = await apiCall({ action:'getLoginUsers' });
+    const names = (d && d.ok && Array.isArray(d.users) && d.users.length) ? d.users : ['Molly'];
+    sel.innerHTML = names.map(n=>'<option value="'+escAttr(n)+'">'+escHtml(n)+'</option>').join('');
+    // 記住上次是誰登入的，下次直接選好
+    try{
+      const last = localStorage.getItem('qs_last_user');
+      if(last && names.indexOf(last)>=0) sel.value = last;
+    }catch(e){}
+  }catch(e){
+    sel.innerHTML = '<option value="">Molly</option>';
+  }
+}
+
 async function doLogin(){
   const pin = document.getElementById('login-pin').value.trim();
+  const userSel = document.getElementById('login-user');
+  const who = userSel ? (userSel.value||'') : '';
   const errEl = document.getElementById('login-err');
   const btn = document.getElementById('login-btn');
   errEl.textContent = '';
@@ -178,11 +200,12 @@ async function doLogin(){
   // 文字寫清楚在做什麼，才不會覺得卡住。
   btn.disabled = true; btn.textContent = '登入中…正在整理今天的待辦';
   try {
-    const data = await apiCall({ action:'login', pin });
+    const data = await apiCall({ action:'login', pin, name: who });
     if(data.ok && data.token){
       AUTH_TOKEN = data.token;
       sessionStorage.setItem('quote_token', data.token);
       setUser(data.role, data.name);          // v46 起後端登入會回角色；舊後端沒回就當老闆（維持原行為）
+      try{ if(data.name) localStorage.setItem('qs_last_user', data.name); }catch(e){}
       const rem = document.getElementById('login-remember');
       if(rem && rem.checked) rememberSave(data.token); else rememberClear();
       hideLogin();
@@ -571,7 +594,7 @@ function renderRecords(){
     if(kw){ const k=kw.toLowerCase(); merged=merged.filter(q=> String(q.clientName||'').toLowerCase().includes(k) || String(q.quoteNo||'').toLowerCase().includes(k)); }
     // 單號皆為 YYYYMMDD-NN 格式，直接以單號新→舊排序（自訂單與標準單自然交錯）
     merged.sort((a,b)=>String(b.quoteNo||'').localeCompare(String(a.quoteNo||'')));
-    if(merged.length===0){ body.innerHTML='<tr><td colspan="6" class="rec-empty">'+((REC_QUOTES.length||customs.length)?'沒有符合條件的報價單':'尚無報價單記錄')+'</td></tr>'; return; }
+    if(merged.length===0){ body.innerHTML='<tr><td colspan="7" class="rec-empty">'+((REC_QUOTES.length||customs.length)?'沒有符合條件的報價單':'尚無報價單記錄')+'</td></tr>'; return; }
     body.innerHTML=merged.map(q=>{
       const typeBadge=q.quoteType==='bottle'
         ? '<span class="rec-badge bottle">瓶裝酒代工</span>'
@@ -593,6 +616,7 @@ function renderRecords(){
           <td data-l="類型">${typeBadge}</td>
           <td data-l="報價日">${escHtml(q.quoteDate||'—')}</td>
           <td data-l="總計" style="font-weight:600">${total}</td>
+          <td data-l="建立者">—</td>
           <td class="rec-actions" data-l="操作" onclick="event.stopPropagation()">
             <button class="rec-act-btn primary" onclick="recOpenCustom('${escAttr(q.quoteNo)}')">開啟</button>
             <button class="rec-act-btn" onclick="recPreviewCustom('${escAttr(q.quoteNo)}')">預覽</button>
@@ -605,6 +629,7 @@ function renderRecords(){
         <td data-l="類型">${typeBadge}</td>
         <td data-l="報價日">${escHtml(q.quoteDate||'—')}</td>
         <td data-l="總計" style="font-weight:600">${total}</td>
+        <td data-l="建立者">${escHtml(q.createdBy||'—')}</td>
         <td class="rec-actions" data-l="操作" onclick="event.stopPropagation()">
           <button class="rec-act-btn primary" onclick="openRecord('${escAttr(q.quoteNo)}')">開啟</button>
           <button class="rec-act-btn" onclick="previewRecordQuote('${escAttr(q.quoteNo)}')">預覽</button>

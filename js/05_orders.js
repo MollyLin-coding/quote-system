@@ -67,6 +67,7 @@ function buildOrders(qs, cq, os){
     list.push({ no:q.quoteNo, client:q.clientName||'—', type:q.quoteType==='banquet'?'宴會':'瓶裝',
       typeKey:q.quoteType, total:q.grandTotal||0, quoteDate:q.quoteDate||'', expiry:q.expiryDate||'',
       payDetail:q.paymentDetail||'',   // 複檢 #3：訂金/尾款要以報價單條款上的實際金額為準
+      by:q.createdBy||'',              // v51 建立者（舊單沒有，空字串）
       st: stMap[q.quoteNo]||null, src:'std' });
   });
   ((cq&&cq.quotes)||[]).forEach(q=>{
@@ -239,7 +240,7 @@ function renderOrders(){
     const lot=ordCustLot(o);
     return `<tr>
       <td class="mc-main"><b>${escHtml(o.no)}</b> <span class="rec-badge ${o.typeKey==='banquet'?'banquet':o.typeKey==='custom'?'custom':'bottle'}">${o.type}</span><br>
-        <span style="color:#6B6B63;font-size:11.5px">${escHtml(o.client)}</span>${lot?`<br><span style="color:#A6824A;font-size:11px">批號 ${escHtml(lot)}</span>`:''}</td>
+        <span style="color:#6B6B63;font-size:11.5px">${escHtml(o.client)}</span>${lot?`<br><span style="color:#A6824A;font-size:11px">批號 ${escHtml(lot)}</span>`:''}${o.by?`<br><span style="color:#8A8880;font-size:11px">建立者 ${escHtml(o.by)}</span>`:''}</td>
       <td data-l="進度">${orderDots(o)}${note?`<br><span class="onote">📌 ${escHtml(note)}${(o.st.track_note.includes('\n'))?'…':''}</span>`:''}</td>
       <td data-l="總計" style="text-align:right;font-weight:600">${money(o.total)}</td>
       <td data-l="出貨日" style="text-align:center">${shipD}</td>
