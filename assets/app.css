@@ -506,3 +506,8 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
   .cus-detail .ch{flex-wrap:wrap}
   .cus-detail .ch-opt{margin-left:0;width:100%}
 }
+
+/* ---- 角色權限：一般使用者（阿軒/Vic）看不到的東西（2026-08-07）----
+   ⚠ 只是把畫面藏乾淨，真正把關在後端 OWNER_ONLY_ACTIONS_；
+     這裡藏漏了也不會有安全問題，按下去只會跳「這個功能只有老闆帳號能操作」。 */
+body.role-general [data-owner-only]{display:none!important}
