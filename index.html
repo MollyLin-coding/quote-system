@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260808a">
-<script src="js/00_qrcode.js?v=20260808a"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260808b">
+<script src="js/00_qrcode.js?v=20260808b"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -20,7 +20,11 @@
         <div class="le">KEVIN NUMBER 1<br>TAILORED.COCKTAIL<br>EST. 2023. TAIWAN</div>
       </div>
     </div>
-    <div class="login-title">報價單系統 · 請輸入 PIN 碼登入</div>
+    <div class="login-title">報價單系統 · 請選擇使用者並輸入 PIN 碼</div>
+    <div class="login-field">
+      <label>使用者</label>
+      <select id="login-user" class="login-select"></select>
+    </div>
     <div class="login-field">
       <label>PIN 碼</label>
       <input type="password" id="login-pin" inputmode="numeric" maxlength="12" placeholder="••••••"
@@ -617,7 +621,7 @@
       <div class="tbl-scroll">
       <table class="rec-table mcard">
         <thead><tr>
-          <th>報價單號</th><th>客戶</th><th>類型</th><th>報價日期</th><th>總計</th><th>操作</th>
+          <th>報價單號</th><th>客戶</th><th>類型</th><th>報價日期</th><th>總計</th><th>建立者</th><th>操作</th>
         </tr></thead>
         <tbody id="rec-body">
           <tr><td colspan="6" style="padding:12px 14px"><div class="skl" style="width:52%"></div></td></tr><tr><td colspan="6" style="padding:12px 14px"><div class="skl" style="width:64%"></div></td></tr><tr><td colspan="6" style="padding:12px 14px"><div class="skl" style="width:44%"></div></td></tr>
@@ -1095,19 +1099,19 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260808a"></script>
-<script src="js/01_quote_form.js?v=20260808a"></script>
-<script src="js/01b_quote_preview.js?v=20260808a"></script>
-<script src="js/02_core_api.js?v=20260808a"></script>
-<script src="js/03_quote_custom.js?v=20260808a"></script>
-<script src="js/04_company.js?v=20260808a"></script>
-<script src="js/05_orders.js?v=20260808a"></script>
-<script src="js/06_verify_mgmt.js?v=20260808a"></script>
-<script src="js/07_calendar.js?v=20260808a"></script>
-<script src="js/08_ownbrand.js?v=20260808a"></script>
-<script src="js/09_verify_form.js?v=20260808a"></script>
-<script src="js/10_today.js?v=20260808a"></script>
-<script src="js/11_customers.js?v=20260808a"></script>
-<script src="js/99_boot.js?v=20260808a"></script>
+<script src="js/00_utils.js?v=20260808b"></script>
+<script src="js/01_quote_form.js?v=20260808b"></script>
+<script src="js/01b_quote_preview.js?v=20260808b"></script>
+<script src="js/02_core_api.js?v=20260808b"></script>
+<script src="js/03_quote_custom.js?v=20260808b"></script>
+<script src="js/04_company.js?v=20260808b"></script>
+<script src="js/05_orders.js?v=20260808b"></script>
+<script src="js/06_verify_mgmt.js?v=20260808b"></script>
+<script src="js/07_calendar.js?v=20260808b"></script>
+<script src="js/08_ownbrand.js?v=20260808b"></script>
+<script src="js/09_verify_form.js?v=20260808b"></script>
+<script src="js/10_today.js?v=20260808b"></script>
+<script src="js/11_customers.js?v=20260808b"></script>
+<script src="js/99_boot.js?v=20260808b"></script>
 </body>
 </html>
