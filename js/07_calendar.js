@@ -39,7 +39,7 @@ function eventsOn(dstr){
       if(s==='cancelled') return;
       if(o.st?.ship_date_est===dstr && !o.st?.ship_date_actual) evs.push({t:'ship', txt:'🚚 '+o.client.split('｜')[0]+' 出貨', no:o.no});
       if(o.st?.ship_date_actual===dstr) evs.push({t:'ship', txt:'🚚 '+o.client.split('｜')[0]+' 出貨 ✓', no:o.no});
-      if(s==='quoted' && o.expiry===dstr) evs.push({t:'exp', txt:'⏰ '+o.client.split('｜')[0]+' 報價到期', no:o.no});
+      // 2026-08-08 Molly：報價到期不需要提醒，不再產生 ⏰ 事件。
     });
   }
   CAL_ITEMS.forEach(it=>{
@@ -111,7 +111,7 @@ function renderCalMonth(el){
     <span style="flex:1"></span>
     <button class="btn btn-gold" style="font-size:12px;padding:6px 14px" onclick="openCalAdd('')">＋ 新增事項</button>
   </div><div class="cal">${cells}</div>
-  <div class="cal-legend">🚚 出貨（訂單自動）　⏰ 報價到期（自動）　📌 備忘　🔁 重複行程　🙏 拜拜日（農曆初二／十六，自動換算）　紅字＝國定假日　※ 點日期格可直接新增事項；點訂單事件跳到訂單追蹤　｜　顏色依「分類」自動區分：${Object.entries(CAL_CATEGORY_COLORS).map(([name,c])=>`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c.fg};margin:0 3px 0 8px;vertical-align:middle"></span>${name}`).join('')}</div>`;
+  <div class="cal-legend">🚚 出貨（訂單自動）　📌 備忘　🔁 重複行程　🙏 拜拜日（農曆初二／十六，自動換算）　紅字＝國定假日　※ 點日期格可直接新增事項；點訂單事件跳到訂單追蹤　｜　顏色依「分類」自動區分：${Object.entries(CAL_CATEGORY_COLORS).map(([name,c])=>`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c.fg};margin:0 3px 0 8px;vertical-align:middle"></span>${name}`).join('')}</div>`;
 }
 function renderCalList(el, days, title){
   const t=new Date(); t.setHours(0,0,0,0);

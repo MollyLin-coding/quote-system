@@ -108,11 +108,7 @@ function ordSideBadges(force){
 function orderBadges(o){
   const s=effOrdStatus(o.st);
   let h='';
-  if(s==='quoted' && o.expiry){
-    const d=daysBetween(o.expiry);
-    if(d!=null && d<0) h+='<span class="ob red">已過有效期</span>';
-    else if(d!=null && d<=7) h+=`<span class="ob red">有效期剩 ${d} 天</span>`;
-  }
+  // 2026-08-08 Molly：報價到期不需要提醒，這裡的「有效期剩 N 天／已過有效期」整段拿掉。
   if(o.st?.ship_date_est && !o.st?.ship_date_actual && ['deposit','production','quoted'].includes(s)){
     const d=daysBetween(o.st.ship_date_est);
     if(d!=null && d<0) h+='<span class="ob red">出貨已逾期</span>';
