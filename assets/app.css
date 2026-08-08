@@ -511,3 +511,8 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
    ⚠ 只是把畫面藏乾淨，真正把關在後端 OWNER_ONLY_ACTIONS_；
      這裡藏漏了也不會有安全問題，按下去只會跳「這個功能只有老闆帳號能操作」。 */
 body.role-general [data-owner-only]{display:none!important}
+
+/* 登入頁的使用者下拉（v51 多人版）——沿用 PIN 欄的外觀 */
+.login-select{width:100%;padding:12px 14px;border:1.5px solid #D9D5C8;border-radius:9px;
+  font-size:15px;background:#F4F2EA;color:#22241F;font-family:inherit;box-sizing:border-box}
+.login-select:focus{outline:none;border-color:#A6824A;background:#EEF1F7}
