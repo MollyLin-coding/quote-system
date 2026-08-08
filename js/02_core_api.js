@@ -3,7 +3,81 @@
    ============================================================ */
 const API_URL = "https://script.google.com/macros/s/AKfycbytSqCF0St1Gu8F_u8KW9rcKJnkkGAfrdaHYyrQ6wDKa19Z3TxZd-GRRi_3Ii3Ijv4i/exec";
 let AUTH_TOKEN = null;
+let USER_ROLE = 'owner';      // 'owner'（Molly，全權限）｜'general'（一般使用者，如阿軒/Vic）
+let USER_NAME = '';
 let currentPage = 'new';      // new | records
+
+/* ============================================================
+   角色權限（2026-08-07 加，配合後端 v46/v50）
+   ⚠ 這裡只是「把不能用的東西藏起來」讓畫面乾淨，**不是安全機制**。
+      真正的把關在後端 OWNER_ONLY_ACTIONS_，一般使用者就算硬打 API 也會被擋。
+   ⚠ 後端擋下來時回的錯誤開頭是 FORBIDDEN（不是 UNAUTHORIZED），
+      所以不會被 apiCall 誤判成「登入過期」而把人踢出去。
+   ============================================================ */
+function isOwner(){ return USER_ROLE !== 'general'; }
+
+// 給寫入類函式開頭用：不是老闆就擋下並提示，回 false
+function needOwner(what){
+  if(isOwner()) return true;
+  toast((what ? what + '：' : '') + '這個功能只有老闆帳號能操作', 'err');
+  return false;
+}
+
+/* 一般使用者要藏起來的按鈕：比對 onclick 裡呼叫的函式名。
+   用「掃 onclick」而不是逐一改每個 render 函式，是因為這些按鈕散在十幾個
+   樣板字串裡，逐一改動到的地方太多、容易漏也容易改壞。 */
+const OWNER_ONLY_FNS = [
+  // 訂單追蹤（唯讀）
+  'openOrdEdit','saveOrdEdit','shpAddRow','shpDelRow','shpSaveRow','shpToggle','fillHalf','openChangeLog',
+  // 寄售管理（唯讀）
+  'openConsignMove','saveConsignMove','csAddMoveRow','csDelMoveRow',
+  'openConsignCustomerEdit','saveConsignCustomerForm','addConsignException','delConsignException',
+  'consignMonthlyToQuote',
+  // 客戶主檔／價目表
+  'openCusEdit','saveCusEdit','deleteCusEdit','cusSeedFromQuotes','applyCusSync','syncCustomerRecipe',
+  'quickAddOwnbrand','quickAddProduct','quickAddProductCustom',
+  // 行事曆
+  'openCalAdd','openCalEdit','saveCalItem','deleteCalItem','syncGCal','toggleTodoDone',
+  // 刪除類
+  'deleteRecord','vmDelForm','vmDelReport'
+];
+const OWNER_FN_RE = new RegExp('\\b(' + OWNER_ONLY_FNS.join('|') + ')\\s*\\(');
+
+let ROLE_SWEEP_T = null;
+function roleSweep(){
+  if(isOwner()) return;
+  document.querySelectorAll('[onclick]').forEach(function(el){
+    if(el.dataset.roleHidden) return;
+    var h = el.getAttribute('onclick') || '';
+    if(OWNER_FN_RE.test(h)){ el.dataset.roleHidden='1'; el.style.display='none'; }
+  });
+}
+function roleSweepSoon(){
+  if(isOwner()) return;
+  clearTimeout(ROLE_SWEEP_T);
+  ROLE_SWEEP_T = setTimeout(roleSweep, 120);
+}
+function applyRoleUI(){
+  document.body.classList.toggle('role-general', !isOwner());
+  if(isOwner()) return;
+  roleSweep();
+  // 表格/彈窗都是後端資料回來才畫，所以要持續盯著新長出來的節點
+  try{
+    if(!window.__ROLE_OBS){
+      window.__ROLE_OBS = new MutationObserver(roleSweepSoon);
+      window.__ROLE_OBS.observe(document.body, {childList:true, subtree:true});
+    }
+  }catch(e){}
+}
+function setUser(role, name){
+  USER_ROLE = (role === 'general') ? 'general' : 'owner';
+  USER_NAME = name || '';
+  try{
+    sessionStorage.setItem('quote_role', USER_ROLE);
+    sessionStorage.setItem('quote_name', USER_NAME);
+  }catch(e){}
+  applyRoleUI();
+}
 let editingQuoteNo = null;    // 若非 null 表示正在編輯既有報價單
 
 /* ---- API 呼叫核心（GAS Web App 用 text/plain 避開 CORS preflight）---- */
@@ -73,19 +147,20 @@ async function apiCall(payload){
    ------------------------------------------------------------------ */
 const REMEMBER_KEY = 'qs_session_v1';
 function rememberSave(token){
-  try{ localStorage.setItem(REMEMBER_KEY, JSON.stringify({ t:token, exp:Date.now()+8*60*60*1000 })); }catch(e){}
+  try{ localStorage.setItem(REMEMBER_KEY, JSON.stringify({ t:token, exp:Date.now()+8*60*60*1000, r:USER_ROLE, n:USER_NAME })); }catch(e){}
 }
 function rememberClear(){ try{ localStorage.removeItem(REMEMBER_KEY); }catch(e){} }
 function rememberRead(){
   try{
     const c = JSON.parse(localStorage.getItem(REMEMBER_KEY) || 'null');
     if(!c || !c.t || !c.exp || Date.now() >= c.exp){ rememberClear(); return null; }
+    if(c.r) setUser(c.r, c.n);
     return c.t;
   }catch(e){ rememberClear(); return null; }
 }
 function doLogout(){
   AUTH_TOKEN = null;
-  try{ sessionStorage.removeItem('quote_token'); }catch(e){}
+  try{ sessionStorage.removeItem('quote_token'); sessionStorage.removeItem('quote_role'); sessionStorage.removeItem('quote_name'); }catch(e){}
   rememberClear();
   if(typeof tdCacheClear==='function') tdCacheClear();
   rcClear();
@@ -107,6 +182,7 @@ async function doLogin(){
     if(data.ok && data.token){
       AUTH_TOKEN = data.token;
       sessionStorage.setItem('quote_token', data.token);
+      setUser(data.role, data.name);          // v46 起後端登入會回角色；舊後端沒回就當老闆（維持原行為）
       const rem = document.getElementById('login-remember');
       if(rem && rem.checked) rememberSave(data.token); else rememberClear();
       hideLogin();
