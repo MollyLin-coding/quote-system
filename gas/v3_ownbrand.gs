@@ -43,7 +43,9 @@ const SHEET_CONSIGN_LEDGER = 'consign_ledger';
 const OWNBRAND_PRODUCTS_HEADERS = ['sku_id', 'name', 'abv', 'volume', 'list_price', 'cost', 'bottle_type', 'active', 'synced_at'];
 const OWNBRAND_TIERS_HEADERS = ['channel', 'min_qty', 'discount', 'free_ship', 'note'];
 const CONSIGN_TERMS_HEADERS = ['key', 'value', 'note'];
-const CONSIGN_CUSTOMERS_HEADERS = ['customer_id', 'company_id', 'name', 'default_discount', 'billing_day', 'contact', 'phone', 'ship_address', 'active', 'note'];
+/* deposit_required（2026-08-06 加）：這個客戶要不要押保證金。空白／'Y' 視為要收（維持舊行為），
+   填 'N' 的客戶鋪貨時不計保證金、庫存頁也不累計保證金餘額。舊資料沒有這欄＝照舊收。 */
+const CONSIGN_CUSTOMERS_HEADERS = ['customer_id', 'company_id', 'name', 'default_discount', 'billing_day', 'contact', 'phone', 'ship_address', 'active', 'note', 'deposit_required'];
 const CONSIGN_DISCOUNTS_HEADERS = ['customer_id', 'sku_id', 'discount', 'note'];
 const CONSIGN_LEDGER_HEADERS = ['movement_id', 'date', 'customer_id', 'sku_id', 'type', 'qty', 'unit_price', 'note', 'created_at'];
 
@@ -551,9 +553,17 @@ function handleGetConsignInventory_(params) {
     };
   });
 
+  /* 2026-08-06 Molly：不是每個寄售客戶都押保證金。客戶主檔 deposit_required='N' 的，
+     這裡就不累計保證金餘額（空白或 'Y' 一律照舊收，舊資料沒這欄不受影響）。 */
+  const custs = v2ReadAll_(SHEET_CONSIGN_CUSTOMERS, CONSIGN_CUSTOMERS_HEADERS);
+  const noDeposit = {};
+  custs.forEach(function (c) {
+    if (String(c.deposit_required || '').toUpperCase() === 'N') noDeposit[String(c.customer_id)] = true;
+  });
   const depositByCustomer = {};
   inventory.forEach(function (row) {
     if (row.deposit_pool_qty <= 0) return;
+    if (noDeposit[String(row.customer_id)]) return;
     const depKey = row.volume === '100ml' ? 'deposit_100ml' : (row.volume === '500ml' ? 'deposit_500ml' : null);
     const depUnit = depKey ? Number(terms[depKey] || 0) : 0;
     depositByCustomer[row.customer_id] = (depositByCustomer[row.customer_id] || 0) + row.deposit_pool_qty * depUnit;
