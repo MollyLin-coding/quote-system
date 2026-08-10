@@ -470,9 +470,9 @@ function buildConsignVerifyModal(){
   const ttl=document.querySelector('#cs-vf-overlay .v2h span');
   if(ttl) ttl.textContent = CONSIGN_VF_EDIT_ID ? '編輯驗收單（產生後取代舊留底）' : '寄售鋪貨・出貨驗收單';
   const inS='border:1px solid var(--bd);border-radius:5px;padding:5px 7px;font-size:12px;font-family:inherit;width:100%';
-  const rowsH=d.rows.map((r,i)=>`<tr>
-    <td><input style="${inS}" data-i="${i}" data-k="name" class="cvfi" value="${escHtml(r.name||'')}"></td>
-    <td><input style="${inS};width:90px" data-i="${i}" data-k="vol" class="cvfi" value="${escHtml(r.vol||'')}"></td>
+  const rowsH=d.rows.map((r,i)=>`<tr${r.taster?' style="background:#FBF8F1"':''}>
+    <td><input style="${inS}" data-i="${i}" data-k="name" class="cvfi" value="${escAttr(r.name||'')}">${r.taster?'<div style="font-size:10.5px;color:#7A5A1E;margin-top:3px">試飲瓶（免費贈送，不計價／不收保證金／不進庫存）</div>':''}</td>
+    <td><input style="${inS};width:90px" data-i="${i}" data-k="vol" class="cvfi" value="${escAttr(r.vol||'')}"></td>
     <td><input type="number" min="0" style="${inS};width:80px" data-i="${i}" data-k="qty" class="cvfi" value="${(r.qty!==''&&r.qty!=null)?r.qty:''}"></td>
     <td style="text-align:center"><button class="del" onclick="csVfDelRow(${i})">✕</button></td>
   </tr>`).join('');
@@ -494,7 +494,7 @@ function buildConsignVerifyModal(){
       </table>
     </div>
     <button type="button" class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63;font-size:12px;padding:6px 12px;margin-top:8px" onclick="csVfAddRow()">＋ 新增品項</button>
-    <p style="font-size:11px;color:var(--hint);margin-top:10px;line-height:1.6">簡化版驗收單：品項／容量／數量＋簽收欄，右下 QR 供客戶收貨後線上驗收回報（跟訂單那套出貨驗收單共用同一套回報系統）。</p>`;
+    <p style="font-size:11px;color:var(--hint);margin-top:10px;line-height:1.6">簡化版驗收單：品項／容量／數量，右下 QR 供客戶收貨後線上驗收回報（版面與一般報價單的出貨驗收單一致，不另設簽收欄）。標「試飲」的列為免費贈送的試飲瓶。</p>`;
 }
 function csVfSyncFromInputs(){
   if(!CONSIGN_VF_DATA) return;
@@ -528,8 +528,14 @@ function csVfCollect(){
 function buildConsignVerifyDocHtml(d, opts){
   const isPreview=!!(opts&&opts.preview);
   const qrSvg=verifyQrSvg(verifyQrUrl(d.no,''),4);
-  const theadCols=`<th class="l" style="width:50%">酒款</th><th style="width:20%">容量</th><th style="width:15%">數量</th><th style="width:15%">簽收</th>`;
-  const rowsHtml=d.rows.map(r=>`<tr><td class="l">${escHtml(r.name)}</td><td>${escHtml(r.vol)||'—'}</td><td>${(parseFloat(r.qty)||0)||'—'}</td><td></td></tr>`);
+  /* 2026-08-06 Molly：拿掉「簽收」欄，改對齊一般報價單那套出貨驗收單的格式
+     （那套沒有簽收欄、也沒有手簽名欄位，一律走 QR 線上回報）。 */
+  const theadCols=`<th class="l" style="width:58%">酒款</th><th style="width:21%">容量</th><th style="width:21%">數量</th>`;
+  const rowsHtml=d.rows.map(r=>{
+    // 試飲瓶：免費贈送，驗收單上明確標示，客戶一眼看得出這瓶不計價
+    const tag=r.taster?' <span style="font-size:10px;font-weight:700;color:#7A5A1E;background:#F3ECDD;border-radius:4px;padding:1px 6px;margin-left:4px">試飲</span>':'';
+    return `<tr><td class="l">${escHtml(r.name)}${tag}</td><td>${escHtml(r.vol)||'—'}</td><td>${(parseFloat(r.qty)||0)||'—'}</td></tr>`;
+  });
   const headerBlockHtml=`
   <div class="hd">
     <div class="hl"><img src="${VERIFY_LOGO}" alt="凱文南坡萬實業社"></div>
@@ -547,15 +553,12 @@ function buildConsignVerifyDocHtml(d, opts){
   <div class="ft">
     <div class="fl2">
       <div class="notes">
-        <div class="nh">簽收確認</div>
-        <div class="nb">請確認到貨品項與數量無誤後簽名；如有品項瑕疵或數量不符，可掃描右側 QR 線上回報，我們會盡快處理。</div>
-      </div>
-      <div style="margin-top:18px;display:flex;gap:28px">
-        <div style="flex:1;border-top:1px solid #c7ac6e;padding-top:6px;font-size:10px;color:#9a9689">客戶簽名</div>
-        <div style="flex:1;border-top:1px solid #c7ac6e;padding-top:6px;font-size:10px;color:#9a9689">簽收日期</div>
+        <div class="nh">驗收與品質說明</div>
+        <div class="nb"><b>驗收回報</b>　為保障您的權益，請於收到商品後 <b>7 日內</b>掃描右側 QR Code 完成線上驗收。若逾期未填寫，將視同驗收合格。如商品有任何問題，請隨時回報，我們將第一時間為您處理。</div>
+        <div class="nb"><b>品質保證</b>　本產品採用<b>天然水果原料</b>製成，若瓶內出現果肉纖維或微量沉澱，均屬自然現象，請安心飲用。</div>
       </div>
     </div>
-    <div class="qr">${qrSvg||''}<div class="cap">掃碼線上驗收回報</div><div class="cap2">Scan to confirm</div></div>
+    <div class="qr">${qrSvg||''}<div class="cap">線上驗收回報</div><div class="cap2">收貨後 7 日內</div></div>
   </div>`;
   const pages=buildVerifyPages({headerBlockHtml, theadCols, rowsHtml, footBlockHtml});
   return `<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8"><title>寄售鋪貨驗收單_${escHtml(d.client||'')}_${escHtml(d.shipDate||'')}</title>
@@ -589,7 +592,8 @@ function saveConsignVerifyFormRecord(d){
     if(!AUTH_TOKEN) return;
     const editId=CONSIGN_VF_EDIT_ID; CONSIGN_VF_EDIT_ID=null;
     const record={ no:d.no, lot:'', shipDate:d.shipDate, pm:d.handler||'', boxes:'', client:d.client,
-      items:(d.rows||[]).map(r=>({ name:r.name, lot:'', vol:r.vol, mfg:'', thisShip:parseFloat(r.qty)||0, ordered:parseFloat(r.qty)||0, shipped:0 })) };
+      // taster 一起存進 items_json，之後從留底編輯這張單時「試飲」標示不會掉
+      items:(d.rows||[]).map(r=>({ name:r.name, lot:'', vol:r.vol, mfg:'', thisShip:parseFloat(r.qty)||0, ordered:parseFloat(r.qty)||0, shipped:0, taster:r.taster?1:0 })) };
     /* 複檢 2026-08-06 #23：留底存檔原本失敗完全不出聲，使用者不會知道這批沒留底——
        下次開驗收單就算不到這批，「已出貨」歸零、「本次出貨」又帶成全部數量。改成明確提示。 */
     apiCall({action:'saveVerifyForm', token:AUTH_TOKEN, record}).then(res=>{

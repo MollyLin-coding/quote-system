@@ -243,7 +243,8 @@ function vmEditForm(id){
     openConsignVerifyForm({
       no:noStr, client:f.client||vmClientOf(noStr)||'',
       shipDate:vmLocalYmd(f.ship_date)||'', handler:f.pm||'', note:'',
-      rows:items.map(it=>({ name:it.name||'', vol:it.vol||'', qty:(it.thisShip!=null&&it.thisShip!=='')?it.thisShip:(it.ordered||0) }))
+      // taster＝試飲瓶標示（2026-08-06 加）：從留底編輯時要一起帶回，否則重新產生會掉標示
+      rows:items.map(it=>({ name:it.name||'', vol:it.vol||'', qty:(it.thisShip!=null&&it.thisShip!=='')?it.thisShip:(it.ordered||0), taster:!!(it.taster&&String(it.taster)!=='0') }))
     }, id);
     toast('已帶回這筆驗收單；只看不改直接關閉即可，修改後按「產生驗收單」會以新版取代舊紀錄','ok');
     return;
