@@ -111,9 +111,31 @@ function ordSideBadges(force){
   loadOrderVerifyBadges(force);
   loadShipmentBadges(force);
 }
+/* ── 卡關天數（2026-08-11 優化建議 #3）─────────────────────────────
+   「這張單停在〈排產中〉幾天了」。取「讓它進到目前這一關的那個日期」往今天算：
+   報價中→報價日、已收訂金/排產中→訂金日、已出貨→實際出貨日、已開發票→發票日、已收尾款→尾款收款日。
+   結案與取消不算（已經結束了，不需要催）。日期缺漏就回 null，畫面上不顯示。 */
+function ordStageSince(o){
+  const st=(o&&o.st)||{}; const s=effOrdStatus(st);
+  if(s==='closed'||s==='cancelled') return null;
+  const pick={quoted:o.quoteDate, deposit:st.deposit_date, production:st.deposit_date,
+              shipped:st.ship_date_actual, invoiced:(st.invoice_date||st.ship_date_actual),
+              paid:st.final_date}[s];
+  const d=String(pick==null?'':pick).trim();
+  if(!/^\d{4}-\d{2}-\d{2}/.test(d)) return null;
+  const n=daysBetween(d.slice(0,10));
+  return n==null?null:-n;   // daysBetween 是「還有幾天」，這裡要「過了幾天」
+}
+/* 幾天以上才顯示：7 天內是正常流程，不吵。14 天橘、30 天紅。 */
+function ordStuckBadge(o){
+  const n=ordStageSince(o);
+  if(n==null||n<7) return '';
+  const cls=n>=30?'red':(n>=14?'warn':'info');
+  return `<span class="ob ${cls}">停在「${stageLabel(effOrdStatus(o.st))}」${n} 天</span>`;
+}
 function orderBadges(o){
   const s=effOrdStatus(o.st);
-  let h='';
+  let h=ordStuckBadge(o);
   // 2026-08-08 Molly：報價到期不需要提醒，這裡的「有效期剩 N 天／已過有效期」整段拿掉。
   if(o.st?.ship_date_est && !o.st?.ship_date_actual && ['deposit','production','quoted'].includes(s)){
     const d=daysBetween(o.st.ship_date_est);
@@ -640,6 +662,17 @@ function rptFinalAmt(o){
   const dep=parseFloat(s.deposit_amt)||0;
   return {amt:gt-dep, est:true};
 }
+/* 帳齡天數：這筆應收「掛在帳上幾天了」。優先用發票日（開了票才真的算應收），
+   沒開票就用實際出貨日；兩個都沒有才退回預計尾款日、再退回報價日。都沒有回 null。 */
+function rptAgeDays(o){
+  const s=o.st||{};
+  const cand=[s.invoice_date, s.ship_date_actual, s.final_date_est, o.quoteDate];
+  for(const c of cand){
+    const d=String(c==null?'':c).trim();
+    if(/^\d{4}-\d{2}-\d{2}/.test(d)){ const n=daysBetween(d.slice(0,10)); if(n!=null) return -n; }
+  }
+  return null;
+}
 function rptUnpaidList(){
   if(!ORDERS_CACHE) return [];
   return ORDERS_CACHE.filter(o=>{
@@ -680,9 +713,20 @@ function renderReport(){
   const paidThisMonth=ORDERS_CACHE.filter(o=>effOrdStatus(o.st)!=='cancelled' && (o.st?.final_date||'').startsWith(mm));
   const paidSum=paidThisMonth.reduce((s,o)=>s+(parseFloat(o.st.final_amt)||0),0);
   const unpaidList=rptUnpaidList();
-  const rptRowDaysLeft=r=>{ const d=daysBetween(r.o.st?.final_date_est); return d==null?99999:d; };
-  const unpaidRows=unpaidList.map(o=>({o, ...rptFinalAmt(o)})).sort((a,b)=>rptRowDaysLeft(a)-rptRowDaysLeft(b));
+  /* 帳齡（2026-08-11 優化建議 #3）：從「這筆錢開始能收」那天算起——
+     有開發票就從發票日，沒開就從實際出貨日；都沒有才退回預計尾款日／報價日。
+     排序改成帳齡由大到小＝欠最久的排最前面，才知道要先催誰。 */
+  const unpaidRows=unpaidList.map(o=>({o, age:rptAgeDays(o), ...rptFinalAmt(o)}))
+    .sort((a,b)=>(b.age==null?-1:b.age)-(a.age==null?-1:a.age));
   const unpaidSum=unpaidRows.reduce((s,r)=>s+r.amt,0);
+  const ageBuckets=[
+    {k:'≤30 天',   hit:n=>n!=null&&n<=30,            col:'#5A5850'},
+    {k:'31–60 天', hit:n=>n!=null&&n>30&&n<=60,      col:'#B5541F'},
+    {k:'61–90 天', hit:n=>n!=null&&n>60&&n<=90,      col:'#B03A2E'},
+    {k:'超過 90 天',hit:n=>n!=null&&n>90,            col:'#B03A2E'},
+    {k:'無日期',    hit:n=>n==null,                   col:'#A8A69C'}
+  ].map(b=>{ const rs=unpaidRows.filter(r=>b.hit(r.age)); return {...b, n:rs.length, a:rs.reduce((s,r)=>s+r.amt,0)}; })
+   .filter(b=>b.n>0);
   const unbilledList=rptUnbilledList().slice().sort((a,b)=>(a.st?.ship_date_actual||'').localeCompare(b.st?.ship_date_actual||''));
 
   el.innerHTML=`
@@ -701,8 +745,10 @@ function renderReport(){
     </tbody></table></div>`:'<div class="rec-empty">本月尚無成交（有填訂金日／出貨日／收款日其中一個，就會列入該月）</div>'}
     <div style="font-size:11px;color:#A8A69C;margin-top:8px">※ 成交以「最早的實際往來日」歸屬月份：有收訂金→算收訂金那個月；先出貨後請款→算出貨那個月；直接付全款→算收款那個月。「本月報價」則照報價日計算。</div>
 
-    <div class="rpt-head" style="margin-top:22px">還沒收的尾款　<span style="font-size:11px;color:#A8A69C;font-weight:400">已出貨或已開發票、但還沒收尾款的單（不分月份，點列可開編輯進度）</span></div>
-    ${unpaidRows.length?`<div class="tbl-scroll"><table class="rec-table mcard" style="margin-top:8px"><thead><tr><th>單號</th><th>客戶</th><th style="text-align:right">尾款金額</th><th style="text-align:center">預計尾款日</th><th style="text-align:center">發票</th></tr></thead><tbody>
+    <div class="rpt-head" style="margin-top:22px">還沒收的尾款　<span style="font-size:11px;color:#A8A69C;font-weight:400">已出貨或已開發票、但還沒收尾款的單（不分月份，欠最久的排最前面，點列可開編輯進度）</span></div>
+    ${ageBuckets.length?`<div class="rpt-age">${ageBuckets.map(b=>
+      `<div class="rpt-age-box"><div class="k">帳齡 ${b.k}</div><div class="v" style="color:${b.col}">${money(b.a)}</div><div class="n">${b.n} 筆</div></div>`).join('')}</div>`:''}
+    ${unpaidRows.length?`<div class="tbl-scroll"><table class="rec-table mcard" style="margin-top:8px"><thead><tr><th>單號</th><th>客戶</th><th style="text-align:right">尾款金額</th><th style="text-align:center">預計尾款日</th><th style="text-align:center">發票</th><th style="text-align:center">帳齡</th></tr></thead><tbody>
       ${unpaidRows.map(r=>{
         const o=r.o, s=o.st||{};
         const fde=s.final_date_est;
@@ -714,9 +760,10 @@ function renderReport(){
           <td data-l="尾款金額" style="text-align:right">${money(r.amt)}${r.est?'<span style="color:#B5541F;font-size:10.5px;margin-left:4px">推估</span>':''}</td>
           <td data-l="預計尾款日" style="text-align:center">${fdeTxt}</td>
           <td data-l="發票" style="text-align:center">${s.invoice_no?'✓':'未開'}</td>
+          <td data-l="帳齡" style="text-align:center">${r.age==null?'—':`<span class="ob ${r.age>90?'red':(r.age>60?'red':(r.age>30?'warn':'info'))}">${r.age} 天</span>`}</td>
         </tr>`;
       }).join('')}
-    </tbody><tfoot><tr><td colspan="2" style="text-align:right;font-weight:700">合計</td><td style="text-align:right;font-weight:700">${money(unpaidSum)}</td><td colspan="2"></td></tr></tfoot></table></div>`
+    </tbody><tfoot><tr><td colspan="2" style="text-align:right;font-weight:700">合計</td><td style="text-align:right;font-weight:700">${money(unpaidSum)}</td><td colspan="3"></td></tr></tfoot></table></div>`
       :'<div class="rec-empty">目前沒有還沒收的尾款 🎉</div>'}
 
     <div class="rpt-head" style="margin-top:22px">已出貨未開發票　<span style="font-size:11px;color:#A8A69C;font-weight:400">出貨超過 7 天標橘提醒</span></div>
