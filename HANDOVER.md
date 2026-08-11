@@ -691,3 +691,41 @@ Molly 拍板的規則：**免費贈送、不計價、不收保證金、不進庫
 
 **⚠️ 後端要重新部署**：本次動到 `gas/v3_ownbrand.gs`（客戶主檔加欄＋保證金加總跳過不押的客戶）。
 部署後請在寄售管理開一次客戶設定存檔，讓 `deposit_required` 欄實際寫進試算表。
+
+---
+
+## 四點十九、2026-08-11 GAS 線上程式碼回存 GitHub（備份對齊）
+
+### 為什麼要做
+GitHub 上的 gas/ 一直落後線上。線上在 2026-08-07 加了**多帳號登入**那套（程式碼.gs 多出 6 支
+函式），但那次沒有回存 GitHub。也就是說：**當時如果拿 GitHub 的備份還原，會把登入系統整套刪掉。**
+這是很硬的地雷，本次已修正。
+
+### 這次回存了什麼
+| 檔案 | 線上大小 | SHA-256 前 16 碼 | 回存前 GitHub |
+|---|---|---|---|
+| gas/程式碼.gs | 74,748 bytes | 94474cc691a27393 | 63,380 bytes / 546db1b8d8d5439a |
+| gas/v2_extensions.gs | 74,528 bytes | bc3308a554dd352b | 74,070 bytes / 4f223371ee7355d1 |
+
+其餘 5 支（v3_ownbrand.gs、c_verify.gs、v33_digest.gs、v3_1_customer_recipe.gs、
+b4_images.gs）回存前就已經逐位元組相同，不用動。
+
+**驗證方式**：從 raw.githubusercontent.com 重新抓下來重算 SHA-256，兩支都與線上完全相同。
+七支 .gs 現在與 Apps Script 線上版**完全一致**。
+
+### 雷 #4：剪貼簿會把 LF 換成 CRLF
+用瀏覽器剪貼簿搬程式碼時，Windows 剪貼簿會把換行正規化成 CRLF。
+v2_extensions.gs 貼出來變成 76,197 bytes（比線上多 1,669 bytes ＝ 剛好多 1,669 個 CR）。
+**上傳前一定要先把 CRLF 正規化回 LF 再算 hash 比對**，否則會把 CRLF 版本存進備份，
+之後 diff 會整份炸開、看不出真正改了什麼。
+
+### 雷 #5：剪貼簿是 Molly 的，隨時會被蓋掉
+搬檔期間 Molly 本人在電腦上複製東西（地址、電話），中途把剪貼簿蓋掉兩次，
+貼出來只有 35 bytes 與 11 bytes。**每次貼上都必須驗 marker 與 SHA，不可以直接送出。**
+本次流程：Apps Script 分頁 navigator.clipboard.writeText(model.getValue())
+→ GitHub 分頁用隱藏 textarea 接 paste 事件 → 正規化換行 → 比對 SHA → 用 DataTransfer
+組 File 塞進 input[type=file] → commit。全程程式碼不經過對話視窗。
+
+### 往後的規矩
+**只要動到線上 GAS，當天就把該檔回存 GitHub。** 線上與備份一旦分岔，
+還原就變成賭博——這次差一點就用舊備份把登入功能蓋掉。
