@@ -10,7 +10,8 @@
  * 3. 部署為 Web App，執行身分：「我」，存取權限：「任何人」
  *
  * action 列表：
- * - login            驗證 PIN，回傳 token
+ * - login            驗證 PIN，回傳 token（2026-08-07 起：多帳號，回應多帶 role/name/uid）
+ * - getUsers/saveUser 帳號管理（owner-only；saveUser 不接受 pin，密碼要 Molly 自己去 users 分頁填）
  * - createQuote      建立新報價單
  * - getQuotes        取得報價單列表（可篩選）
  * - getQuoteById     取得單張報價單完整資料
@@ -62,7 +63,8 @@ const MAIN_COLS = {
   shipPhone: 34,            // AH 出貨電話（v2.4，選填）
   shipAddress: 35,           // AI 出貨地址（v2.4，選填；有值才視為與發票地址不同）
   expectedShipDate: 36, // AJ expected ship date (v2.5)
-  showShipDate: 37       // AK show ship date Y/N (v2.5)
+  showShipDate: 37,      // AK show ship date Y/N (v2.5)
+  createdBy: 38          // AL 建立者（v51 多人版：存登入者姓名；舊單為空）
 };
 
 const ITEM_COLS = {
@@ -91,12 +93,40 @@ const MAIN_HEADERS = [
   '價格模式','稅率','付款條件類型','付款條件詳情','備註','圖片連結','狀態',
   '建立時間','最後修改時間','PDF連結','Word連結',
   '佈置地點','進場時間','供酒時間','撤場時間','調酒師服務費模式','調酒師服務費金額',
-  '發票抬頭','出貨聯絡人','出貨電話','出貨地址','預計出貨日','顯示出貨日'
+  '發票抬頭','出貨聯絡人','出貨電話','出貨地址','預計出貨日','顯示出貨日','建立者'
 ];
 
 const ITEM_HEADERS = [
   '報價單號','品項類型','品名','批次','容量ml','單價','標費扣除','LOGO印刷費',
   '數量','單位','小計','品名清單','OEM','貼牌','原價','折數','不計價'
+];
+
+// ===================================================================
+// 多使用者帳號（2026-08-07 新增）：users 分頁存個人帳號，PIN_CODE（Script
+// Properties）維持是老闆帳號，兩者並存。角色只有 'owner'（老闆，全權限）跟
+// 'general'（一般使用者，見 OWNER_ONLY_ACTIONS_ 白名單）。
+// ===================================================================
+const SHEET_USERS = 'users';
+const OWNER_DISPLAY_NAME = 'Molly';   // 老闆帳號（PIN_CODE 那組）在畫面上的名字
+const USERS_HEADERS = ['user_id', 'name', 'pin', 'role', 'active', 'created_at', 'updated_at'];
+
+// 這些 action 只有 role==='owner' 才能呼叫；其餘 action 只要有效登入（不分角色）即可。
+// 對照 2026-08-07 跟 Molly 定案的權限表：一般使用者＝報價查詢/新增/修改報價單、
+// 出貨驗收全套、訂單追蹤唯讀、寄售管理唯讀；不能刪除任何紀錄、不能改客戶主檔／
+// 價目表、不能碰帳號與系統設定、看不到工作行事曆（未討論到，先預設不開放）。
+var OWNER_ONLY_ACTIONS_ = [
+  'setupItemHeaders',
+  'deleteQuote',
+  'updateOrderStatus', 'saveInvoicePhotos', 'addShipment', 'updateShipment', 'deleteShipment',
+  'listCalendarItems', 'saveCalendarItem', 'deleteCalendarItem', 'syncCalendarNow',
+  'getChangeLog',
+  'syncOwnbrandProducts', 'syncCustomerProducts', 'syncAllCustomerProducts',
+  'saveConsignCustomer', 'saveConsignDiscount', 'deleteConsignDiscount',
+  'addConsignMovement', 'addConsignMovements',
+  'deleteVerification', 'deleteVerifyForm',
+  'setupWeeklyBackup', 'runBackupNow', 'protectHeaders',
+  'saveCustomer', 'deleteCustomer', 'seedCustomersFromQuotes',
+  'getUsers', 'saveUser'
 ];
 
 // ===================================================================
@@ -191,21 +221,154 @@ function resolveColMaps_() {
   } catch (e) {}
 }
 
-function checkPin_(pin) {
-  const props = PropertiesService.getScriptProperties();
-  const correctPin = props.getProperty('PIN_CODE');
-  if (!correctPin) {
-    throw new Error('系統尚未設定 PIN_CODE，請在 Script Properties 中設定');
-  }
-  return String(pin) === String(correctPin);
+function getUsersSheet_() {
+  return v2Sheet_(SHEET_USERS, USERS_HEADERS);
 }
 
-function generateToken_() {
+// 老闆帳號＝Script Properties 的 PIN_CODE（沿用舊機制，不動 Molly 現有登入方式）。
+// 一般使用者＝users 分頁裡 active!=='N' 的列，逐列比對 pin。回傳 {uid,name,role} 或 null。
+function identifyUserByPin_(pin, name) {
+  const props = PropertiesService.getScriptProperties();
+  const ownerPin = props.getProperty('PIN_CODE');
+  if (!ownerPin) {
+    throw new Error('系統尚未設定 PIN_CODE，請在 Script Properties 中設定');
+  }
+  // 有指定 name 時＝登入頁選了使用者：只比對那個人，兩個人密碼相同也不會認錯人
+  if (String(pin) === String(ownerPin) && (!name || String(name) === OWNER_DISPLAY_NAME)) {
+    return { uid: 'owner', name: OWNER_DISPLAY_NAME, role: 'owner' };
+  }
+  try {
+    const sh = getUsersSheet_();
+    const lastRow = sh.getLastRow();
+    if (lastRow > 1) {
+      const idxPin = USERS_HEADERS.indexOf('pin');
+      const idxActive = USERS_HEADERS.indexOf('active');
+      const idxUid = USERS_HEADERS.indexOf('user_id');
+      const idxName = USERS_HEADERS.indexOf('name');
+      const idxRole = USERS_HEADERS.indexOf('role');
+      const rows = sh.getRange(2, 1, lastRow - 1, USERS_HEADERS.length).getValues();
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const rPin = r[idxPin];
+        if (rPin === '' || rPin === null || rPin === undefined) continue; // 密碼欄空白＝尚未設定，不可用來登入
+        if (String(r[idxActive]) === 'N') continue;
+        if (name && String(r[idxName]) !== String(name)) continue;   // v51：選了使用者就只比對那一列
+        if (String(rPin) === String(pin)) {
+          return { uid: r[idxUid], name: r[idxName], role: r[idxRole] || 'general' };
+        }
+      }
+    }
+  } catch (e) { /* users 分頁還沒建立時視同查無此人 */ }
+  return null;
+}
+
+/* v51：登入頁的使用者下拉清單。**刻意不需要 token**（登入前就要用），
+   所以只回「名字」——不回 user_id、不回角色、絕不回密碼。
+   只列出已設好密碼且未停用的人；老闆固定排第一個。 */
+function handleGetLoginUsers_() {
+  var names = [OWNER_DISPLAY_NAME];
+  try {
+    var sh = getUsersSheet_();
+    var lastRow = sh.getLastRow();
+    if (lastRow > 1) {
+      var idxName = USERS_HEADERS.indexOf('name');
+      var idxPin = USERS_HEADERS.indexOf('pin');
+      var idxActive = USERS_HEADERS.indexOf('active');
+      var rows = sh.getRange(2, 1, lastRow - 1, USERS_HEADERS.length).getValues();
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        var pin = r[idxPin];
+        if (pin === '' || pin === null || pin === undefined) continue;  // 沒設密碼的不列
+        if (String(r[idxActive]) === 'N') continue;
+        var nm = String(r[idxName] || '').trim();
+        if (nm && names.indexOf(nm) < 0) names.push(nm);
+      }
+    }
+  } catch (e) { /* users 分頁還沒建立時只回老闆 */ }
+  return { ok: true, users: names };
+}
+
+// ===== 帳號管理（owner-only，見 OWNER_ONLY_ACTIONS_）=====
+// ⚠ 刻意不接受/不會寫入 pin 欄位：新使用者的密碼一律由 Molly 自己到 Google Sheet
+// 的 users 分頁手動輸入，程式碼不經手密碼值。
+function handleGetUsers_(params) {
+  const sh = getUsersSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return { ok: true, users: [] };
+  const idxUid = USERS_HEADERS.indexOf('user_id');
+  const idxName = USERS_HEADERS.indexOf('name');
+  const idxPin = USERS_HEADERS.indexOf('pin');
+  const idxRole = USERS_HEADERS.indexOf('role');
+  const idxActive = USERS_HEADERS.indexOf('active');
+  const idxCreated = USERS_HEADERS.indexOf('created_at');
+  const rows = sh.getRange(2, 1, lastRow - 1, USERS_HEADERS.length).getValues();
+  const users = rows
+    .filter(function (r) { return String(r[idxUid]) !== ''; })
+    .map(function (r) {
+      const pinVal = r[idxPin];
+      return {
+        user_id: r[idxUid],
+        name: r[idxName],
+        role: r[idxRole] || 'general',
+        active: r[idxActive] || 'Y',
+        pin_set: !(pinVal === '' || pinVal === null || pinVal === undefined),
+        created_at: r[idxCreated]
+      };
+    });
+  return { ok: true, users: users };
+}
+
+function handleSaveUser_(params) {
+  const u = params.user || {};
+  if (!u.user_id && !u.name) throw new Error('姓名必填');
+  const role = (u.role === 'owner') ? 'general' : (u.role || 'general'); // owner 只能是 PIN_CODE 那組，這支 API 不能造第二個 owner
+  const sh = getUsersSheet_();
+  const idxUid = USERS_HEADERS.indexOf('user_id');
+  const idxName = USERS_HEADERS.indexOf('name');
+  const idxRole = USERS_HEADERS.indexOf('role');
+  const idxActive = USERS_HEADERS.indexOf('active');
+  const idxCreated = USERS_HEADERS.indexOf('created_at');
+  const idxUpdated = USERS_HEADERS.indexOf('updated_at');
+  const now = tpeNow_();
+  let rowIdx = -1;
+  if (u.user_id) {
+    const lastRow = sh.getLastRow();
+    if (lastRow > 1) {
+      const ids = sh.getRange(2, idxUid + 1, lastRow - 1, 1).getValues();
+      for (let i = 0; i < ids.length; i++) {
+        if (String(ids[i][0]) === String(u.user_id)) { rowIdx = i + 2; break; }
+      }
+    }
+    if (rowIdx === -1) throw new Error('找不到這個 user_id：' + u.user_id);
+  }
+  if (rowIdx === -1) {
+    const uid = 'U-' + Utilities.getUuid().slice(0, 8);
+    const row = new Array(USERS_HEADERS.length).fill('');
+    row[idxUid] = uid;
+    row[idxName] = u.name;
+    row[idxRole] = role;
+    row[idxActive] = 'Y';
+    row[idxCreated] = now;
+    row[idxUpdated] = now;
+    sh.appendRow(row);
+    return { ok: true, user_id: uid, created: true };
+  }
+  if (u.name !== undefined) sh.getRange(rowIdx, idxName + 1).setValue(u.name);
+  if (u.role !== undefined) sh.getRange(rowIdx, idxRole + 1).setValue(role);
+  if (u.active !== undefined) sh.getRange(rowIdx, idxActive + 1).setValue(u.active);
+  sh.getRange(rowIdx, idxUpdated + 1).setValue(now);
+  return { ok: true, user_id: u.user_id, created: false };
+}
+
+function generateToken_(user) {
   const token = Utilities.getUuid();
   const props = PropertiesService.getScriptProperties();
   const expiry = new Date().getTime() + 8 * 60 * 60 * 1000;
   try { sweepExpiredTokens_(props); } catch (e) {}
-  props.setProperty('TOKEN_' + token, String(expiry));
+  const u = user || { uid: 'owner', name: 'Molly', role: 'owner' };
+  props.setProperty('TOKEN_' + token, JSON.stringify({
+    exp: expiry, uid: u.uid, role: u.role, name: u.name
+  }));
   return token;
 }
 
@@ -215,23 +378,34 @@ function sweepExpiredTokens_(props) {
   const all = props.getProperties();
   Object.keys(all).forEach(function (k) {
     if (k.indexOf('TOKEN_') === 0) {
-      var exp = parseInt(all[k], 10);
+      var exp = 0;
+      try {
+        var d = JSON.parse(all[k]);
+        exp = (d && typeof d === 'object') ? d.exp : parseInt(all[k], 10);
+      } catch (e) { exp = parseInt(all[k], 10); }
       if (!exp || nowMs > exp) props.deleteProperty(k);
     }
   });
 }
 
+// 回傳 {uid,name,role} 或 null（舊格式 token／過期／查無皆回 null）
 function validateToken_(token) {
-  if (!token) return false;
+  if (!token) return null;
   const props = PropertiesService.getScriptProperties();
-  const expiryStr = props.getProperty('TOKEN_' + token);
-  if (!expiryStr) return false;
-  const expiry = parseInt(expiryStr, 10);
-  if (new Date().getTime() > expiry) {
+  const raw = props.getProperty('TOKEN_' + token);
+  if (!raw) return null;
+  var data;
+  try { data = JSON.parse(raw); } catch (e) { data = null; }
+  if (!data || typeof data !== 'object' || !data.exp) {
+    // 舊格式 token（純過期時間字串，2026-08-07 前簽發）：一律當無效，逼重新登入一次即可拿到角色資訊
     props.deleteProperty('TOKEN_' + token);
-    return false;
+    return null;
   }
-  return true;
+  if (new Date().getTime() > data.exp) {
+    props.deleteProperty('TOKEN_' + token);
+    return null;
+  }
+  return { uid: data.uid, name: data.name, role: data.role };
 }
 
 // ===================================================================
@@ -292,6 +466,7 @@ function ssApp_() {
 }
 function ssCacheReset_() {
   SS_CACHE_ = null;
+  CURRENT_USER_ = null;
   try { V2_HDR_OK_ = {}; } catch (e) {}
 }
 
@@ -325,6 +500,15 @@ function handleRequest_(e) {
   const action = params.action;
 
   try {
+    if (OWNER_ONLY_ACTIONS_.indexOf(action) !== -1) {
+      requireAuth_(params);
+      if (!CURRENT_USER_ || CURRENT_USER_.role !== 'owner') {
+        // ⚠ 開頭一定要是 FORBIDDEN 不能是 UNAUTHORIZED：前端 apiCall 看到 UNAUTHORIZED 會判定
+        // 「登入過期」→ 清空 token 踢回登入頁。一般使用者只要點到被擋的按鈕就會被登出。
+        // FORBIDDEN 會照一般錯誤顯示，使用者看到的是提示訊息、登入狀態不受影響。
+        throw new Error('FORBIDDEN: 這個功能只有老闆帳號能操作');
+      }
+    }
     switch (action) {
       case 'verifyHeaders':
         return jsonResponse_(verifyHeadersReport_());
@@ -334,6 +518,8 @@ function handleRequest_(e) {
         return jsonResponse_({ ok: true, result: setupItemPricingColumns() });
       case 'login':
         return jsonResponse_(handleLogin_(params));
+      case 'getLoginUsers':
+        return jsonResponse_(handleGetLoginUsers_());
       case 'createQuote': {
         requireAuth_(params);
         const rCreate = handleCreateQuote_(params);
@@ -517,6 +703,15 @@ function handleRequest_(e) {
       case 'seedCustomersFromQuotes':
         requireAuth_(params);
         return jsonResponse_(handleSeedCustomersFromQuotes_(params));
+      case 'getUsers':
+        requireAuth_(params);
+        return jsonResponse_(handleGetUsers_(params));
+      case 'saveUser': {
+        requireAuth_(params);
+        const rUser = handleSaveUser_(params);
+        if (rUser && rUser.ok) logChange_('saveUser', rUser.user_id, params.user || {});
+        return jsonResponse_(rUser);
+      }
       default:
         return jsonResponse_({ ok: false, error: 'Unknown action: ' + action });
     }
@@ -529,10 +724,14 @@ function handleRequest_(e) {
   }
 }
 
+var CURRENT_USER_ = null;
+
 function requireAuth_(params) {
-  if (!validateToken_(params.token)) {
+  const user = validateToken_(params.token);
+  if (!user) {
     throw new Error('UNAUTHORIZED: token 無效或已過期，請重新登入');
   }
+  CURRENT_USER_ = user;
 }
 
 function jsonResponse_(obj) {
@@ -586,7 +785,8 @@ function handleLogin_(params) {
     return { ok: false, locked: true, retry_after_min: lock.retryMin,
              error: '錯誤次數過多，請 ' + lock.retryMin + ' 分鐘後再試' };
   }
-  if (!checkPin_(params.pin)) {
+  var user = identifyUserByPin_(params.pin, params.name);
+  if (!user) {
     var fails = pinFailRecord_();
     var left = PIN_FAIL_LIMIT_ - fails;
     if (left <= 0) {
@@ -596,8 +796,8 @@ function handleLogin_(params) {
     return { ok: false, error: 'PIN 錯誤（再錯 ' + left + ' 次會鎖 ' + PIN_LOCK_MIN_ + ' 分鐘）' };
   }
   pinFailClear_();
-  const token = generateToken_();
-  var res = { ok: true, token: token };
+  const token = generateToken_(user);
+  var res = { ok: true, token: token, role: user.role, name: user.name, uid: user.uid };
   // v38：登入成功順便把「今日待辦」一起帶回去。
   // 前端原本要先 login（2.5 秒）拿到 token，才能再打 getTodayDigest（又 2.5 秒），
   // 兩趟一定是接力的、沒辦法平行；合併之後只剩一趟往返。
@@ -617,6 +817,7 @@ function handleCreateQuote_(params) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   verifyHeaders_(ss);
+  ensureMainHeaders_(mainSheet);          // v51：確保「建立者」等新欄位有表頭
   const quoteNo = generateQuoteNo_(quote.quoteDate);
   const now = tpeNow_();
 
@@ -631,6 +832,8 @@ function handleCreateQuote_(params) {
   row[MAIN_COLS.quoteDate - 1] = quote.quoteDate || '';
   row[MAIN_COLS.expiryDate - 1] = quote.expiryDate || '';
   row[MAIN_COLS.handler - 1] = quote.handler || '';
+  // v51 建立者：一律用「目前登入的人」，不吃前端傳來的值（避免被冒名）
+  row[MAIN_COLS.createdBy - 1] = (typeof CURRENT_USER_ !== 'undefined' && CURRENT_USER_ && CURRENT_USER_.name) ? CURRENT_USER_.name : '';
   row[MAIN_COLS.itemsSubtotal - 1] = quote.itemsSubtotal || 0;
   row[MAIN_COLS.taxAmount - 1] = quote.taxAmount || 0;
   row[MAIN_COLS.extrasTotal - 1] = quote.extrasTotal || 0;
@@ -751,6 +954,28 @@ function handleGetQuotes_(params) {
   }
 
   return { ok: true, quotes: quotes, total: total, page: page, pageSize: pageSize, hasMore: hasMore };
+}
+
+/* v51：主表新增欄位時自動補表頭（只補「該位置目前是空的」，不動既有欄名）。
+   主表沒有 v2Sheet_ 那種自動補欄機制，新增 MAIN_HEADERS 卻不補標籤的話，
+   資料會寫進沒有標題的欄，resolveColMaps_ 之後也對不回來。 */
+function ensureMainHeaders_(sh) {
+  /* ⚠ v52 修：新增欄位時「試算表實際的欄數」可能還不夠。這一步一定要先做、
+     而且**不能包在會吞掉錯誤的 try/catch 裡**——欄位沒補成的話，下面 appendRow
+     一列的格數會對不上而失敗，等於整個「存報價單」都壞掉，卻因為錯誤被吞掉而看不出原因。 */
+  var need = MAIN_HEADERS.length;
+  var maxc = sh.getMaxColumns();
+  if (maxc < need) sh.insertColumnsAfter(maxc, need - maxc);
+
+  try {
+    var cur = sh.getRange(1, 1, 1, need).getValues()[0];
+    for (var i = 0; i < need; i++) {
+      if (String(cur[i] || '').trim() === '') {
+        sh.getRange(1, i + 1).setValue(MAIN_HEADERS[i])
+          .setFontWeight('bold').setBackground('#1B4D2E').setFontColor('#FFFFFF');
+      }
+    }
+  } catch (e) { /* 只有「補標籤文字」失敗可以忽略，欄位數不夠不能忽略 */ }
 }
 
 function verifyHeaders_(ss) {
@@ -993,6 +1218,7 @@ function rowToQuoteObject_(row) {
     quoteDate: formatDateValue_(row[MAIN_COLS.quoteDate - 1]),
     expiryDate: formatDateValue_(row[MAIN_COLS.expiryDate - 1]),
     handler: row[MAIN_COLS.handler - 1],
+    createdBy: row[MAIN_COLS.createdBy - 1] || '',   // v51；舊單沒這欄，回空字串
     itemsSubtotal: row[MAIN_COLS.itemsSubtotal - 1],
     taxAmount: row[MAIN_COLS.taxAmount - 1],
     extrasTotal: row[MAIN_COLS.extrasTotal - 1],
