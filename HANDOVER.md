@@ -729,3 +729,71 @@ v2_extensions.gs 貼出來變成 76,197 bytes（比線上多 1,669 bytes ＝ 剛
 ### 往後的規矩
 **只要動到線上 GAS，當天就把該檔回存 GitHub。** 線上與備份一旦分岔，
 還原就變成賭博——這次差一點就用舊備份把登入功能蓋掉。
+
+---
+
+# 四點十九：2026-08-11 複檢第一級 5 項（會直接少收錢的那批）
+
+複檢報告＝`複檢報告_20260811_全流程複檢與優化建議.md`（在 Molly 的專案資料夾）。
+這批是報告裡的「第一級」，全部是**錯了完全沒有聲音**的類型。回歸測試＝`test_wave5.js`（28 項全過）。
+
+## #1 載入舊單會把自動運費／扣標列整列刪掉 ⭐ 最嚴重
+`js/04_company.js` `applyAutoRules`。`loadQuoteIntoForm` 會先把 `SELECTED_COMPANY`
+清成 null 再還原品項與 extras，但 `afterCalc` 掛勾照樣呼叫 `applyAutoRules`；
+沒選公司時 `want` 是空的，同步邏輯第 3 條分支就把帶 `auto` 標記的列刪掉
+（`locked` 這個旗標全站從來沒有被設定過，擋不住）。
+**8/6 #5 的修法（auto 標記存得回去、也還原得回來）反而讓這條路一定觸發。**
+後果：總計少一筆運費、連帶跳「金額有異動」把原單談好的付款條款改寫；再存一次錢就永久掉了。
+**修法**：`['ship','label'].forEach(...)` 那段整段用 `if(SELECTED_COMPANY)` 包起來。
+使用者主動選「不指定」那條路不受影響——`onSelectCompany` 本來就另外呼叫 `clearAutoRuleExtras()`。
+⚠ 底下的「級距價」段落**刻意不包進去**（它只需要 COMPANY_DATA + 該列 pid），否則 #2 修了也沒用。
+
+## #2 舊單重開後級距價與 MOQ 永久脫鉤
+`product_id` 沒存進品項、載入時也沒還原 `row.dataset.pid`，而級距換價與 MOQ 提醒都以
+`dataset.pid` 為前提。舊單改瓶數不會換級距（停在舊價＝多收或少收），**重選公司也救不回來**。
+**修法**：
+- `collectQuote` 的 bottle 列借用從來沒用到的 `flavorList` 欄存 pid（比照 taglabel／banquet_free
+  的借欄約定，不動資料庫結構；後端正式文件的瓶裝表不印這一欄，只有宴會列會印）。
+- `loadQuoteIntoForm` 還原 `pid`，並多帶一個 `tierBaseQty`＝載入當下的瓶數。
+- `addBotRow` 把 `tierBaseQty` 寫進 `div.dataset`；`collectRows`（切換欄位開關時重建列）一併帶走。
+- `applyAutoRules` 的級距段：瓶數還等於 `tierBaseQty` 就不動單價（不讓級距價在載入的瞬間
+  把當初談好的價錢改掉），使用者一改瓶數就 `delete` 這個旗標、恢復正常換價。
+
+## #3 非訂金型付款條款被硬帶 50/50
+`orderPayFromQuote_`（後端）／`ordPayFromQuote`（前端）只認「支付訂金…元整」。
+Tab1（驗收後付 100%）印「支付款項新台幣 X 元整之 100%」、Tab2（月結）印「支付全額款項新台幣 X 元整」，
+兩種都解不出來 → 退回「總額的一半」。**寄售月結轉出的請款單首當其衝**：尾款腰斬、還憑空掛一筆訂金。
+**修法**：兩邊都先認全額型（`!/支付訂金/` 且比對得到金額 → `{dep:0, bal:全額}`）；
+帶部分比例（例如之 70%）語意不明確，一律回 null 不猜。
+**呼叫端**：後端（`updateOrderStatus` 建新列）改成讀不出來就**留空不寫**——背景自動建列亂猜，
+錯了整條月報表跟著錯而且毫無聲音。前端 `openOrdEdit` 的 `ordDepositPct` 退路**保留**——
+那是填在畫面上給人過目、要按儲存才進資料庫，不是無聲的。
+
+## #4 月報表與今日待辦只看最近 300 張報價單
+`ordPayloads()` 用 `withLimit()`（`LIST_LIMIT=300`），而月報表的「還沒收的尾款」是**累計型**數字，
+用裁切過的清單算會安靜地漏掉舊欠款，翻回幾個月前數字還會愈來愈小。
+**修法**：新增 `ORD_LOAD_ALL` 與 `ordSetLoadAll()`；`gotoPage('report')` 第一次進去時
+強制重抓一次完整清單（不帶 limit），之後維持完整模式、不再重抓。訂單追蹤平常仍是 300 筆。
+⚠ `test_cache.js` 的「月報表：不重抓訂單」已同步改成「第一次補抓一次、第二次不重抓」。
+
+## #5 試飲瓶標示存不進後端留底
+`gas/c_verify.gs` `handleSaveVerifyForm_` 把 items 逐欄重建成白名單，**沒有 `taster`**
+（2026-08-10 只改了前端與 `v3_ownbrand.gs`，`c_verify.gs` 從頭到尾沒動）。
+從留底重印寄售驗收單時「試飲」標籤與「免費贈送」說明會整個消失，**客戶看到的是一支要算錢的 500ml**。
+四點十八第 3 點寫「重新產生不會掉標示」是**錯的**，以此條為準。
+**修法**：白名單補 `taster: (Number(it.taster)||0) ? 1 : 0`。items_json 是自由格式，不影響舊資料。
+⚠ `test_consign_20260806.js` 是用 regex 比對前端原始碼字串，完全驗不到這種「前端存了、後端丟掉」
+的斷點；`test_wave5.js` 改成直接把後端那段 map 抽出來實跑。
+
+## 順帶：補上 8/10 漏升的快取版號
+`?v=20260808c` → `?v=20260811a`。commit `f950043`（8/10）改了 js/06、08、09 卻沒升版號，
+造成混版：新的 08 配舊的 09 → 保證金金額與驗收單版面對不上，而且只發生在部分人的瀏覽器。
+長開分頁不重整的人會一直跑舊碼（「不押保證金」按了會靜默無效）。
+**⚠ 上線後請 Molly 按一次 Ctrl+Shift+R。**
+
+## 回歸狀況
+`test_wave5.js` 28 項全過。全專案 39 支測試逐支與 `git stash` 基準線比對，**零新增失敗**。
+既存的長期 fail（與本次無關）：`test_caltime` calSnap5 23:59、`test_fix0728` 存完即時更新、
+`test_urgent` fallback 未開發票、`test_rpt` 2 項、`test_debt` 2 項、`test_login` 1 項、
+`test_recheck0803` 34/35、`test_cal`／`test_hooks`／`test_v31` 直接拋錯、
+`test_molly_case`（打線上版，數字停在舊版＝正好反映上面的版號問題）。

@@ -95,11 +95,20 @@ function respond(action){
   check('切走再切回訂單追蹤：完全不打後端', countOf('getQuotes')===0 && countOf('getOrderStatusList')===0 && countOf('listCustomQuotes')===0);
   check('切回來列表還在', await page.evaluate(() => document.getElementById('ord-body').innerHTML.includes('20260701-01')));
 
-  /* ---------- 3. 月報表吃現成資料 ---------- */
+  /* ---------- 3. 月報表吃現成資料 ----------
+     複檢 2026-08-11 #4：月報表的「還沒收的尾款」是累計型數字，不能用裁切到 300 筆的
+     清單算（會安靜地漏掉舊欠款）。所以「第一次」進月報表會刻意重抓一次完整清單，
+     之後再進就吃現成資料、不再打後端。 */
   reset();
   await page.evaluate(async () => { gotoPage('report'); });
-  await page.waitForTimeout(400);
-  check('月報表：不重抓訂單', countOf('getQuotes')===0);
+  await page.waitForTimeout(600);
+  check('月報表：第一次進去補抓一次完整清單（複檢 #4 刻意行為）', countOf('getQuotes')===1);
+  check('月報表：抓的是完整清單（不帶 limit）',
+        await page.evaluate(() => ordPayloads()[0].limit===undefined));
+  reset();
+  await page.evaluate(async () => { gotoPage('orders'); gotoPage('report'); });
+  await page.waitForTimeout(600);
+  check('月報表：第二次進去不重抓', countOf('getQuotes')===0);
   check('月報表：有內容（不是空白）', await page.evaluate(() => document.getElementById('rpt-box').innerHTML.length > 50));
 
   /* ---------- 4. 驗收管理與報價紀錄共用同一份快取 ---------- */
