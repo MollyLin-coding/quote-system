@@ -136,6 +136,7 @@ function toggleCol(which){
     const priceEl=row.querySelector('[data-f="price"]');
     return {id,name:gs(row,'name'),lot:lotEl?lotEl.value:(botLotCache[id]||''),vol:gs(row,'vol'),price:gs(row,'price'),ded:botDedCache[id]||'',logo:botLogoCache[id]||'',qty:gs(row,'qty'),lp:lpEl?lpEl.value:'',disc:diEl?diEl.value:'',discManual:(diEl&&diEl.dataset.manual==='1')?1:0,gift:(giftEl&&giftEl.checked)?1:0,mark:(markEl&&markEl.checked)?1:0,
       pid:row.dataset.pid||'', sku:row.dataset.sku||'', listprice:row.dataset.listprice||'',
+      tierBaseQty:(row.dataset.tierBaseQty!=null?row.dataset.tierBaseQty:''),   // 複檢 2026-08-11 #2：切換欄位重建列時別把「還沒動過瓶數」的狀態弄丟
       priceSrc:(priceEl&&priceEl.dataset.src!=null)?priceEl.dataset.src:'', manual:(priceEl&&priceEl.dataset.manual==='1')?1:0};
   }).filter(Boolean);
   document.getElementById('itbody-bot').innerHTML='';
@@ -265,6 +266,9 @@ function addBotRow(prefill){
      級距價與 MOQ 提醒全部失效。同時把 hand-edit 標示與手改監聽一併接回去。 */
   if(prefill && prefill.pid){
     div.dataset.pid=prefill.pid;
+    /* 複檢 2026-08-11 #2：載入舊單時帶進來的「當時瓶數」。
+       瓶數還等於這個值，就代表使用者還沒動過，級距價不介入（保留原單談好的價）。 */
+    if(prefill.tierBaseQty!==''&&prefill.tierBaseQty!=null) div.dataset.tierBaseQty=String(prefill.tierBaseQty);
     const pi=div.querySelector('[data-f="price"]');
     if(pi){
       if(prefill.priceSrc!=='' && prefill.priceSrc!=null) pi.dataset.src=prefill.priceSrc;

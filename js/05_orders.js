@@ -55,8 +55,14 @@ function orderTimelineHtml(o){
 /* 訂單追蹤：三份資料（報價單／自訂單／進度）都走讀取快取。
    有快取先秒開舊的、背景再更新；90 秒內重複進出完全不打後端。
    快取被寫入動作清掉時，這裡的衍生資料也要歸零（見檔尾 onCacheClear）。 */
+/* 複檢 2026-08-11 #4：月報表要完整清單（累計型數字不能用裁切過的資料算）。
+   ordSetLoadAll() 由 gotoPage('report') 呼叫；回傳 true 代表「這次要強制重抓」。
+   一旦打開過月報表就維持完整模式，訂單追蹤與今日待辦 fallback 也一起受惠。 */
+let ORD_LOAD_ALL=false;
+function ordSetLoadAll(){ if(ORD_LOAD_ALL) return false; ORD_LOAD_ALL=true; return true; }
 function ordPayloads(){
-  return [ withLimit({action:'getQuotes', token:AUTH_TOKEN, filters:{}}),
+  const qp={action:'getQuotes', token:AUTH_TOKEN, filters:{}};
+  return [ (ORD_LOAD_ALL||(typeof LIST_LOAD_ALL!=='undefined'&&LIST_LOAD_ALL))?qp:withLimit(qp),
            {action:'listCustomQuotes', token:AUTH_TOKEN},
            {action:'getOrderStatusList', token:AUTH_TOKEN} ];
 }
@@ -275,7 +281,12 @@ function openOrdEdit(no){
   if(!st.updated_at && !String(g('deposit_amt')).trim() && !String(g('final_amt')).trim()){
     const _gt=Math.round(parseFloat(document.getElementById('oe-grand_total').value)||0);
     if(_gt>0){
-      const _fromQuote=ordPayFromQuote(o,_gt);   // 複檢 #3：先用報價單條款上的實際金額
+      /* 複檢 #3：先用報價單條款上的實際金額（2026-08-11 起也認得「全額型」條款：
+         Tab1 驗收後付 100%／Tab2 月結全額 → 訂金 0、尾款全額）。
+         讀不出來才退回客戶主檔的訂金比例——這條退路留著沒關係，因為這裡是「填在畫面上
+         給 Molly 過目、要按儲存才會進資料庫」；真正危險的是後端在背景自動建列時亂猜，
+         那邊已改成讀不出來就留空（見 v2_extensions.gs 的 orderPayFromQuote_ 呼叫端）。 */
+      const _fromQuote=ordPayFromQuote(o,_gt);
       const _dep=_fromQuote?_fromQuote.dep:Math.round(_gt*ordDepositPct(o.client)/100);
       document.getElementById('oe-deposit_amt').value=_dep;
       document.getElementById('oe-final_amt').value=_fromQuote?_fromQuote.bal:(_gt-_dep);
@@ -301,6 +312,17 @@ function ordPayFromQuote(o, gt){
   const s=String((o&&o.payDetail)||'').replace(/<br\s*\/?>/gi,'\n');
   if(!s) return null;
   const num=m=>m?Math.round(parseFloat(String(m[1]).replace(/[$,]/g,''))||0):null;
+  /* 複檢 2026-08-11 #3：全額型條款（Tab1 驗收後付 100%／Tab2 月結全額）沒有「訂金」這個字，
+     原本一律解不出來就退回「總額×比例」，尾款被算成一半、還多掛一筆不會收的訂金。
+     這裡先認全額型：訂金 0、尾款＝全額。Tab3 自訂文字仍回 null（呼叫端留空不猜）。 */
+  if(!/支付訂金/.test(s)){
+    const full=num(s.match(/支付(?:全額)?款項新台幣\s*\$?([\d,]+(?:\.\d+)?)\s*元整/));
+    if(full==null) return null;
+    const mPct=s.match(/元整\s*之\s*(\d+(?:\.\d+)?)\s*%/);
+    if(mPct && Math.round(parseFloat(mPct[1]))!==100) return null;   // 只付部分比例：語意不明確，不猜
+    if(gt>0 && full!==Math.round(gt)) return null;
+    return {dep:0, bal:full};
+  }
   const dep=num(s.match(/支付訂金(?:總計)?新台幣\s*\$?([\d,]+(?:\.\d+)?)\s*元整/));
   if(dep==null) return null;
   let bal=num(s.match(/支付尾款新台幣\s*\$?([\d,]+(?:\.\d+)?)\s*元整/));

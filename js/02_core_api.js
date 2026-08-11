@@ -277,7 +277,12 @@ function gotoPage(p){
   if(p==='report'){
     document.getElementById('nav-report').classList.add('on');
     if(ORDERS_CACHE) renderReport();                       // 有現成資料就先畫，不用等後端
-    loadOrders().then(renderReport).catch(()=>{});
+    /* 複檢 2026-08-11 #4：月報表一定要用完整清單。
+       訂單追蹤平常只抓最近 300 張報價單（LIST_LIMIT）比較快，但月報表的
+       「還沒收的尾款」是累計型數字，用裁切過的清單算會安靜地漏掉舊欠款，
+       而且翻回幾個月前看數字會愈來愈小。進到這一頁就補抓完整的一次。 */
+    const _needAll=(typeof ordSetLoadAll==='function')?ordSetLoadAll():false;
+    loadOrders(_needAll).then(renderReport).catch(()=>{});
   }
   if(p==='verify'){ document.getElementById('nav-verify').classList.add('on'); loadVerifyMgmt().catch(()=>{}); }
   if(p==='cal'){ document.getElementById('nav-cal').classList.add('on'); loadCalendar().catch(()=>{}); }
@@ -329,9 +334,14 @@ function collectQuote(){
       const _gift=(row.querySelector('[data-f="gift"]')&&row.querySelector('[data-f="gift"]').checked)?'Y':'N';
       let _lot=gs(row,'lot'); if(_lot.replace(/\s/g,'').toLowerCase()==='lot') _lot='';   // 未填數字的預填「Lot 」不存
       const _lpEl=row.querySelector('[data-f="lp"]'),_diEl=row.querySelector('[data-f="disc"]');
+      /* 複檢 2026-08-11 #2：把「這一列是公司報價檔的哪個產品」（product_id）一起存下來。
+         沒有它，舊單重新載入後就跟報價檔永久脫鉤——改瓶數不會換級距價（停在舊價＝多收或少收）、
+         MOQ 未達提醒也不會出現，而且重選一次公司也救不回來（列上仍然沒有 pid）。
+         借用 bottle 列從來沒用到的 flavorList 欄存放（比照 taglabel／banquet_free 的借欄約定），
+         不動資料庫結構；後端正式文件的瓶裝表也不會印這一欄（只有宴會列會印）。 */
       items.push({ itemType:'bottle', name, lot:_lot, volume:gv(row,'vol'),
         unitPrice:gv(row,'price'), deduction:colDed?gv(row,'ded'):0, logoFee:colLogo?gv(row,'logo'):0,
-        qty:gv(row,'qty'), unit:'瓶', subtotal:(_gift==='Y'?0:sub), flavorList:'',
+        qty:gv(row,'qty'), unit:'瓶', subtotal:(_gift==='Y'?0:sub), flavorList:(row.dataset.pid||''),
         is_oem:(qType==='bottle'?_marked:'N'), is_label:(qType==='ownlabel'?'Y':'N'), noCharge:_gift,
         listPrice:(colOwn&&_lpEl?(parseFloat(_lpEl.value)||''):''), discount:(colOwn&&_diEl?_diEl.value.trim():'') });
     });
@@ -748,7 +758,12 @@ function loadQuoteIntoForm(q){
       else if(it.itemType==='freeship'){ /* 免運優惠已於上方共用區還原到 f-freeship，不建品項列 */ }
       else if(it.itemType==='taglabel'){ /* 批次標籤已於上方共用區還原到 f-tag-lot / f-tag-cli，不建品項列 */ }
       else if(it.itemType==='svcdetail'){ /* 服務費拆項＝宴會用特殊列，瓶裝型不會有；防呆跳過不建品項列 */ }
+      /* 複檢 2026-08-11 #2：還原 pid（存在 flavorList 欄）＋「載入當下的瓶數」。
+         tierBaseQty 的用意：剛開起來時瓶數還沒被動過，這一列的單價就照原單顯示，
+         不讓級距價在載入的瞬間把當初談好的價錢改掉；等使用者真的改了瓶數，
+         applyAutoRules 才開始按級距換價（也才會出現 MOQ 提醒）。 */
       else { addBotRow({name:it.name,lot:it.lot,vol:it.volume,price:it.unitPrice,ded:it.deduction,logo:it.logoFee,qty:it.qty,mark:((it.is_oem==='Y'||it.is_label==='Y')?1:0), gift:(isGiftItem(it)?1:0),
+        pid:(it.flavorList||''), tierBaseQty:((it.flavorList||'')?String(parseFloat(it.qty)||0):''),
         lp:((it.listPrice!=null&&it.listPrice!=='')?it.listPrice:it.unitPrice), disc:(it.discount!=null?it.discount:''), discManual:((it.discount!=null&&it.discount!=='')?1:0), listprice:(it.listPrice||it.unitPrice)}); }
     });
     if(botItems.length===0) addBotRow();

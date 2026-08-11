@@ -323,8 +323,17 @@ function applyAutoRules(){
       }
     });
   }
-  // 同步 extras 中的 auto 列（使用者手動改過金額的 locked 列不動）
-  ['ship','label'].forEach(k=>{
+  /* 同步 extras 中的 auto 列（使用者手動改過金額的 locked 列不動）
+     複檢 2026-08-11 #1：**沒有選公司時整段跳過**。
+     載入舊單（loadQuoteIntoForm）會先把 SELECTED_COMPANY 清成 null，再還原品項與 extras，
+     但 afterCalc 掛勾照樣會呼叫這支；沒選公司時 want 是空的，下面第 3 條分支就會把
+     8/6 #5 之後「存得回去、也還原得回來」的 auto 列（運費／客戶自備酒標）整列刪掉——
+     總計少一筆運費，還會連帶跳「金額有異動」把原單談好的付款條款改寫。
+     真正該清乾淨的是使用者主動把公司選成「不指定」，那條路 onSelectCompany 已經
+     另外呼叫 clearAutoRuleExtras()，不靠這裡，所以跳過不影響。
+     ⚠ 底下的「級距價」段落不受這個判斷影響（它只需要 COMPANY_DATA + 該列的 pid），
+     否則載入舊單後改瓶數就換不了級距。 */
+  if(SELECTED_COMPANY) ['ship','label'].forEach(k=>{
     let cur=extras.find(e=>e.auto===k);
     const w=want.find(e=>e.auto===k);
     // 只有在規則這輪確實要長這一列時才認領，避免誤動使用者自己加的費用列
@@ -342,6 +351,12 @@ function applyAutoRules(){
     const prod=(COMPANY_DATA?.products||[]).find(x=>String(x.product_id)===String(row.dataset.pid)); if(!prod||!prod.tier_json) return;
     const pi=row.querySelector('[data-f="price"]'); if(!pi||pi.dataset.manual==='1') return;
     const q=gv(row,'qty'); if(!q) return;
+    /* 複檢 2026-08-11 #2：載入舊單後，瓶數還沒被改過就不動單價
+       （否則一開單就把當初談好的價錢換成級距價）。使用者一改瓶數，這道保護就解除。 */
+    if(row.dataset.tierBaseQty!=null){
+      if(String(q)===String(row.dataset.tierBaseQty)) return;
+      delete row.dataset.tierBaseQty;
+    }
     const tiers=parseJsonSafe(prod.tier_json,[]);
     /* 複檢 2026-08-06 #19：
        (a) max 填成空字串時 `t.max==null` 為 false、`q<=''` 恆假，該級距永遠比不中 → 一併當「沒有上限」。
