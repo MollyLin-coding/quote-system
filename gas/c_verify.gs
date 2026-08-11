@@ -492,7 +492,12 @@ function handleSaveVerifyForm_(params) {
       mfg: verifyClean_(it.mfg, 40),
       thisShip: Number(it.thisShip) || 0,
       ordered: Number(it.ordered) || 0,
-      shipped: Number(it.shipped) || 0
+      shipped: Number(it.shipped) || 0,
+      /* 複檢 2026-08-11 #5：試飲瓶標示（2026-08-10 前端加的，後端這支當時沒跟上）。
+         少了它，從留底重印寄售驗收單時「試飲」標籤與「免費贈送（不計價／不收保證金／
+         不進庫存）」的說明會整個消失，客戶看到的是一支要算錢的 500ml。
+         items_json 是自由格式的 JSON，多存一欄不影響舊資料。 */
+      taster: (Number(it.taster) || 0) ? 1 : 0
     };
   });
   var id = verifyFormGenId_();

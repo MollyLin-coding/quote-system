@@ -341,11 +341,10 @@ function handleUpdateOrderStatus_(params) {
         if (_pay) {
           fields.deposit_amt = _pay.dep;
           fields.final_amt = _pay.bal;
-        } else {
-          var _dep = Math.round(_gt * 0.5);
-          fields.deposit_amt = _dep;
-          fields.final_amt = _gt - _dep;
         }
+        /* 複檢 2026-08-11 #3：讀不出來就「留空」，不要退回總額各半。
+           猜錯的代價是月報表的未收尾款、今日待辦的金額全部跟著錯，而且錯得毫無聲音；
+           留空只是要 Molly 在編輯進度時自己填一次（畫面上的「各半帶入」鈕還在）。 */
       }
     }
   }
@@ -425,6 +424,21 @@ function orderPayFromQuote_(quoteNo, gt) {
     }
     if (!detail) return null;
     var s = detail.replace(/<br\s*\/?>/gi, '\n');
+    /* 複檢 2026-08-11 #3：不是每種付款條款都有訂金。
+       Tab1（驗收後付款 100%）印「支付款項新台幣 X 元整之 100%」、
+       Tab2（月結）印「支付全額款項新台幣 X 元整」——這兩種原本都解不出來，
+       呼叫端就退回「總額的一半」，結果尾款被寫成一半、還憑空掛一筆不會收的訂金
+       （寄售月結轉出的請款單首當其衝）。這裡先認全額型：訂金 0、尾款＝全額。
+       Tab3 自訂文字仍然回 null，由呼叫端留空不猜。 */
+    if (!/支付訂金/.test(s)) {
+      var mFull = s.match(/支付(?:全額)?款項新台幣\s*\$?([\d,]+(?:\.\d+)?)\s*元整/);
+      if (!mFull) return null;
+      var mPct = s.match(/元整\s*之\s*(\d+(?:\.\d+)?)\s*%/);
+      if (mPct && Math.round(parseFloat(mPct[1])) !== 100) return null;   // 只付部分比例：語意不明確，不猜
+      var full = Math.round(parseFloat(String(mFull[1]).replace(/,/g, '')) || 0);
+      if (gt > 0 && full !== Math.round(gt)) return null;
+      return { dep: 0, bal: full };
+    }
     var mDep = s.match(/支付訂金(?:總計)?新台幣\s*\$?([\d,]+(?:\.\d+)?)\s*元整/);
     if (!mDep) return null;
     var dep = Math.round(parseFloat(String(mDep[1]).replace(/,/g, '')) || 0);
