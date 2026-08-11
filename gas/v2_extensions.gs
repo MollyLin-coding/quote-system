@@ -63,7 +63,7 @@ var SHEET_ORDER_SHIPMENTS = 'order_shipments';
 var ORDER_SHIP_HEADERS = ['id','quote_no','seq','ship_date_est','ship_date_actual','amount','invoice_no','invoice_last5','note','created_at','updated_at'];
 var INVOICE_IMG_ROOT = '發票照片';
 const CALENDAR_HEADERS = ['item_id','kind','date','recur_json','title','detail','category','priority','done','done_date','created_at','updated_at','time','all_day','source_quote_no','repeat_interval'];
-const CHANGELOG_HEADERS = ['ts','action','ref_no','payload_json'];
+const CHANGELOG_HEADERS = ['ts','action','ref_no','payload_json','operator']; // operator＝2026-08-07 新增，記錄是誰做的操作
 
 // ===================================================================
 // 初始化：建立 v2 分頁與測試資料（手動執行一次；可重複執行，不會清掉既有資料）
@@ -234,7 +234,11 @@ function v2AsCell_(v) {
 function logChange_(action, refNo, payload) {
   try {
     const sh = v2Sheet_(SHEET_CHANGELOG, CHANGELOG_HEADERS);
-    sh.appendRow([tpeNow_(), action, refNo || '', JSON.stringify(payload || {})]);
+    var operator = '';
+    try {
+      if (typeof CURRENT_USER_ !== 'undefined' && CURRENT_USER_ && CURRENT_USER_.name) operator = CURRENT_USER_.name;
+    } catch (e2) {}
+    sh.appendRow([tpeNow_(), action, refNo || '', JSON.stringify(payload || {}), operator]);
   } catch (e) {
     // 日誌失敗絕不能影響主要流程
   }
@@ -887,7 +891,7 @@ function setupProductV22Columns() {
 // runCalendarSync。首次執行需在編輯器授權 Calendar 權限。
 // ===================================================================
 var NANPOWAN_CAL_NAME = '南坡萬';
-var CAL_WINDOW_PAST_DAYS = 7;
+var CAL_WINDOW_PAST_DAYS = 400;
 var CAL_WINDOW_FUTURE_DAYS = 180;
 
 function ensureNanpowanCalendar_() {
@@ -1024,10 +1028,9 @@ function syncGoogleCalendar_() {
       var d = calParseYmd_(est);
       if (d) desired['ship:' + no] = { title: '🚚 ' + client + ' 出貨（' + no + '）', date: d, detail: '' };
     }
-    if (status === 'quoted') {
-      var de = calParseYmd_(expiryByNo[no]);
-      if (de) desired['exp:' + no] = { title: '⏰ ' + client + ' 報價單到期（' + no + '）', date: de, detail: '' };
-    }
+    /* 2026-08-08 Molly 要求：報價到期不需要提醒，這段整個拿掉。
+       calSyncCore_ 會把「不在 desired 裡」的同步事件刪除，所以以前已經寫進
+       Google 日曆的 ⏰ 報價單到期事件，下次同步時會自動被清掉，不用另外處理。 */
   });
 
   // 行事曆備忘 + 重複行程
@@ -1041,7 +1044,8 @@ function syncGoogleCalendar_() {
     if (done) return;
     if (kind === 'memo') {
       var d = calParseYmd_(it['date']);
-      if (d) desired['memo:' + id] = { title: '📌 ' + (it['title'] || '備忘'), date: d, detail: String(it['detail'] || '') };
+      var _shipNo = (id.indexOf('ship-') === 0) ? id.slice(5) : null;
+      if (d && !(_shipNo && desired['ship:' + _shipNo])) desired['memo:' + id] = { title: '📌 ' + (it['title'] || '待辦'), date: d, detail: String(it['detail'] || '') };
     } else if (kind === 'recur') {
       var rj = {};
       try { rj = JSON.parse(it['recur_json'] || '{}') || {}; } catch (x) { rj = {}; }
