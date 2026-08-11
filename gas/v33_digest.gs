@@ -410,6 +410,106 @@ function previewDigestText() {
   Logger.log(digestTextSummary_(null));
 }
 
+/* ============================================================
+   每日推播（2026-08-11 優化建議 #2）
+   LINE 還沒申辦，先用 Gmail 版把今日待辦每天早上寄出來。
+   摘要文字沿用上面的 digestTextSummary_，之後要接 LINE 只要換掉送出那一行。
+
+   Molly 只需要做一次：
+     編輯器上方函式下拉選「setupDailyDigestMail」→ 按「執行」→ 首次會問權限，按允許。
+     跑完看「執行記錄」會寫「已設定每天 8:00 前後寄出到 xxx@gmail.com」。
+   想先看看信長什麼樣：改選「previewDailyDigestMail」執行，只寫進記錄，不會寄信。
+
+   Script Properties（不設也能跑，只是留彈性）：
+     DIGEST_MAIL_TO  ：要寄給誰（不設＝寄給這個 Apps Script 的擁有者本人）
+     DIGEST_MAIL_OFF ：設成 YES 就暫停寄送（觸發器還在，只是不寄；刪掉這個屬性即恢復）
+   ============================================================ */
+
+var DIGEST_MAIL_HOUR_ = 8;                                        // 每天幾點寄（跟著專案時區＝台北）
+var DIGEST_APP_URL_ = 'https://mollylin-coding.github.io/quote-system/';
+
+function digestMailTo_() {
+  var p = PropertiesService.getScriptProperties().getProperty('DIGEST_MAIL_TO');
+  if (p && String(p).indexOf('@') > 0) return String(p).trim();
+  return Session.getEffectiveUser().getEmail();   // 預設寄給自己
+}
+
+/** 主旨要在手機通知列一眼看完，所以把「幾件事」直接寫進去 */
+function digestMailSubject_(d) {
+  var n = function (a) { return ((a || []).filter(function (x) { return x.urgent !== false; })).length; };
+  var parts = [];
+  if (n(d.ship_due)) parts.push('該出貨 ' + n(d.ship_due));
+  if (n(d.final_due)) parts.push('催尾款 ' + n(d.final_due));
+  if (n(d.no_invoice)) parts.push('未開發票 ' + n(d.no_invoice));
+  if (n(d.no_scan)) parts.push('未回報 ' + n(d.no_scan));
+  if ((d.calendar || []).length) parts.push('行程 ' + d.calendar.length);
+  var md = String(d.today || '').slice(5).replace('-', '/');
+  return '【南坡萬】' + md + ' 今日待辦' + (parts.length ? '：' + parts.join('、') : '：今天沒事 ☕');
+}
+
+function digestMailBody_(d) {
+  var nl = String.fromCharCode(10);
+  return digestTextSummary_(d) + nl + nl +
+    '────────────' + nl +
+    '打開系統：' + DIGEST_APP_URL_ + nl +
+    '（這封信是系統每天早上自動寄的。想停掉或改時間，跟 Claude 說一聲就好。）';
+}
+
+/** 觸發器的進入點。名稱不帶底線，觸發器才掛得上（跟 runCalendarSync 同一個慣例）。 */
+function sendDailyDigestMail() {
+  var props = PropertiesService.getScriptProperties();
+  if (String(props.getProperty('DIGEST_MAIL_OFF') || '').toUpperCase() === 'YES') {
+    Logger.log('DIGEST_MAIL_OFF=YES，本次不寄。');
+    return 'off';
+  }
+  var to = digestMailTo_();
+  if (!to) { Logger.log('找不到收件人，沒有寄出。'); return 'no-recipient'; }
+  var d;
+  try {
+    d = buildTodayDigest_();
+  } catch (e) {
+    // 待辦讀不出來也要讓 Molly 知道，不然「今天沒收到信」會被誤會成「今天沒事」
+    MailApp.sendEmail(to, '【南坡萬】今日待辦產生失敗', '系統今天早上讀不到待辦資料：' + e +
+      String.fromCharCode(10) + String.fromCharCode(10) + '請打開系統確認：' + DIGEST_APP_URL_);
+    Logger.log('buildTodayDigest_ 失敗：' + e);
+    return 'error';
+  }
+  MailApp.sendEmail(to, digestMailSubject_(d), digestMailBody_(d));
+  Logger.log('已寄出到 ' + to + '：' + digestMailSubject_(d));
+  return 'sent';
+}
+
+/** 只看不寄：把收件人、主旨與內文寫進執行記錄 */
+function previewDailyDigestMail() {
+  var d = buildTodayDigest_();
+  Logger.log('收件人：' + digestMailTo_());
+  Logger.log('主旨：' + digestMailSubject_(d));
+  Logger.log(String.fromCharCode(10) + digestMailBody_(d));
+}
+
+/** 掛（或重掛）每天早上的觸發器。重複執行不會長出第二個。 */
+function setupDailyDigestMail() {
+  var olds = ScriptApp.getProjectTriggers().filter(function (t) {
+    return t.getHandlerFunction() === 'sendDailyDigestMail';
+  });
+  olds.forEach(function (t) { ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('sendDailyDigestMail').timeBased().everyDays(1).atHour(DIGEST_MAIL_HOUR_).create();
+  var msg = '已設定每天 ' + DIGEST_MAIL_HOUR_ + ':00 前後寄出到 ' + digestMailTo_() +
+    '（順便清掉舊的 ' + olds.length + ' 個）。⚠ Google 的時間觸發器是「那個小時內」，不會分秒不差。';
+  Logger.log(msg);
+  return msg;
+}
+
+/** 想停掉每日信：執行這支（要恢復再跑一次 setupDailyDigestMail） */
+function removeDailyDigestMail() {
+  var n = 0;
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'sendDailyDigestMail') { ScriptApp.deleteTrigger(t); n++; }
+  });
+  Logger.log('已移除 ' + n + ' 個每日待辦信觸發器。');
+  return n;
+}
+
 /* ---------- list 類 action 共用：選填 limit / since ---------- */
 
 function listOptNum_(v) {
