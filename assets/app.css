@@ -328,6 +328,13 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
 .rpt-stat{background:#FAF9F5;border:1px solid var(--bd);border-radius:10px;padding:12px 16px}
 .rpt-stat .k{font-size:11px;color:#A8A69C}
 .rpt-stat .v{font-size:19px;font-weight:700;margin-top:2px}
+/* 應收帳齡分組（2026-08-11 優化建議 #3）：擺在「還沒收的尾款」表格上方，一眼看出該先催誰 */
+.rpt-age{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap}
+.rpt-age-box{flex:1 1 120px;min-width:120px;background:#FAF9F5;border:1px solid var(--bd);border-radius:10px;padding:8px 12px}
+.rpt-age-box .k{font-size:11px;color:#A8A69C}
+.rpt-age-box .v{font-size:16px;font-weight:700;margin-top:1px}
+.rpt-age-box .n{font-size:10.5px;color:#A8A69C;margin-top:1px}
+@media (max-width:860px){ .rpt-age-box{flex:1 1 44%;min-width:0} }
 .calhead{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
 /* 週一～週五格子較大、六日稍微縮小；順序改成一到五在前、六日排最後（Molly 2026-07-25 選定「低調文字風」）
    用 minmax(0,Nfr) 而不是單純 Nfr：格子裡塞了兩三個事件標籤時，欄寬才不會被內容「撐開」導致七欄寬度不平均（.cd 也要 overflow:hidden 配合） */
