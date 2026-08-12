@@ -317,7 +317,8 @@ function openConsignMove(){
   document.getElementById('cs-m-price').value='';
   document.getElementById('cs-m-note').value='';
   { const e=document.getElementById('cs-m-handler'); if(e) e.value=''; }
-  { const e=document.getElementById('cs-m-genvf'); if(e) e.checked=true; }
+  { const e=document.getElementById('cs-m-genvf'); if(e){ e.checked=true; e.disabled=false; } }
+  { const h=document.getElementById('cs-m-genvf-hint'); if(h) h.style.display='none'; }
   CS_MOVE_ROWID=0; csMoveItems=[]; csAddMoveRow(); csAddMoveRow();   // 預留兩列，方便直接一次填多款
   if(!OWNBRAND_PRODUCTS || !OWNBRAND_PRODUCTS.length){ loadOwnbrandData().then(renderCsMoveItems).catch(()=>{}); }
   onConsignMoveType();
@@ -357,6 +358,17 @@ function csDelMoveRow(id){
 function csMoveRowInput(id, key, val){
   const r=csMoveItems.find(x=>x.id===id); if(r) r[key]=val;
   csMoveRowDepositHint(id);
+  if(key==='taster') csMoveGenvfLock();
+}
+/* 2026-08-12 Molly：試飲瓶只會出現在出貨驗收單上，不寫進 consign_ledger——
+   一旦有任一列勾了試飲瓶，「同時產生出貨驗收單」就強制勾選＋鎖定，避免她手動取消
+   之後那幾支試飲瓶就完全沒地方查得到（跟複檢報告 2026-08-11 #42 是同一個坑）。 */
+function csMoveGenvfLock(){
+  const cb=document.getElementById('cs-m-genvf'), hint=document.getElementById('cs-m-genvf-hint');
+  if(!cb) return;
+  const anyTaster=csMoveItems.some(r=>r.taster);
+  if(anyTaster){ cb.checked=true; cb.disabled=true; if(hint) hint.style.display='block'; }
+  else { cb.disabled=false; if(hint) hint.style.display='none'; }
 }
 function csMoveRowDepositHint(id){
   const el=document.getElementById('cs-m-rowdep-'+id); if(!el) return;
@@ -431,30 +443,50 @@ async function saveConsignMove(){
     // 鋪貨/補貨：一次登記多款（一次呼叫 addConsignMovements，backend 用鎖包住避免單號互撞）
     const rows=csMoveItems.map(r=>({sku:String(r.sku||'').trim(), qty:parseFloat(r.qty),
       taster:!!r.taster, tasterQty:Math.max(1, parseInt(r.tasterQty,10)||1)}));
-    const valid=rows.filter(r=>r.sku && !isNaN(r.qty) && r.qty>0);
-    const partial=rows.filter(r=>(r.sku && (isNaN(r.qty)||r.qty<=0)) || (!r.sku && !isNaN(r.qty)));
+    const hasSku=r=>!!r.sku, hasQty=r=>!isNaN(r.qty)&&r.qty>0;
+    const valid=rows.filter(r=>hasSku(r)&&hasQty(r));
+    /* 2026-08-12 Molly：有時只是純拜訪送試飲瓶，沒有搭配真的鋪貨——這種列允許
+       「選了公版酒＋勾試飲瓶＋數量留空」單獨成立，不算填一半、也不會寫進庫存帳。 */
+    const tasterOnly=rows.filter(r=>hasSku(r)&&r.taster&&!hasQty(r));
+    const partial=rows.filter(r=>{
+      if(hasSku(r)&&hasQty(r)) return false;               // 正常鋪貨列
+      if(hasSku(r)&&r.taster&&!hasQty(r)) return false;     // 試飲瓶單獨列
+      if(!hasSku(r)&&!hasQty(r)) return false;              // 完全空白列，忽略
+      return true;                                          // 其餘＝填了一半
+    });
     // 先看有沒有「填了一半」的列（比較具體、對使用者更有幫助）；全部列都完全空白才顯示泛用提示
     if(partial.length){ toast('有列只填了一半（公版酒或數量缺一個），請補齊或用 ✕ 刪掉該列','err'); _csMoveSaving=false; return; }
-    if(!valid.length){ toast('請至少填一款酒的公版酒與數量','err'); _csMoveSaving=false; return; }
+    if(!valid.length && !tasterOnly.length){ toast('請至少填一款酒的公版酒與數量，或勾選「附試飲瓶」單獨贈送','err'); _csMoveSaving=false; return; }
     const movements=valid.map(r=>({ date, customer_id:CS_CUR, sku_id:r.sku, type:'in', qty:r.qty, note }));
     try{
-      const d=await apiCall({action:'addConsignMovements', token:AUTH_TOKEN, movements});
-      if(!d.ok) throw new Error(d.error||'儲存失敗');
-      toast('已登記鋪貨（共 '+valid.length+' 款）','ok');
+      if(movements.length){
+        const d=await apiCall({action:'addConsignMovements', token:AUTH_TOKEN, movements});
+        if(!d.ok) throw new Error(d.error||'儲存失敗');
+      }
+      const tasterExtra=valid.filter(r=>r.taster).length + tasterOnly.length;
+      toast(valid.length
+        ? ('已登記鋪貨（共 '+valid.length+' 款）'+(tasterExtra?'，另加 '+tasterExtra+' 款試飲瓶':''))
+        : ('已登記試飲瓶（共 '+tasterOnly.length+' 款，不影響庫存與保證金）'), 'ok');
       const genvf=document.getElementById('cs-m-genvf');
-      const wantVf=!!(genvf&&genvf.checked);
+      // 只要有任何試飲瓶（鋪貨列附加或單獨列），驗收單留底是唯一查得到「送了幾支、何時送」的地方，
+      // 不管使用者有沒有勾，一律強制產生（畫面上的勾選已經被 csMoveGenvfLock 鎖住，這裡是後端保險）。
+      const wantVf=tasterExtra>0 ? true : !!(genvf&&genvf.checked);
       const handler=(document.getElementById('cs-m-handler')||{}).value||'';
       const c=curConsignCustomer();
       closeConsignMove();
-      loadConsignInventory(); loadConsignLedger();
+      if(movements.length){ loadConsignInventory(); loadConsignLedger(); }
       if(wantVf){
-        /* 驗收單的列：正常鋪貨列＋（有勾的話）該款的 500ml 試飲瓶列。
+        /* 驗收單的列：正常鋪貨列＋（有勾的話）該款的 500ml 試飲瓶列＋單獨登記的試飲瓶列。
            試飲瓶只在這張單上出現，不寫進 consign_ledger，所以庫存與保證金都不受影響。 */
         const rowsForVf=[];
         valid.forEach(r=>{
           const p=ownbrandBySku(r.sku);
           rowsForVf.push({ name:p?p.name:r.sku, vol:p?p.volume:'', qty:r.qty });
           if(r.taster) rowsForVf.push({ name:p?p.name:r.sku, vol:'500ml', qty:r.tasterQty, taster:true });
+        });
+        tasterOnly.forEach(r=>{
+          const p=ownbrandBySku(r.sku);
+          rowsForVf.push({ name:p?p.name:r.sku, vol:'500ml', qty:r.tasterQty, taster:true });
         });
         openConsignVerifyForm({
           no: csGenVerifyNo(CS_CUR),

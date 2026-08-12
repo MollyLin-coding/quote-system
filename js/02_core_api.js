@@ -444,6 +444,7 @@ async function saveQuote(){
   const cliName=(document.getElementById('f-cli')?.value||'').trim();
   if(!cliName && !quoteHasItems()){ toast('請至少填寫客戶名稱或一筆品項再儲存','err'); return; }
   const quote=collectQuote();
+  const wasNewQuote=!editingQuoteNo;   // 2026-08-12：存檔前先記住是不是新單，決定要不要順便建訂單追蹤進度
   const btn=document.getElementById('btn-save');
   if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader"></i>儲存中…'; }
   try {
@@ -466,7 +467,10 @@ async function saveQuote(){
         if(_m){ const _s=document.getElementById('f-ser'); if(_s) _s.value=parseInt(_m[1],10)||1; }
       }
       FORM_DIRTY=false;
+      quote.quoteNo=data.quoteNo;   // collectQuote() 存的是存檔前的猜測值，這裡校正成後端實際發的單號
       toast('已儲存：'+data.quoteNo,'ok');
+      if(wasNewQuote && typeof updateOrdProgVisibility==='function') updateOrdProgVisibility();
+      if(wasNewQuote) await maybeCreateOrderProgressOnSave(data.quoteNo, quote);
       runHooks('afterSaveQuote', quote);   // 客戶主檔比對提醒登記在 11_customers.js
     } else {
       toast(data.error||'儲存失敗','err');
@@ -476,6 +480,42 @@ async function saveQuote(){
   } finally {
     if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-device-floppy"></i>儲存'; }
   }
+}
+/* 2026-08-12：「訂單追蹤進度」併入報價單表單本身（index.html #ordprog-block），存檔成功後
+   （只有「新增」，不含編輯既有單——見 saveQuote 的 wasNewQuote）直接呼叫既有的
+   updateOrderStatus 建一筆進度，不用另外再跑一趟「訂單追蹤」→「編輯進度」。
+   三格（訂金日期／客戶批號／備註）都留空就完全不呼叫——維持「沒編輯進度就不建列」的原本行為，
+   不會平白多出一堆空的訂單追蹤紀錄。訂金／尾款金額算法跟 05_orders.js 的 openOrdEdit 自動帶入
+   完全同一套（ordPayFromQuote 優先讀報價單條款上的實際金額，讀不出來才退回客戶主檔的訂金比例）。 */
+async function maybeCreateOrderProgressOnSave(quoteNo, quote){
+  const depDate=(document.getElementById('f-ord-depdate')?.value||'').trim();
+  const lot=(document.getElementById('f-ord-lot')?.value||'').trim();
+  const note=(document.getElementById('f-ord-note')?.value||'').trim();
+  if(!depDate && !lot && !note) return;
+  const gt=Math.round(parseFloat(quote.grandTotal)||0);
+  const fields={};
+  if(gt>0) fields.grand_total=gt;
+  if(lot) fields.cust_lot=lot;
+  if(note) fields.track_note=note;
+  if(depDate){
+    fields.deposit_date=depDate;
+    if(gt>0){
+      const fromQuote=(typeof ordPayFromQuote==='function')?ordPayFromQuote({payDetail:quote.paymentDetail}, gt):null;
+      const pct=(typeof ordDepositPct==='function')?ordDepositPct(quote.clientName):50;
+      const dep=fromQuote?fromQuote.dep:Math.round(gt*pct/100);
+      const bal=fromQuote?fromQuote.bal:(gt-dep);
+      fields.deposit_amt=dep; fields.final_amt=bal;
+    }
+  }
+  if(typeof effOrdStatus==='function'){
+    const eff=effOrdStatus(fields);
+    if(eff) fields.status=eff;
+  }
+  try{
+    const d=await apiCall({ action:'updateOrderStatus', token:AUTH_TOKEN, quote_no:quoteNo, fields });
+    if(d&&d.ok) toast('已同時建立訂單追蹤進度','ok');
+    else toast('報價單已存，但訂單追蹤進度建立失敗：'+((d&&d.error)||'請到「訂單追蹤」手動補上'),'err');
+  }catch(e){ toast('報價單已存，但訂單追蹤進度建立失敗，請到「訂單追蹤」手動補上','err'); }
 }
 
 /* ---- 產生正式 PDF/Word 文件（GAS 動態建立 Google Doc）----
@@ -689,6 +729,7 @@ async function deleteRecord(quoteNo, cliName){
 /* ---- 把 quote 物件灌回表單 ---- */
 function loadQuoteIntoForm(q){
   editingQuoteNo=q.quoteNo;
+  if(typeof updateOrdProgVisibility==='function') updateOrdProgVisibility();   // 編輯既有單：隱藏「訂單追蹤進度」區塊，不去動已存的進度資料
   /* 複檢 2026-08-06 #2：凍結狀態必須在載入流程「最前面」清掉。
      下面的 setType/setTaxMode/onSvcModeChange 都會觸發 calc()，若上一張單的
      LOADED_PAY_DETAIL/SIG 還掛著，指紋比對會誤判「金額有異動」——

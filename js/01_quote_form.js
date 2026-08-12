@@ -15,7 +15,17 @@ let flavors={g1:[],g2:[]};
 (()=>{
   document.getElementById('f-dt').value=todayStr();
   onDate(); upNo(); addBotRow(); rebuildBotHeader();
+  updateOrdProgVisibility();
 })();
+
+/* 2026-08-12：「訂單追蹤進度」併入報價單表單本身（見 index.html ordprog-block）。
+   只在「新增報價單」時顯示——載入既有單編輯（editingQuoteNo 有值）就藏起來，
+   避免她以為改這裡會動到已經存過、可能被手改過的訂單追蹤資料。實際送出邏輯在
+   02_core_api.js 的 saveQuote()／maybeCreateOrderProgressOnSave()。 */
+function updateOrdProgVisibility(){
+  const box=document.getElementById('ordprog-block'); if(!box) return;
+  box.style.display=(typeof editingQuoteNo!=='undefined' && editingQuoteNo) ? 'none' : 'block';
+}
 
 /* 訂金比例預設值：瓶裝／OEM代工／公版買斷／公版客製標／寄售一律 50%（酒款對半拆），宴會等其他類型維持 30% */
 function defaultDepPct(){
@@ -956,6 +966,7 @@ function resetAll(skipConfirm){
   if(typeof editingQuoteNo!=='undefined') editingQuoteNo=null;
   calc(); onDate(); upNo();
   FORM_DIRTY=false;   // 清空後視為乾淨狀態，關頁/切單不再誤跳「未儲存」警告
+  updateOrdProgVisibility();   // 清除＝回到全新單，「訂單追蹤進度」區塊要重新顯示出來
   runHooks('afterReset', skipConfirm);   // 清掉公司選擇／發票抬頭等登記在這（見 08_ownbrand.js 檔尾）
 }
 

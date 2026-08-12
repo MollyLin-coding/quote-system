@@ -104,19 +104,38 @@ function vmNoReportList(){
 }
 function vmCounts(){
   const reps=VM_DATA?VM_DATA.reports:[];
-  return { pending:reps.filter(vmIsUnhandled).length, all:reps.length, noreport:vmNoReportList().length, forms:(VM_DATA?VM_DATA.forms:[]).length };
+  return { pending:reps.filter(vmIsUnhandled).length, all:reps.length, noreport:vmNoReportList().length,
+    forms:(VM_DATA?VM_DATA.forms:[]).length, taster:vmTasterList().length };
+}
+/* 2026-08-12 新增：試飲瓶記錄——彙整所有驗收單留底裡標 taster 的品項列（日期／客戶／酒款／支數）。
+   純讀既有的「驗收單紀錄」資料（listVerifyForms 早就回 items），不用動後端、也不新增寫入路徑。 */
+function vmTasterList(){
+  if(!VM_DATA) return [];
+  const out=[];
+  (VM_DATA.forms||[]).forEach(f=>{
+    const items=Array.isArray(f.items)?f.items:parseJsonSafe(f.items_json,[]);
+    (Array.isArray(items)?items:[]).forEach(it=>{
+      if(!it||!(Number(it.taster)||0)) return;
+      const qty=(it.thisShip!=null&&it.thisShip!=='')?it.thisShip:(it.ordered!=null?it.ordered:0);
+      out.push({ no:f.no||'', client:f._client||vmClientOf(String(f.no||'').trim())||f.client||'', date:vmLocalYmd(f.ship_date)||vmLocalYmd(f.created_at)||'',
+        name:it.name||'', vol:it.vol||'500ml', qty:parseFloat(qty)||0, formId:f.id });
+    });
+  });
+  out.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  return out;
 }
 function renderVerifyMgmt(){
   const wrap=document.getElementById('vm-body'); if(!wrap) return;
   if(!VM_DATA){ wrap.innerHTML=sklBlock(4); return; }
   const c=vmCounts();
-  const fs=[['pending','待處理回報',c.pending],['all','全部回報',c.all],['noreport','未回報催單',c.noreport],['forms','驗收單留底',c.forms]];
+  const fs=[['pending','待處理回報',c.pending],['all','全部回報',c.all],['noreport','未回報催單',c.noreport],['forms','驗收單留底',c.forms],['taster','🍷 試飲瓶記錄',c.taster]];
   document.getElementById('vm-filters').innerHTML=fs.map(([k,l,n])=>
     `<button class="fchip${VM_TAB===k?' on':''}" onclick="setVmTab('${k}')">${l} <b>${n}</b></button>`).join('');
   let warn='';
   if(VM_DATA.gvErr||VM_DATA.lfErr) warn=`<div class="ob warn" style="display:block;margin:0 0 10px;padding:8px 12px;font-size:11.5px">部分資料讀取失敗（後端可能尚未更新此功能）：${escHtml(VM_DATA.gvErr||VM_DATA.lfErr||'')}</div>`;
   if(VM_TAB==='forms') wrap.innerHTML=warn+vmRenderForms();
   else if(VM_TAB==='noreport') wrap.innerHTML=warn+vmRenderNoReport();
+  else if(VM_TAB==='taster') wrap.innerHTML=warn+vmRenderTaster();
   else wrap.innerHTML=warn+vmRenderReports(VM_TAB==='pending');
 }
 function vmStatusPill(r){
@@ -205,6 +224,28 @@ function vmRenderForms(){
   }).join('');
   return sel+`<div class="tbl-scroll"><table class="rec-table mcard">
     <thead><tr><th>產生時間</th><th>單號／客戶</th><th style="text-align:center">配送日</th><th style="text-align:center">PM</th><th style="text-align:center">箱數</th><th>品項</th><th>操作</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+/* ---- 試飲瓶記錄（2026-08-12 加）：彙整所有客戶「送過幾次試飲瓶、什麼時候送的」----
+   資料來源＝驗收單留底（listVerifyForms 的 items，taster=1 的列），跟寄售登記異動存的
+   「附試飲瓶」勾選是同一份資料，只是這裡換一個角度彙整成可查詢的清單，不是新的紀錄來源。 */
+function vmRenderTaster(){
+  const list=vmTasterList();
+  if(!list.length) return `<div class="rec-empty">尚無試飲瓶紀錄（登記寄售鋪貨時勾選「附 500ml 試飲瓶」，或單獨登記試飲瓶並產生驗收單後會出現在這裡）</div>`;
+  const byClient={};
+  list.forEach(r=>{ const k=r.client||'(未歸戶)'; byClient[k]=(byClient[k]||0)+(r.qty||0); });
+  const summary=Object.keys(byClient).sort((a,b)=>byClient[b]-byClient[a])
+    .map(k=>`<span class="rec-badge bottle" style="margin:0 6px 6px 0">${escHtml(k)} ${byClient[k]} 支</span>`).join('');
+  const rows=list.map(r=>`<tr>
+    <td data-l="日期" style="white-space:nowrap;color:#6B6B63;font-size:11.5px">${escHtml(r.date)||'—'}</td>
+    <td class="mc-main">${escHtml(r.client)||'（未歸戶）'}<br><span style="color:#6B6B63;font-size:11.5px">${escHtml(r.no)}</span></td>
+    <td data-l="酒款">${escHtml(r.name)}${r.vol?`（${escHtml(r.vol)}）`:''}</td>
+    <td data-l="支數" style="text-align:right;font-weight:600">${(r.qty||0).toLocaleString()}</td>
+    <td class="rec-actions" data-l="操作">${r.formId?`<button class="rec-act-btn" onclick="vmEditForm('${escAttr(r.formId)}')">查看驗收單</button>`:''}</td>
+  </tr>`).join('');
+  return `<div style="margin-bottom:10px">${summary}</div>
+    <div class="tbl-scroll"><table class="rec-table mcard">
+    <thead><tr><th>日期</th><th>客戶／單號</th><th>酒款</th><th style="text-align:right">支數</th><th>操作</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
 /* ---- 刪除（後端 v32：deleteVerification／deleteVerifyForm／deleteShipment，皆 {id}→整列刪除、不可復原）---- */
