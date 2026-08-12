@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260811b">
-<script src="js/00_qrcode.js?v=20260811b"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260812a">
+<script src="js/00_qrcode.js?v=20260812a"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -234,6 +234,15 @@
             <div class="fl"><label>Lot / 日期標記</label><input class="fi" id="f-tag-lot" placeholder="如：Lot 31 或 2026/06/18"></div>
             <div class="fl"><label>客戶名稱標籤</label><input class="fi" id="f-tag-cli" placeholder="如：南野子"></div>
           </div>
+        </div>
+        <div id="ordprog-block" style="margin-top:16px">
+          <div class="sub-label">訂單追蹤進度 <span class="ln"></span> <span style="font-style:italic;color:var(--bd);font-weight:400">選填，存檔時一起建立，之後不用再另外跑一趟「訂單追蹤」</span></div>
+          <div class="fg fg2">
+            <div class="fl"><label>訂金日期 <span class="opt">選填，已收訂金才填</span></label><input class="fi" type="date" id="f-ord-depdate"></div>
+            <div class="fl"><label>客戶批號 <span class="opt">選填</span></label><input class="fi" id="f-ord-lot" placeholder="客戶自己的批號／貨號"></div>
+          </div>
+          <div class="fl" style="margin-top:8px"><label>訂單備註 <span class="opt">選填</span></label><input class="fi" id="f-ord-note" placeholder="給「訂單追蹤」看的補充說明"></div>
+          <div style="font-size:11.5px;color:var(--hint);margin-top:4px">三格都留空就不會建立訂單追蹤進度（跟現在一樣，之後仍可到「訂單追蹤」手動編輯）；訂金／尾款金額會依付款條款自動算好。此區只在新增報價單時顯示，編輯既有單不會影響已存的進度資料。</div>
         </div>
         <div id="ban-meta" style="display:none;margin-top:16px">
           <div class="sub-label">活動資訊 <span class="ln"></span> <span style="font-style:italic;color:var(--bd);font-weight:400">選填</span></div>
@@ -1076,6 +1085,7 @@
       <label style="display:flex;align-items:center;gap:6px;margin-top:12px;font-size:12.5px;color:var(--fg);cursor:pointer">
         <input type="checkbox" id="cs-m-genvf" checked> 同時產生「出貨驗收單」（簡化版，含掃碼回報客訴 QR）
       </label>
+      <div id="cs-m-genvf-hint" style="display:none;font-size:11px;color:#7A5A1E;margin-top:2px">有勾試飲瓶時，驗收單是唯一能查到「送了幾支、什麼時候送」的地方，已自動勾選並鎖定。</div>
       <div class="fl" style="margin-top:8px"><label>經手人 <span class="opt">選填，會印在驗收單上</span></label><input class="fi" id="cs-m-handler" placeholder="選填"></div>
     </div>
     <div class="fl" style="margin-top:8px"><label>備註 <span class="opt">選填</span></label><input class="fi" id="cs-m-note"></div>
@@ -1100,19 +1110,19 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260811b"></script>
-<script src="js/01_quote_form.js?v=20260811b"></script>
-<script src="js/01b_quote_preview.js?v=20260811b"></script>
-<script src="js/02_core_api.js?v=20260811b"></script>
-<script src="js/03_quote_custom.js?v=20260811b"></script>
-<script src="js/04_company.js?v=20260811b"></script>
-<script src="js/05_orders.js?v=20260811b"></script>
-<script src="js/06_verify_mgmt.js?v=20260811b"></script>
-<script src="js/07_calendar.js?v=20260811b"></script>
-<script src="js/08_ownbrand.js?v=20260811b"></script>
-<script src="js/09_verify_form.js?v=20260811b"></script>
-<script src="js/10_today.js?v=20260811b"></script>
-<script src="js/11_customers.js?v=20260811b"></script>
-<script src="js/99_boot.js?v=20260811b"></script>
+<script src="js/00_utils.js?v=20260812a"></script>
+<script src="js/01_quote_form.js?v=20260812a"></script>
+<script src="js/01b_quote_preview.js?v=20260812a"></script>
+<script src="js/02_core_api.js?v=20260812a"></script>
+<script src="js/03_quote_custom.js?v=20260812a"></script>
+<script src="js/04_company.js?v=20260812a"></script>
+<script src="js/05_orders.js?v=20260812a"></script>
+<script src="js/06_verify_mgmt.js?v=20260812a"></script>
+<script src="js/07_calendar.js?v=20260812a"></script>
+<script src="js/08_ownbrand.js?v=20260812a"></script>
+<script src="js/09_verify_form.js?v=20260812a"></script>
+<script src="js/10_today.js?v=20260812a"></script>
+<script src="js/11_customers.js?v=20260812a"></script>
+<script src="js/99_boot.js?v=20260812a"></script>
 </body>
 </html>
