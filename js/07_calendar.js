@@ -381,6 +381,47 @@ async function deleteCalItem(){
     loadCalendar().catch(()=>{});
   }catch(e){ CAL_ITEMS=snap; if(osnap&&!ORDERS_CACHE) ORDERS_CACHE=osnap; toast(e.message||'刪除失敗','err'); }
 }
+/* 2026-08-13 複檢建議 #1：自我檢查。
+   這套系統最常出問題的地方是「同一條規則被抄在好幾個地方」（系統月曆／今日待辦／
+   Google 日曆同步／每日待辦信），改一處另外幾處不會跟著動，而且壞掉不會有人知道，
+   都要等 Molly 自己撞上才發現。這顆按鈕把「資料庫裡的真實狀態」跟「Google 日曆上
+   真正存在的事件」對一次答案，把對不上的列出來。純檢查，不會新增/修改/刪除任何東西。 */
+async function calSelfCheck(){
+  const b=document.getElementById('gcal-check-btn');
+  const orig=b?b.textContent:''; if(b){ b.textContent='檢查中…'; b.disabled=true; }
+  try{
+    const d=await apiCall({ action:'calendarSelfCheck', token:AUTH_TOKEN });
+    if(!d||!d.ok) throw new Error((d&&d.error)||'檢查失敗');
+    const issues=d.issues||[];
+    const lvl={high:['嚴重','#B03A2E'],mid:['注意','#B5541F'],low:['提醒','#8A8880']};
+    const body = issues.length
+      ? `<div style="font-size:12px;color:#6B6B63;margin-bottom:10px">檢查範圍 ${escHtml(d.window?d.window.from:'')} ～ ${escHtml(d.window?d.window.to:'')}　·　Google 日曆上共 ${d.checked_events||0} 筆由系統產生的事件</div>`
+        + issues.map(it=>{
+            const L=lvl[it.level]||lvl.low;
+            return `<div style="padding:9px 11px;border-left:3px solid ${L[1]};background:#FAF9F6;margin-bottom:7px;border-radius:0 6px 6px 0">
+              <span class="ob" style="background:${L[1]};color:#fff">${L[0]}</span>
+              <b style="margin-left:6px">${escHtml(it.type||'')}</b>
+              <div style="margin-top:4px;font-size:12.5px;line-height:1.6">${escHtml(it.msg||'')}</div>
+            </div>`;
+          }).join('')
+        + `<div style="font-size:11.5px;color:#8A8880;margin-top:10px">多數問題按一次上面的「⟳ 同步 Google 日曆」就會自動修好；按完可以再檢查一次確認。</div>`
+      : `<div class="td-alldone" style="padding:26px 10px"><div class="big">都對得起來 🎉</div>
+         <div class="sm">系統裡的資料跟 Google 日曆上的事件完全一致（檢查範圍 ${escHtml(d.window?d.window.from:'')} ～ ${escHtml(d.window?d.window.to:'')}，共 ${d.checked_events||0} 筆）。</div></div>`;
+    let ov=document.getElementById('calchk-overlay');
+    if(!ov){
+      ov=document.createElement('div'); ov.className='v2ov'; ov.id='calchk-overlay';
+      ov.innerHTML=`<div class="v2bx" style="max-width:640px">
+        <div class="v2h"><span>🔍 行事曆自我檢查</span><button class="v2x" onclick="document.getElementById('calchk-overlay').style.display='none'">✕</button></div>
+        <div class="v2b" id="calchk-body" style="max-height:60vh;overflow:auto"></div>
+        <div class="v2f"><button class="btn btn-g" onclick="document.getElementById('calchk-overlay').style.display='none'">關閉</button></div>
+      </div>`;
+      document.body.appendChild(ov);
+    }
+    document.getElementById('calchk-body').innerHTML=body;
+    ov.style.display='flex';
+  }catch(e){ toast(e.message||'檢查失敗','err'); }
+  finally{ if(b){ b.textContent=orig; b.disabled=false; } }
+}
 async function syncGCal(){
   const b=document.getElementById('gcal-sync-btn');
   const orig=b.textContent; b.textContent='同步中…'; b.disabled=true;
