@@ -12,8 +12,37 @@ const VERIFY_MIN_ROWS=3;
    寬 297-22=275mm→1039px；高 210-22=188mm→710px。自己手動分頁才印得出頁碼。 */
 const VPAGE_W=1039, VPAGE_H=710;
 
+/* 2026-08-13 複檢 #2-1／#2-7：驗收單 QR 加驗證碼。
+   原本 QR 的網址就是 API 網址，單號是 YYYYMMDD-NN 這種可以逐號猜的格式，任何拿到任一張
+   驗收單的人把單號改一改，就能看到別家客戶的公司名稱與訂購酒款、還能灌假的回報。
+   Molly 2026-08-13 決定：**新單才驗、舊單維持現狀**，已經送到客戶手上的紙本 QR 照樣能用。
+   驗證碼只有後端算得出來（Script Properties 裡的鹽），所以要先跟後端要。 */
+let VF_KEYS={};
+async function vfKeyFor(no){
+  const key=String(no||''); if(!key) return '';
+  if(VF_KEYS[key]!=null) return VF_KEYS[key];
+  try{
+    const d=await apiCall({action:'getVerifyKey', token:AUTH_TOKEN, no:key});
+    VF_KEYS[key]=(d&&d.ok&&d.k)?d.k:'';
+  }catch(e){ VF_KEYS[key]=''; }
+  return VF_KEYS[key];
+}
+/* 產生驗收單前的檢查：驗證碼還沒拿到就先講清楚，不要印出一張客戶掃不進去的 QR。
+   （驗證碼在「開啟驗收單」時就會先抓好，正常情況下這裡不會擋。） */
+function vfKeyReady(no){
+  const key=String(no||'');
+  if(VF_KEYS[key]) return true;
+  vfKeyFor(key);   // 先去抓，等一下再產生一次就會有
+  const m=key.match(/20\d{6}/g);
+  const ymd=(m&&m.length)?m[m.length-1]:'';
+  if(!ymd || ymd<'20260813') return true;   // 舊單號後端不驗，沒有驗證碼也沒關係
+  toast('QR 的驗證碼還沒取到，這樣印出去客戶會掃不進去。請等兩秒再按一次「產生」','err');
+  return false;
+}
 function verifyQrUrl(no,lot){
-  return API_URL+'?page=verify&no='+encodeURIComponent(no||'')+'&lot='+encodeURIComponent(lot||'');
+  const k=VF_KEYS[String(no||'')]||'';
+  return API_URL+'?page=verify&no='+encodeURIComponent(no||'')+'&lot='+encodeURIComponent(lot||'')
+       + (k?('&k='+encodeURIComponent(k)):'');
 }
 function verifyQrSvg(text,cell){
   try{
@@ -49,6 +78,7 @@ async function openVerifyForm(no){
   try{
     toast('讀取訂單資料…','ok');
     // 走讀取快取：留底那份登入後就預抓好了，通常 0 秒；報價單本身 90 秒內開過也 0 秒
+    vfKeyFor(no);   // 複檢 #2-1：順便把 QR 驗證碼抓回來（跟下面兩支平行，不多花時間）
     const [data, formsData] = await Promise.all([
       readCall({ action:'getQuoteById', token:AUTH_TOKEN, quoteNo:no }),
       readCall({ action:'listVerifyForms', token:AUTH_TOKEN, filters:{} }).catch(()=>null)
@@ -186,6 +216,7 @@ function generateVerifyPdf(mode){
   const gvl=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
   d.lot=gvl('vf-lot'); d.shipDate=gvl('vf-shipdate'); d.shipper=gvl('vf-shipper'); d.boxes=gvl('vf-boxes');
   d.shipSeq=parseInt(gvl('vf-shipseq'),10)||1; // 「第幾次出貨」改成人工填，不再自動算
+  if(!vfKeyReady(d.no)) return;   // 複檢 #2-1：沒有 QR 驗證碼就先別印
   /* 複檢 2026-08-13 #1-3：留底一定要先存。原本是彈窗被瀏覽器擋掉就直接 return，留底一筆都不會存
      → 下次開同一張單的驗收單，「已出貨」歸零、「本次出貨」又帶成全部訂購量，第二批會印成整批數量。 */
   saveVerifyFormRecord(d);
@@ -465,6 +496,7 @@ function closeConsignVerifyForm(){ CONSIGN_VF_EDIT_ID=null; const o=document.get
 
 /* data={no, client, shipDate, handler, note, rows:[{name,vol,qty}]}；editId 有值＝編輯既有留底（產生後取代舊筆） */
 function openConsignVerifyForm(data, editId){
+  vfKeyFor(data&&data.no);   // 複檢 #2-1：先把 QR 驗證碼抓回來
   CONSIGN_VF_DATA={ ...data, rows:(data.rows||[]).map(r=>({...r})) };
   CONSIGN_VF_EDIT_ID=editId||null;
   ensureConsignVerifyOverlay();
@@ -583,6 +615,7 @@ function previewConsignVerifyPdf(){
 }
 function generateConsignVerifyPdf(){
   const d=csVfCollect(); if(!d||!d.rows.length){ toast('請至少填一項酒款與數量','err'); return; }
+  if(!vfKeyReady(d.no)) return;   // 複檢 #2-1：沒有 QR 驗證碼就先別印
   // 複檢 2026-08-13 #1-3：留底先存（試飲瓶只有留底查得到，彈窗被擋不能讓它整批消失）
   saveConsignVerifyFormRecord(d);
   closeConsignVerifyForm();
