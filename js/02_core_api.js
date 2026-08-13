@@ -471,6 +471,7 @@ async function saveQuote(){
       toast('已儲存：'+data.quoteNo,'ok');
       if(wasNewQuote && typeof updateOrdProgVisibility==='function') updateOrdProgVisibility();
       if(wasNewQuote) await maybeCreateOrderProgressOnSave(data.quoteNo, quote);
+      else await maybeSyncOrderProgressOnEdit(data.quoteNo, quote);
       runHooks('afterSaveQuote', quote);   // 客戶主檔比對提醒登記在 11_customers.js
     } else {
       toast(data.error||'儲存失敗','err');
@@ -516,6 +517,42 @@ async function maybeCreateOrderProgressOnSave(quoteNo, quote){
     if(d&&d.ok) toast('已同時建立訂單追蹤進度','ok');
     else toast('報價單已存，但訂單追蹤進度建立失敗：'+((d&&d.error)||'請到「訂單追蹤」手動補上'),'err');
   }catch(e){ toast('報價單已存，但訂單追蹤進度建立失敗，請到「訂單追蹤」手動補上','err'); }
+}
+/* 2026-08-12（Molly 追加需求）：編輯既有報價單、金額有改的話，要「聯動更新」訂單追蹤裡的資料，
+   不用改完報價單又跑一趟訂單追蹤手動對金額。規則（Molly 選的，避免蓋掉已經實際收款的金額）：
+   - 這張單從沒建過訂單追蹤進度（getOrderStatusList 查不到這個 quote_no）→ 不主動建立，維持
+     「當初報價單存檔時三格留空＝不追蹤這張單」的選擇；純編輯金額不會平白生出訂單追蹤紀錄。
+   - 已經建過、但還沒開始收訂金（deposit_date 空）→ 視為「沒有進度」，總額＋訂金／尾款
+     一起用最新金額重新算好（跟 maybeCreateOrderProgressOnSave 同一套算法）。
+   - 已經有進度（deposit_date 有填，代表可能已經實際收了訂金）→ 只更新 grand_total 這個
+     「總額參考」欄位，訂金／尾款金額完全不動，避免把已經收到的實際金額覆蓋掉；要調整
+     還是得手動去「訂單追蹤」改。updateOrderStatus 後端是逐欄位覆蓋（沒送的欄位不會被動到），
+     所以這裡只要不把 deposit_amt/final_amt 放進 fields 就不會被改。
+   - 金額其實沒變就不打後端（用快取 getOrderStatusList 比對，省一次呼叫）。 */
+async function maybeSyncOrderProgressOnEdit(quoteNo, quote){
+  const gt=Math.round(parseFloat(quote.grandTotal)||0);
+  if(gt<=0 || typeof readCall!=='function') return;
+  try{
+    const d=await readCall({ action:'getOrderStatusList', token:AUTH_TOKEN });
+    const list=(d&&d.orders)||[];
+    const st=list.find(o=>o.quote_no===quoteNo);
+    if(!st) return;   // 從沒連結過訂單追蹤，編輯報價單不會主動建立
+    if(gt===Math.round(parseFloat(st.grand_total)||0)) return;   // 金額沒變，不用同步
+    const hasProgress=String(st.deposit_date||'').trim()!=='';
+    const fields={ grand_total: gt };
+    if(!hasProgress){
+      const fromQuote=(typeof ordPayFromQuote==='function')?ordPayFromQuote({payDetail:quote.paymentDetail}, gt):null;
+      const pct=(typeof ordDepositPct==='function')?ordDepositPct(quote.clientName):50;
+      const dep=fromQuote?fromQuote.dep:Math.round(gt*pct/100);
+      const bal=fromQuote?fromQuote.bal:(gt-dep);
+      fields.deposit_amt=dep; fields.final_amt=bal;
+    }
+    const r=await apiCall({ action:'updateOrderStatus', token:AUTH_TOKEN, quote_no:quoteNo, fields });
+    if(r&&r.ok){
+      toast(hasProgress?'金額已修改，訂單追蹤總額已同步（訂金/尾款已有進度，未變動）':'金額已修改，訂單追蹤的訂金/尾款也一起重新算好了','ok');
+    }
+    // 失敗就安靜略過：報價單本身已經存檔成功，同步只是附加動作，不打擾 Molly，需要時仍可手動到訂單追蹤調整
+  }catch(e){ /* 同上，安靜略過 */ }
 }
 
 /* ---- 產生正式 PDF/Word 文件（GAS 動態建立 Google Doc）----
