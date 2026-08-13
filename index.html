@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260813a">
-<script src="js/00_qrcode.js?v=20260813a"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260813b">
+<script src="js/00_qrcode.js?v=20260813b"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -729,6 +729,7 @@
         <button class="rec-act-btn" onclick="loadCalendar(true)"><i class="ti ti-refresh"></i> 重新整理</button>
         <span style="width:8px"></span>
         <button class="fchip" id="gcal-sync-btn" onclick="syncGCal()" title="把訂單日程與備忘推送到 Google 日曆「南坡萬」">⟳ 同步 Google 日曆</button>
+        <button class="fchip" id="gcal-check-btn" onclick="calSelfCheck()" title="比對系統資料與 Google 日曆，把對不上的地方列出來（只檢查，不會改任何東西）">🔍 自我檢查</button>
         <span id="cal-filters" style="display:inline-flex;gap:6px;flex-wrap:wrap">
           <button class="fchip on" data-f="all" onclick="calAllOn()" title="全部打開">全部</button>
           <button class="fchip on" data-f="order" onclick="toggleCalKind('order')">🚚 訂單日程</button>
@@ -1110,19 +1111,19 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260813a"></script>
-<script src="js/01_quote_form.js?v=20260813a"></script>
-<script src="js/01b_quote_preview.js?v=20260813a"></script>
-<script src="js/02_core_api.js?v=20260813a"></script>
-<script src="js/03_quote_custom.js?v=20260813a"></script>
-<script src="js/04_company.js?v=20260813a"></script>
-<script src="js/05_orders.js?v=20260813a"></script>
-<script src="js/06_verify_mgmt.js?v=20260813a"></script>
-<script src="js/07_calendar.js?v=20260813a"></script>
-<script src="js/08_ownbrand.js?v=20260813a"></script>
-<script src="js/09_verify_form.js?v=20260813a"></script>
-<script src="js/10_today.js?v=20260813a"></script>
-<script src="js/11_customers.js?v=20260813a"></script>
-<script src="js/99_boot.js?v=20260813a"></script>
+<script src="js/00_utils.js?v=20260813b"></script>
+<script src="js/01_quote_form.js?v=20260813b"></script>
+<script src="js/01b_quote_preview.js?v=20260813b"></script>
+<script src="js/02_core_api.js?v=20260813b"></script>
+<script src="js/03_quote_custom.js?v=20260813b"></script>
+<script src="js/04_company.js?v=20260813b"></script>
+<script src="js/05_orders.js?v=20260813b"></script>
+<script src="js/06_verify_mgmt.js?v=20260813b"></script>
+<script src="js/07_calendar.js?v=20260813b"></script>
+<script src="js/08_ownbrand.js?v=20260813b"></script>
+<script src="js/09_verify_form.js?v=20260813b"></script>
+<script src="js/10_today.js?v=20260813b"></script>
+<script src="js/11_customers.js?v=20260813b"></script>
+<script src="js/99_boot.js?v=20260813b"></script>
 </body>
 </html>
