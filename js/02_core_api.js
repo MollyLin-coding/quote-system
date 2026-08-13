@@ -35,9 +35,12 @@ const OWNER_ONLY_FNS = [
   'consignMonthlyToQuote',
   // 客戶主檔／價目表
   'openCusEdit','saveCusEdit','deleteCusEdit','cusSeedFromQuotes','applyCusSync','syncCustomerRecipe',
-  'quickAddOwnbrand','quickAddProduct','quickAddProductCustom',
+  /* 複檢 2026-08-13：quickAddOwnbrand／quickAddProduct／quickAddProductCustom 是「純前端把品項帶進表單」，
+     不打任何 API。原本被藏起來，害一般使用者只能照著螢幕手打單價，反而更容易報錯價，所以移出名單。 */
   // 行事曆
   'openCalAdd','openCalEdit','saveCalItem','deleteCalItem','syncGCal','toggleTodoDone',
+  // 今日待辦上的入口（點下去會開 owner-only 的編輯彈窗，儲存鈕被藏＝填半天存不進去）
+  'tdOpenOrder','tdOpenCal',
   // 刪除類
   'deleteRecord','vmDelForm','vmDelReport'
 ];
@@ -46,10 +49,23 @@ const OWNER_FN_RE = new RegExp('\\b(' + OWNER_ONLY_FNS.join('|') + ')\\s*\\(');
 let ROLE_SWEEP_T = null;
 function roleSweep(){
   if(isOwner()) return;
+  /* 複檢 2026-08-13：index.html 上「工作行事曆」「客戶管理」「管理客戶」標了 data-owner-only，
+     但以前沒有任何程式讀這個屬性，等於完全沒擋（點進去會看到空白破版的月曆、或整份客戶主檔）。 */
+  document.querySelectorAll('[data-owner-only]').forEach(function(el){
+    if(el.dataset.roleHidden) return;
+    el.dataset.roleHidden='1'; el.style.display='none';
+  });
   document.querySelectorAll('[onclick]').forEach(function(el){
     if(el.dataset.roleHidden) return;
     var h = el.getAttribute('onclick') || '';
-    if(OWNER_FN_RE.test(h)){ el.dataset.roleHidden='1'; el.style.display='none'; }
+    if(!OWNER_FN_RE.test(h)) return;
+    /* 複檢 2026-08-13：表格的資料列（tr/td）也帶 onclick（點列＝開編輯進度），原本整列被藏掉，
+       造成月報表「明細一列都沒有、合計卻還顯示金額」，看起來像資料掉了。
+       資料列本身只是唯讀內容，改成只拿掉點擊行為、不隱藏內容。 */
+    if(el.tagName==='TR'||el.tagName==='TD'){
+      el.dataset.roleHidden='1'; el.removeAttribute('onclick'); el.style.cursor='default'; return;
+    }
+    el.dataset.roleHidden='1'; el.style.display='none';
   });
 }
 function roleSweepSoon(){
@@ -498,14 +514,17 @@ async function maybeCreateOrderProgressOnSave(quoteNo, quote){
   if(gt>0) fields.grand_total=gt;
   if(lot) fields.cust_lot=lot;
   if(note) fields.track_note=note;
+  let _amtUnknown=false;
   if(depDate){
     fields.deposit_date=depDate;
     if(gt>0){
+      /* 複檢 2026-08-13 #1-1：這裡是「不經人眼、直接寫進資料庫」的路徑，讀不出金額就不要猜。
+         原本付款條件選「自訂」或「不顯示此欄位」時會靜默寫入「總額各半」，那兩個數字報價單上
+         根本不存在、畫面上也從沒出現過，卻會流進月報表的已收訂金、今日待辦的尾款金額、
+         客戶頁的未收款。改成：只有從報價單條款上真的讀得到金額才寫，讀不到就留空並明講。 */
       const fromQuote=(typeof ordPayFromQuote==='function')?ordPayFromQuote({payDetail:quote.paymentDetail}, gt):null;
-      const pct=(typeof ordDepositPct==='function')?ordDepositPct(quote.clientName):50;
-      const dep=fromQuote?fromQuote.dep:Math.round(gt*pct/100);
-      const bal=fromQuote?fromQuote.bal:(gt-dep);
-      fields.deposit_amt=dep; fields.final_amt=bal;
+      if(fromQuote){ fields.deposit_amt=fromQuote.dep; fields.final_amt=fromQuote.bal; }
+      else _amtUnknown=true;
     }
   }
   if(typeof effOrdStatus==='function'){
@@ -514,7 +533,10 @@ async function maybeCreateOrderProgressOnSave(quoteNo, quote){
   }
   try{
     const d=await apiCall({ action:'updateOrderStatus', token:AUTH_TOKEN, quote_no:quoteNo, fields });
-    if(d&&d.ok) toast('已同時建立訂單追蹤進度','ok');
+    if(d&&d.ok){
+      if(_amtUnknown) toast('已建立訂單追蹤進度。⚠ 這張單的付款條件讀不出訂金／尾款金額，兩欄先留空（不亂猜），請到「訂單追蹤」自行填寫','err');
+      else toast('已同時建立訂單追蹤進度','ok');
+    }
     else toast('報價單已存，但訂單追蹤進度建立失敗：'+((d&&d.error)||'請到「訂單追蹤」手動補上'),'err');
   }catch(e){ toast('報價單已存，但訂單追蹤進度建立失敗，請到「訂單追蹤」手動補上','err'); }
 }
@@ -540,19 +562,23 @@ async function maybeSyncOrderProgressOnEdit(quoteNo, quote){
     if(gt===Math.round(parseFloat(st.grand_total)||0)) return;   // 金額沒變，不用同步
     const hasProgress=String(st.deposit_date||'').trim()!=='';
     const fields={ grand_total: gt };
+    let _amtUnknown=false;
     if(!hasProgress){
+      // 複檢 2026-08-13 #1-1：同上，讀不出來就不要猜著寫進資料庫
       const fromQuote=(typeof ordPayFromQuote==='function')?ordPayFromQuote({payDetail:quote.paymentDetail}, gt):null;
-      const pct=(typeof ordDepositPct==='function')?ordDepositPct(quote.clientName):50;
-      const dep=fromQuote?fromQuote.dep:Math.round(gt*pct/100);
-      const bal=fromQuote?fromQuote.bal:(gt-dep);
-      fields.deposit_amt=dep; fields.final_amt=bal;
+      if(fromQuote){ fields.deposit_amt=fromQuote.dep; fields.final_amt=fromQuote.bal; }
+      else _amtUnknown=true;
     }
     const r=await apiCall({ action:'updateOrderStatus', token:AUTH_TOKEN, quote_no:quoteNo, fields });
     if(r&&r.ok){
-      toast(hasProgress?'金額已修改，訂單追蹤總額已同步（訂金/尾款已有進度，未變動）':'金額已修改，訂單追蹤的訂金/尾款也一起重新算好了','ok');
+      if(hasProgress) toast('金額已修改，訂單追蹤總額已同步（訂金/尾款已有進度，未變動）','ok');
+      else if(_amtUnknown) toast('金額已修改，訂單追蹤總額已同步。⚠ 付款條件讀不出訂金／尾款金額，那兩欄沒有動，請到「訂單追蹤」確認','err');
+      else toast('金額已修改，訂單追蹤的訂金/尾款也一起重新算好了','ok');
     }
-    // 失敗就安靜略過：報價單本身已經存檔成功，同步只是附加動作，不打擾 Molly，需要時仍可手動到訂單追蹤調整
-  }catch(e){ /* 同上，安靜略過 */ }
+    /* 複檢 2026-08-13 #1-5：原本失敗完全靜默。一般使用者（阿軒／Vic）沒有 updateOrderStatus 權限，
+       每次改金額都會失敗、而且完全沒有提示，Molly 看到的訂單總額會一直停在舊值。改成明確提示。 */
+    else toast('⚠ 報價單已存，但訂單追蹤的總額沒有同步到：'+((r&&r.error)||'請到「訂單追蹤」手動更新總額'),'err');
+  }catch(e){ toast('⚠ 報價單已存，但訂單追蹤的總額沒有同步到，請到「訂單追蹤」手動更新總額','err'); }
 }
 
 /* ---- 產生正式 PDF/Word 文件（GAS 動態建立 Google Doc）----
@@ -810,6 +836,18 @@ function loadQuoteIntoForm(q){
   if(q.quoteNo){ document.getElementById('f-no').value=q.quoteNo; document.getElementById('pl-no').textContent=q.quoteNo; }
   const items=q.items||[];
   if(q.quoteType==='bottle'||q.quoteType==='ownbrand'||q.quoteType==='ownlabel'||q.quoteType==='consign'){
+    /* 複檢 2026-08-13 #3-2：反方向也要清。宴會分支已經會清瓶裝的殘留（複檢 #9），但瓶裝分支沒清宴會的——
+       開完一張宴會單再開一張瓶裝單、然後把單型改成「宴會酒水」，上一張宴會單的調酒組金額、
+       免費列、加購列會整批冒出來並計進總計，直接存檔就把別張單的品項寫進這張。 */
+    ['g1','g2'].forEach(g=>{
+      set(`ban-${g}-price`,''); set(`ban-${g}-qty`,'');
+      const _us=document.getElementById(`ban-${g}-unit`); if(_us) _us.value='cup';
+      const _m=document.getElementById(`ban-${g}-man`); if(_m) _m.checked=false;
+      const _s=document.getElementById(`ban-${g}-subman`); if(_s){ _s.value=''; _s.style.display='none'; }
+    });
+    { const _fb=document.getElementById('ban-free-body'); if(_fb) _fb.innerHTML=''; }
+    { const _ab=document.getElementById('ban-addon-body'); if(_ab) _ab.innerHTML=''; }
+    try{ banFreeItems=[]; banAddonItems=[]; flavors={g1:[],g2:[]}; }catch(_){}
     document.getElementById('itbody-bot').innerHTML=''; botItems=[];
     extras=[];
     const realItems = items.filter(it=>it.itemType!=='extra'&&it.itemType!=='freeship'&&it.itemType!=='taglabel'&&it.itemType!=='svcdetail');
@@ -871,7 +909,10 @@ function loadQuoteIntoForm(q){
       if(typeof onBanUnitChange==='function') onBanUnitChange(g);
       const auto=Math.round((parseFloat(it.unitPrice)||0)*(parseFloat(it.qty)||0));
       const st=Math.round(parseFloat(it.subtotal)||0);
-      if(st && st!==auto){
+      /* 複檢 2026-08-13 #3-1：原本是 if(st && …)，手動小計填 0（整組招待／併入其他費用不另計）
+         會因為 0 是 falsy 而沒被勾回，重新開啟這張單就自己變回「單價×杯數」，總計無聲變大。 */
+      const hasSt=(it.subtotal!=null && String(it.subtotal).trim()!=='');
+      if(hasSt && st!==auto){
         const m=document.getElementById(`ban-${g}-man`); if(m) m.checked=true;
         const s=document.getElementById(`ban-${g}-subman`); if(s){ s.style.display=''; s.value=st; }
       }

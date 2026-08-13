@@ -266,7 +266,7 @@ function renderOrders(){
       <td class="mc-main"><b>${escHtml(o.no)}</b> <span class="rec-badge ${o.typeKey==='banquet'?'banquet':o.typeKey==='custom'?'custom':'bottle'}">${o.type}</span><br>
         <span style="color:#6B6B63;font-size:11.5px">${escHtml(o.client)}</span>${lot?`<br><span style="color:#A6824A;font-size:11px">批號 ${escHtml(lot)}</span>`:''}${o.by?`<br><span style="color:#8A8880;font-size:11px">建立者 ${escHtml(o.by)}</span>`:''}</td>
       <td data-l="進度">${orderDots(o)}${note?`<br><span class="onote">📌 ${escHtml(note)}${(o.st.track_note.includes('\n'))?'…':''}</span>`:''}</td>
-      <td data-l="總計" style="text-align:right;font-weight:600">${money(o.total)}</td>
+      <td data-l="總計" style="text-align:right;font-weight:600">${money(ordGrandTotal(o))}</td>
       <td data-l="出貨日" style="text-align:center">${shipD}</td>
       <td data-l="提醒">${orderBadges(o)}${orderVerifyBadge(o)}</td>
       <td class="rec-actions" data-l="操作">
@@ -662,6 +662,24 @@ function rptFinalAmt(o){
   const dep=parseFloat(s.deposit_amt)||0;
   return {amt:gt-dep, est:true};
 }
+/* 訂單金額：訂單追蹤裡手改過的「訂單總額」(grand_total) 優先，沒填才用報價單的總計。
+   複檢 2026-08-13 #3-10：原本列表與月報表成交金額固定讀報價單總計，客戶追加後手改的金額不會反映，
+   但同一頁的尾款推估卻是用 grand_total —— 同一張單在同一頁出現兩套基準。 */
+function ordGrandTotal(o){
+  const s=(o&&o.st)||{};
+  if(s.grand_total!=null && String(s.grand_total)!=='') return parseFloat(s.grand_total)||0;
+  return parseFloat(o&&o.total)||0;
+}
+/* 訂金金額：s.deposit_amt 有填就用；沒填但尾款有填 → 用總額－尾款推估；兩欄都空白 → 回 missing（不計入合計，另外標示筆數）。
+   複檢 2026-08-13 #1-4：原本月報表的「本月已收訂金／已收尾款」是 parseFloat(...)||0，空白直接當 0，
+   但同一頁的「還沒收的尾款」卻會推估 —— 同一筆錢在報表上兩邊都看不到。 */
+function rptDepositAmt(o){
+  const s=o.st||{};
+  if(s.deposit_amt!=null && s.deposit_amt!==''){ return {amt:parseFloat(s.deposit_amt)||0, est:false}; }
+  const gt=(s.grand_total!=null && s.grand_total!=='') ? (parseFloat(s.grand_total)||0) : (parseFloat(o.total)||0);
+  if(s.final_amt!=null && s.final_amt!==''){ return {amt:Math.max(0, gt-(parseFloat(s.final_amt)||0)), est:true}; }
+  return {amt:0, est:true, missing:true};
+}
 /* 帳齡天數：這筆應收「掛在帳上幾天了」。優先用發票日（開了票才真的算應收），
    沒開票就用實際出貨日；兩個都沒有才退回預計尾款日、再退回報價日。都沒有回 null。 */
 function rptAgeDays(o){
@@ -703,15 +721,23 @@ function renderReport(){
   // 成交＝以「成交日」歸屬月份（訂金→出貨→收款中最早的實際日期），不再看報價日、
   // 也不再被手動狀態卡住：只要有填收款/出貨日期，就算狀態忘了改也會列入
   const dealt=ORDERS_CACHE.filter(o=>rptDealDate(o).startsWith(mm));
-  const sum=dealt.reduce((s,o)=>s+(parseFloat(o.total)||0),0);
-  const byC={}; dealt.forEach(o=>{ const k=o.client.split('｜')[0]; byC[k]=byC[k]||{n:0,a:0}; byC[k].n++; byC[k].a+=parseFloat(o.total)||0; });
+  const sum=dealt.reduce((s,o)=>s+ordGrandTotal(o),0);
+  const byC={}; dealt.forEach(o=>{ const k=o.client.split('｜')[0]; byC[k]=byC[k]||{n:0,a:0}; byC[k].n++; byC[k].a+=ordGrandTotal(o); });
   const rows=Object.entries(byC).sort((a,b)=>b[1].a-a[1].a);
 
   // 對帳視角：本月已收訂金／已收尾款（存量以外的月份篩選），未收尾款（存量、不分月）
   const depositedThisMonth=ORDERS_CACHE.filter(o=>effOrdStatus(o.st)!=='cancelled' && (o.st?.deposit_date||'').startsWith(mm));
-  const depositSum=depositedThisMonth.reduce((s,o)=>s+(parseFloat(o.st.deposit_amt)||0),0);
+  const depRows=depositedThisMonth.map(o=>rptDepositAmt(o));
+  const depositSum=depRows.reduce((s,r)=>s+r.amt,0);
+  const depEst=depRows.filter(r=>r.est&&!r.missing).length, depMiss=depRows.filter(r=>r.missing).length;
   const paidThisMonth=ORDERS_CACHE.filter(o=>effOrdStatus(o.st)!=='cancelled' && (o.st?.final_date||'').startsWith(mm));
-  const paidSum=paidThisMonth.reduce((s,o)=>s+(parseFloat(o.st.final_amt)||0),0);
+  const paidRows=paidThisMonth.map(o=>rptFinalAmt(o));
+  const paidSum=paidRows.reduce((s,r)=>s+r.amt,0);
+  const paidEst=paidRows.filter(r=>r.est).length;
+  const amtHint=(est,miss)=>{
+    const p=[]; if(est) p.push('含推估 '+est+' 筆'); if(miss) p.push(miss+' 筆未填金額未計入');
+    return p.length?'<div style="font-size:10px;color:#B5541F;margin-top:2px">'+p.join('、')+'</div>':'';
+  };
   const unpaidList=rptUnpaidList();
   /* 帳齡（2026-08-11 優化建議 #3）：從「這筆錢開始能收」那天算起——
      有開發票就從發票日，沒開就從實際出貨日；都沒有才退回預計尾款日／報價日。
@@ -736,8 +762,8 @@ function renderReport(){
       <div class="rpt-stat"><div class="k">成交筆數</div><div class="v">${dealt.length} 筆</div></div>
       <div class="rpt-stat"><div class="k">成交金額</div><div class="v" style="color:#A6824A">${money(sum)}</div></div>
       <div class="rpt-stat"><div class="k">本月報價</div><div class="v">${inMonth.length} 筆</div></div>
-      <div class="rpt-stat"><div class="k">本月已收訂金</div><div class="v" style="color:#2E7D4F">${money(depositSum)}</div></div>
-      <div class="rpt-stat"><div class="k">本月已收尾款</div><div class="v" style="color:#2E7D4F">${money(paidSum)}</div></div>
+      <div class="rpt-stat"><div class="k">本月已收訂金</div><div class="v" style="color:#2E7D4F">${money(depositSum)}</div>${amtHint(depEst,depMiss)}</div>
+      <div class="rpt-stat"><div class="k">本月已收尾款</div><div class="v" style="color:#2E7D4F">${money(paidSum)}</div>${amtHint(paidEst,0)}</div>
       <div class="rpt-stat"><div class="k">還沒收的尾款（累計）</div><div class="v" style="color:#B03A2E">${money(unpaidSum)}</div></div>
     </div>
     ${rows.length?`<div class="tbl-scroll"><table class="rec-table mcard" style="margin-top:10px"><thead><tr><th>客戶</th><th style="text-align:center">筆數</th><th style="text-align:right">金額</th></tr></thead><tbody>

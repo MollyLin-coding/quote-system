@@ -150,10 +150,8 @@ function renderTodayFocus(){
       if(d!=null&&d<0) items.push({o:d,h:`<span class="ob red">出貨逾期 ${-d} 天</span> 🚚 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）`,click:`gotoPage('orders')`});
       else if(d!=null&&d<=7) items.push({o:d,h:`<span class="ob warn">${d===0?'今天':d+' 天後'}</span> 🚚 ${escHtml(o.client.split('｜')[0])} 出貨（${escHtml(o.no)}）`,click:`gotoPage('orders')`});
     }
-    if(s==='quoted'&&o.expiry){
-      const d=daysBetween(o.expiry);
-      if(d!=null&&d>=0&&d<=7) items.push({o:d,h:`<span class="ob red">有效期剩 ${d} 天</span> ⏰ ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）`,click:`gotoPage('orders')`});
-    }
+    /* 2026-08-08 Molly：報價到期不需要提醒。月曆格、訂單提醒徽章、Google 日曆同步當時都拿掉了，
+       只有「今日焦點」這塊漏掉（複檢 2026-08-13 找到），一併移除。 */
     if(s==='shipped') items.push({o:99,h:`<span class="ob warn">待開發票</span> 💰 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）`,click:`gotoPage('orders')`});
     if(s==='invoiced') items.push({o:99,h:`<span class="ob warn">待收尾款</span> 💰 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）${o.st?.final_amt?'尾款 '+money(o.st.final_amt):''}`,click:`gotoPage('orders')`});
   });
@@ -234,8 +232,10 @@ function openCalEdit(id){
   document.getElementById('ce-category').value=it.category||'工作';
   document.getElementById('ce-priority').checked=it.priority==='high';
   { const dc=document.getElementById('ce-done'); if(dc) dc.checked=(it.done==='Y'); }
-  // 全天／時間：舊資料沒有 all_day 欄位時，視為全天（維持原本沒有時間的行為）
-  document.getElementById('ce-allday').checked=(it.all_day!=='N');
+  /* 全天／時間：舊資料 all_day 是空的。複檢 2026-08-13 發現，顯示端（月曆格／今日待辦／待辦信）
+     把「空值＋有時間」當成「有指定時間」，但這裡卻當成全天並把時間欄清空——只要開一次編輯視窗
+     再按儲存，時間就永久消失。改成跟顯示端同一套判斷：有填時間就不是全天。 */
+  document.getElementById('ce-allday').checked=(String(it.all_day||'')==='Y' || !String(it.time||'').trim());
   // time 欄可能是 "14:00" 或 "14:00-15:30"（幾點到幾點）
   const tparts=String(it.time||'').split('-');
   document.getElementById('ce-time').value=(tparts[0]||'').trim();

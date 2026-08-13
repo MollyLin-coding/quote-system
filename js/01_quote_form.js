@@ -829,10 +829,13 @@ function addExt(){
   document.getElementById('ea').value='';
 }
 function pres(n,a){pushExt(n,a);}
+/* 複檢 2026-08-13 #3-12：這兩個 prompt 是純文字輸入，打「1,500」會被 parseFloat 截成 1，
+   報價單上直接出現「運費：$1」並進入合計與 PDF，沒有任何提示。先把逗號／空白／$ 去掉。 */
+function _extNum(s){ return parseFloat(String(s==null?'':s).replace(/[,，\s$＄]/g,'')); }
 function presAmt(n,def){
   const s=prompt(`請輸入${n}金額`, def!=null?String(def):'');
   if(s===null) return;
-  const amt=parseFloat(s)||0;
+  const amt=_extNum(s)||0;
   pushExt(n, amt);
 }
 function handleExtPreset(sel){
@@ -848,7 +851,7 @@ function handleExtPreset(sel){
 function presDiscount(n){
   const s=prompt(`請輸入「${n}」折抵金額（正數即可，會以折抵方式扣減總額）`, '');
   if(s===null) return;
-  const amt=Math.abs(parseFloat(s)||0);
+  const amt=Math.abs(_extNum(s)||0);
   if(!amt){ toast('折抵金額需大於 0','err'); return; }
   pushExt(n, -amt); // 以負數列入額外費用 → 於合計前扣減（與其他額外費用一併計稅）
 }

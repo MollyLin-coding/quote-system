@@ -85,9 +85,19 @@ onCacheClear(function(){ VM_DATA=null; });
 function setVmTab(t){ VM_TAB=t; renderVerifyMgmt(); }
 function vmNoReportList(){
   if(!VM_DATA) return [];
+  /* 複檢 2026-08-13 #3-7：出貨日原本用留底的「建立時間」(last_at)，不是驗收單上印的配送日期。
+     8/1 出貨、8/20 才補開驗收單 → 系統以為 8/20 才出貨，接下來 7 天不催；
+     進留底按「編輯／重印」也會讓建立時間重來一次，已逾期的單直接從催單名單消失。
+     改成優先用驗收單上的「配送日期」(ship_date)、同一張單取最新的那一張，讀不到才退回建立時間。 */
   const shipped={};
-  Object.keys(VM_DATA.formSum||{}).forEach(no=>{ const s=VM_DATA.formSum[no]||{}; shipped[no]=s.last_at||s.last||s.last_date||''; });
-  (VM_DATA.forms||[]).forEach(f=>{ if(shipped[f.no]==null||shipped[f.no]==='') shipped[f.no]=f.ship_date||f.created_at||''; });
+  (VM_DATA.forms||[]).forEach(f=>{
+    if(!f.no || !f.ship_date) return;
+    const nd=vmLocalYmd(f.ship_date)||'';
+    const cur=shipped[f.no]?(vmLocalYmd(shipped[f.no])||''):'';
+    if(!cur || nd>cur) shipped[f.no]=f.ship_date;
+  });
+  Object.keys(VM_DATA.formSum||{}).forEach(no=>{ const s=VM_DATA.formSum[no]||{}; if(!shipped[no]) shipped[no]=s.last_at||s.last||s.last_date||''; });
+  (VM_DATA.forms||[]).forEach(f=>{ if(f.no && !shipped[f.no]) shipped[f.no]=f.created_at||''; });
   const reported={};
   (VM_DATA.reports||[]).forEach(r=>{ if(r.no) reported[r.no]=true; });
   Object.keys(VM_DATA.repSum||{}).forEach(no=>{ reported[no]=true; });

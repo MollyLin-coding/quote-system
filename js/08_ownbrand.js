@@ -62,7 +62,16 @@ function recalcOwnRow(id){
   const lpEl=row.querySelector('[data-f="lp"]'),diEl=row.querySelector('[data-f="disc"]'),pEl=row.querySelector('[data-f="price"]');
   if(!lpEl||!diEl||!pEl) return;
   const lp=parseFloat(lpEl.value)||0;
-  const dv=diEl.value.trim();
+  let dv=diEl.value.trim();
+  /* 複檢 2026-08-13 #3-13：折欄以「折」為單位（6＝6折），原本沒有上下限——想打 6 折打成 60，
+     計價就變成原價×6，而計價欄是 readonly 只顯示結果，金額不誇張時很容易漏看。 */
+  if(dv!==''){
+    const dnum=parseFloat(dv);
+    if(!(dnum>0 && dnum<=10)){
+      toast('折數要填 0～10（6 折就填 6，原價請留空）','err');
+      diEl.value=''; dv='';
+    }
+  }
   const f = dv==='' ? 1 : ((parseFloat(dv)||0)/10);
   pEl.value = lp>0 ? Math.round(lp*f) : '';
   calc();
@@ -289,7 +298,14 @@ async function saveConsignCustomerForm(){
   if(!editing && CS_CUSTOMERS.some(c=>String(c.customer_id)===String(id))){
     toast('客戶代碼「'+id+'」已存在，換一個代碼；要改既有客戶請用「客戶設定」','err'); _csSaving=false; return;
   }
-  const disc=parseFloat(g('cs-f-disc'));
+  /* 複檢 2026-08-13 #3-9：折數欄按習慣打「8」或「7.5」（想表達 8 折）會被靜默改成 0.75，
+     之後每一筆銷售都用 0.75 自動鎖價，月結長期錯誤而且不可追溯。改成明確擋下來。 */
+  const discRaw=String(g('cs-f-disc')).trim();
+  const disc=parseFloat(discRaw);
+  if(discRaw!=='' && !(disc>0 && disc<=1)){
+    toast('預設折數要填 0～1 之間的小數（8 折請填 0.8、7.5 折請填 0.75），不是填 8 或 7.5','err');
+    _csSaving=false; return;
+  }
   const customer={ customer_id:id, name, default_discount:(disc>0&&disc<=1)?disc:0.75,
     billing_day:g('cs-f-bill'), contact:g('cs-f-contact'), phone:g('cs-f-phone'),
     ship_address:g('cs-f-addr'), note:g('cs-f-note'), active:document.getElementById('cs-f-active').value,
@@ -474,7 +490,8 @@ async function saveConsignMove(){
       const handler=(document.getElementById('cs-m-handler')||{}).value||'';
       const c=curConsignCustomer();
       closeConsignMove();
-      if(movements.length){ loadConsignInventory(); loadConsignLedger(); }
+      // 複檢 2026-08-13 #1-2：帳動了，已產生的月結就作廢，避免匯出／轉報價單用到舊金額
+      if(movements.length){ csClearMonthly(); loadConsignInventory(); loadConsignLedger(); }
       if(wantVf){
         /* 驗收單的列：正常鋪貨列＋（有勾的話）該款的 500ml 試飲瓶列＋單獨登記的試飲瓶列。
            試飲瓶只在這張單上出現，不寫進 consign_ledger，所以庫存與保證金都不受影響。 */
@@ -526,6 +543,8 @@ async function saveConsignMove(){
     if(!d.ok) throw new Error(d.error||'儲存失敗');
     toast('已登記'+(CS_TYPE_LABEL[type]||''),'ok');
     closeConsignMove();
+    // 複檢 2026-08-13 #1-2：帳動了，已產生的月結就作廢，避免匯出／轉報價單用到舊金額
+    csClearMonthly();
     loadConsignInventory(); loadConsignLedger();
   }catch(e){ toast(e.message||'儲存失敗','err'); }
   finally{ _csMoveSaving=false; }
@@ -640,7 +659,9 @@ function consignMonthlyToQuote(){
   setTaxMode('inc');
   document.getElementById('itbody-bot').innerHTML=''; botItems=[];
   CS_MONTHLY.lines.forEach(l=>{
-    addBotRow({name:l.name||l.sku_id, vol:l.volume, price:l.unit_price, qty:l.qty});
+    /* 複檢 2026-08-13 #3-3：l.volume 是 '100ml'/'500ml' 字串，直接塞進 type=number 的容量欄會變空白，
+       轉出來的報價單與正式 PDF 整欄沒有容量，同支酒的 100ml/500ml 變成兩列同名。跟 quickAddOwnbrand 一樣先抽數字。 */
+    addBotRow({name:l.name||l.sku_id, vol:String(l.volume||'').replace(/[^\d]/g,''), price:l.unit_price, qty:l.qty});
   });
   if(botItems.length===0) addBotRow();
   onDate(); upNo();

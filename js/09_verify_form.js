@@ -186,11 +186,17 @@ function generateVerifyPdf(mode){
   const gvl=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
   d.lot=gvl('vf-lot'); d.shipDate=gvl('vf-shipdate'); d.shipper=gvl('vf-shipper'); d.boxes=gvl('vf-boxes');
   d.shipSeq=parseInt(gvl('vf-shipseq'),10)||1; // 「第幾次出貨」改成人工填，不再自動算
-  const w=window.open('','_blank');
-  if(!w){ toast('請允許彈出視窗，才能列印／存成 PDF','err'); return; }
-  w.document.open(); w.document.write(buildVerifyDocHtml(d)); w.document.close();
+  /* 複檢 2026-08-13 #1-3：留底一定要先存。原本是彈窗被瀏覽器擋掉就直接 return，留底一筆都不會存
+     → 下次開同一張單的驗收單，「已出貨」歸零、「本次出貨」又帶成全部訂購量，第二批會印成整批數量。 */
   saveVerifyFormRecord(d);
   const seqEl=document.getElementById('vf-shipseq'); if(seqEl) seqEl.value=d.shipSeq+1; // 方便下一次接著填
+  /* 複檢 2026-08-13 #3-4：產生完要關掉視窗（寄售那套本來就有關）。原本留在畫面上，想比較版面
+     先按「產生分批」再按「產生整批」就會存出兩筆同單號留底，下次開同一張單「已出貨」數量加倍、
+     「本次出貨」變 0，還會跳一則歸因錯誤的警告。要改版面請用「預覽」，那個不留底。 */
+  closeVerifyForm();
+  const w=window.open('','_blank');
+  if(!w){ toast('留底已存好了，但列印視窗被瀏覽器擋掉。請允許彈出視窗後，到「驗收單留底」重印這一筆','err'); return; }
+  w.document.open(); w.document.write(buildVerifyDocHtml(d)); w.document.close();
   toast('已開啟驗收單，於列印視窗選「另存為 PDF」','ok');
 }
 /* 純預覽：只是給人看排版對不對，不留底、不自動跳出列印視窗（跟「產生」的差別）
@@ -577,11 +583,12 @@ function previewConsignVerifyPdf(){
 }
 function generateConsignVerifyPdf(){
   const d=csVfCollect(); if(!d||!d.rows.length){ toast('請至少填一項酒款與數量','err'); return; }
-  const w=window.open('','_blank');
-  if(!w){ toast('請允許彈出視窗，才能列印／存成 PDF','err'); return; }
-  w.document.open(); w.document.write(buildConsignVerifyDocHtml(d)); w.document.close();
+  // 複檢 2026-08-13 #1-3：留底先存（試飲瓶只有留底查得到，彈窗被擋不能讓它整批消失）
   saveConsignVerifyFormRecord(d);
   closeConsignVerifyForm();
+  const w=window.open('','_blank');
+  if(!w){ toast('留底已存好了，但列印視窗被瀏覽器擋掉。請允許彈出視窗後，到「驗收單留底」重印這一筆','err'); return; }
+  w.document.open(); w.document.write(buildConsignVerifyDocHtml(d)); w.document.close();
   toast('已開啟驗收單，於列印視窗選「另存為 PDF」','ok');
 }
 /* 存留底：跟報價單那套一樣存進「驗收單紀錄」（saveVerifyForm），額外多存 client 欄

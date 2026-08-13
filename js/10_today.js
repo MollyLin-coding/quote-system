@@ -269,7 +269,11 @@ function renderToday(){
   const noInvoice = d.no_invoice || [];
   // 「出貨：XXX」備忘（item_id 為 ship-單號）是舊版存單自動寫進行事曆的，
   // 跟上面的 🚚 出貨卡片重複，這裡不再列一次
-  const cal       = (d.calendar  || []).filter(it=>!/^ship-/.test(String(it.item_id||'')));
+  /* 複檢 2026-08-13 #2-5：行事曆設計上不開放給一般使用者（後端 listCalendarItems 是 owner-only），
+     但登入回應夾帶的 digest 會把當天的行事曆事項（含「私人」分類）一起送出來，
+     阿軒／Vic 登入的第一個畫面就看得到。前端先擋掉；後端也要一起補（見複檢報告第二級）。 */
+  const cal       = ((typeof isOwner==='function' && !isOwner()) ? [] : (d.calendar  || []))
+                      .filter(it=>!/^ship-/.test(String(it.item_id||'')));
   const csBill    = tdConsignBilling();
   const total = shipDue.length + finalDue.length + noScan.length + noInvoice.length + cal.length + csBill.length;
 
