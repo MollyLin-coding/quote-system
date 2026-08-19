@@ -147,8 +147,12 @@ function renderTodayFocus(){
     if(s==='cancelled'||s==='closed'||s==='paid') return;
     if(o.st?.ship_date_est&&!o.st?.ship_date_actual){
       const d=daysBetween(o.st.ship_date_est);
-      if(d!=null&&d<0) items.push({o:d,h:`<span class="ob red">出貨逾期 ${-d} 天</span> 🚚 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）`,click:`gotoPage('orders')`});
-      else if(d!=null&&d<=7) items.push({o:d,h:`<span class="ob warn">${d===0?'今天':d+' 天後'}</span> 🚚 ${escHtml(o.client.split('｜')[0])} 出貨（${escHtml(o.no)}）`,click:`gotoPage('orders')`});
+      // 2026-08-19 Molly：出貨提醒本來沒有勾選確認已出貨的入口，只能點整列跳去訂單追蹤手動填，
+      // 沒空填就會一直卡成逾期。跟備忘同一顆圈圈勾法：打勾＝把實際出貨日記為今天（同一個欄位，
+      // 跟去訂單追蹤「編輯進度」填的效果一樣）；填錯了照樣可以到訂單追蹤調整。
+      const shipBox=`<span class="fdone" title="打勾＝標記今天已出貨（記為實際出貨日），不再顯示於焦點" onclick="event.stopPropagation();calFocusShip('${escAttr(o.no)}')"></span>`;
+      if(d!=null&&d<0) items.push({o:d,h:`${shipBox}<span class="ob red">出貨逾期 ${-d} 天</span> 🚚 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）`,click:`gotoPage('orders')`});
+      else if(d!=null&&d<=7) items.push({o:d,h:`${shipBox}<span class="ob warn">${d===0?'今天':d+' 天後'}</span> 🚚 ${escHtml(o.client.split('｜')[0])} 出貨（${escHtml(o.no)}）`,click:`gotoPage('orders')`});
     }
     /* 2026-08-08 Molly：報價到期不需要提醒。月曆格、訂單提醒徽章、Google 日曆同步當時都拿掉了，
        只有「今日焦點」這塊漏掉（複檢 2026-08-13 找到），一併移除。 */
@@ -156,7 +160,7 @@ function renderTodayFocus(){
     if(s==='invoiced') items.push({o:99,h:`<span class="ob warn">待收尾款</span> 💰 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）${o.st?.final_amt?'尾款 '+money(o.st.final_amt):''}`,click:`gotoPage('orders')`});
   });
   items.sort((a,b)=>a.o-b.o);
-  el.innerHTML=`<div class="ph" style="font-weight:700;font-size:13px;margin-bottom:6px">今日焦點 — ${fmtD(new Date()).slice(5)}<span style="color:#A8A69C;font-weight:400;font-size:11px">　今天＋未來 7 天；逾期自動標紅；📌 備忘做完了就點左邊圈圈打勾</span></div>`+
+  el.innerHTML=`<div class="ph" style="font-weight:700;font-size:13px;margin-bottom:6px">今日焦點 — ${fmtD(new Date()).slice(5)}<span style="color:#A8A69C;font-weight:400;font-size:11px">　今天＋未來 7 天；逾期自動標紅；📌 備忘、🚚 出貨做完了就點左邊圈圈打勾</span></div>`+
     (items.length?items.map(i=>`<div class="focus-row" onclick="${i.click}">${i.h}</div>`).join(''):'<div style="color:#A8A69C;font-size:12.5px">目前沒有需要注意的事項 ✓</div>');
 }
 function renderTodoList(){
@@ -195,6 +199,41 @@ function calFocusDone(id){
   const it=CAL_ITEMS.find(x=>String(x.item_id)===String(id)); if(!it||it.done==='Y') return;
   toggleTodoDone(id);
   toast('已完成：'+(it.title||'')+'（要復原可在行事曆點這筆，取消「已完成」）','ok');
+}
+/* 今日焦點的「打勾＝已出貨」（2026-08-19，Molly 回報出貨提醒沒有勾選確認已出貨的入口，只能點整列
+   跳去訂單追蹤手動填，沒空填就一直卡成逾期）：打勾把訂單追蹤的實際出貨日記為今天——跟去「訂單追蹤」
+   開「編輯進度」填的是同一個欄位（updateOrderStatus 的 ship_date_actual），填錯了一樣可以到那邊改。
+   跟 toggleTodoDone 同一套「樂觀更新＋失敗還原」寫法；差別是這裡動的是 ORDERS_CACHE，但 apiCall
+   （寫入類）連 CAL_ITEMS 也會一起清空，所以兩份快照都要留、都要還原。 */
+function calFocusShip(no){
+  const o=(ORDERS_CACHE||[]).find(x=>x.no===no); if(!o) return;
+  if(o.st && o.st.ship_date_actual) return;   // 已經標過了，不重複問
+  if(_busy['shipFocus_'+no]) return;
+  if(!confirm(`「${(o.client||'').split('｜')[0]}」（${no}）今天已出貨？\n將把訂單追蹤的實際出貨日記為今天；填錯了可以到訂單追蹤調整。`)) return;
+  calFocusShipSave(no);
+}
+async function calFocusShipSave(no){
+  _busy['shipFocus_'+no]=true;
+  const o=(ORDERS_CACHE||[]).find(x=>x.no===no);
+  if(!o){ _busy['shipFocus_'+no]=false; return; }
+  const today=fmtD(new Date());
+  const prevSt=o.st;
+  o.st=Object.assign({}, o.st||{}, { ship_date_actual: today });
+  renderCalendar();
+  const snap=CAL_ITEMS, osnap=ORDERS_CACHE;   // apiCall（寫入類）會清空 CAL_ITEMS 與 ORDERS_CACHE，先各留一份
+  try{
+    const d=await apiCall({ action:'updateOrderStatus', token:AUTH_TOKEN, quote_no:no, fields:{ ship_date_actual: today } });
+    if(!d.ok) throw new Error(d.error||'儲存失敗');
+    CAL_ITEMS=snap; if(osnap) ORDERS_CACHE=osnap;
+    renderCalendar();                              // 畫面即刻反映（這筆已是改好的），背景再同步
+    if(typeof loadOrders==='function') loadOrders().catch(()=>{});
+    toast('已標記出貨，實際出貨日：'+today+'（要改可到訂單追蹤調整）','ok');
+  }catch(e){
+    CAL_ITEMS=snap; if(osnap) ORDERS_CACHE=osnap;
+    const oo=(ORDERS_CACHE||[]).find(x=>x.no===no); if(oo) oo.st=prevSt;   // 回復畫面，避免以為標了其實沒存到
+    renderCalendar();
+    toast('標記出貨失敗，已還原：'+e.message,'err');
+  }finally{ _busy['shipFocus_'+no]=false; }
 }
 /* 新增／編輯事項 */
 let CAL_EDIT_ID=null;
