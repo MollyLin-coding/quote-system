@@ -111,7 +111,9 @@ function applyOwnbrandTiers(){
    v3.0 自有品牌公版酒（B. 合作寄售管理）
    ============================================================ */
 let CS_CUSTOMERS=[], CS_DISCOUNTS=[], CS_CUR='', CS_INV=[], CS_MONTHLY=null;
-const CS_TYPE_LABEL={in:'鋪貨/補貨',out:'銷售',return:'退貨',adjust:'盤點調整',deposit_refund:'退保證金'};
+const CS_TYPE_LABEL={in:'鋪貨/補貨',out:'銷售',return:'退貨',adjust:'盤點調整'};
+/* 2026-08-21 Molly：寄售不再走保證金制。保證金餘額／在池瓶數／退保證金異動全部從畫面移除，
+   舊的 deposit_refund 明細也一併過濾不顯示（後端資料原封保留，沒有刪除任何東西）。 */
 
 async function initConsignPage(force){
   // 公版酒資料與寄售客戶同時要（以前是一個等一個，等於兩倍時間）
@@ -170,26 +172,22 @@ async function loadConsignInventory(){
   // 一次抓「全部客戶」的庫存進 90 秒讀取快取（前端本來就有按客戶過濾）：
   // 切換客戶不再重打後端（原本每切一次 2.5 秒起跳）；登記異動後快取自動清掉會重抓。
   const payload={action:'getConsignInventory', token:AUTH_TOKEN};
-  if(!rcPeek(payload)) body.innerHTML=sklTableRows(4,4);
+  if(!rcPeek(payload)) body.innerHTML=sklTableRows(3,4);
   try{
     const d=await readCall(payload);
     if(!d.ok) throw new Error(d.error||'載入庫存失敗');
     CS_INV=(d.inventory||[]).filter(r=>!r.customer_id||String(r.customer_id)===String(CS_CUR));
-    // 不押保證金的客戶：直接顯示「不押保證金」，不要秀 $0 讓人以為是還沒收（2026-08-06）
-    const dep=(d.deposit_held_by_customer&&d.deposit_held_by_customer[CS_CUR])||0;
-    document.getElementById('cs-deposit').textContent=csCustomerNeedsDeposit()?money(dep):'不押保證金';
     const totStock=CS_INV.reduce((s,r)=>s+(parseFloat(r.balance)||0),0);
     document.getElementById('cs-totstock').textContent=totStock.toLocaleString()+' 瓶';
-    if(!CS_INV.length){ body.innerHTML='<tr><td colspan="4" class="rec-empty">尚無庫存資料（先登記鋪貨）</td></tr>'; return; }
+    if(!CS_INV.length){ body.innerHTML='<tr><td colspan="3" class="rec-empty">尚無庫存資料（先登記鋪貨）</td></tr>'; return; }
     body.innerHTML=CS_INV.map(r=>{
       const p=ownbrandBySku(r.sku_id);
       const nm=r.name||(p?p.name:r.sku_id);
       const vol=r.volume||(p?p.volume:'');
       return `<tr><td class="mc-main">${escHtml(nm)}</td><td data-l="容量" style="text-align:center">${escHtml(vol)}</td>
-        <td data-l="實體庫存" style="text-align:right;font-weight:600">${(parseFloat(r.balance)||0).toLocaleString()}</td>
-        <td data-l="保證金在池瓶數" style="text-align:right">${(parseFloat(r.deposit_pool_qty)||0).toLocaleString()}</td></tr>`;
+        <td data-l="實體庫存" style="text-align:right;font-weight:600">${(parseFloat(r.balance)||0).toLocaleString()}</td></tr>`;
     }).join('');
-  }catch(e){ body.innerHTML=`<tr><td colspan="4" class="rec-empty">${escHtml(e.message||'載入失敗')}</td></tr>`; }
+  }catch(e){ body.innerHTML=`<tr><td colspan="3" class="rec-empty">${escHtml(e.message||'載入失敗')}</td></tr>`; }
 }
 async function loadConsignLedger(){
   const body=document.getElementById('cs-ledger-body');
@@ -198,7 +196,8 @@ async function loadConsignLedger(){
   try{
     const d=await readCall(payload);
     if(!d.ok) throw new Error(d.error||'載入明細失敗');
-    let rows=(d.rows||[]).filter(r=>!r.customer_id||String(r.customer_id)===String(CS_CUR));
+    // 2026-08-21：保證金制取消，舊的「退保證金」異動一併不顯示（資料仍在後端）
+    let rows=(d.rows||[]).filter(r=>(!r.customer_id||String(r.customer_id)===String(CS_CUR)) && String(r.type||'')!=='deposit_refund');
     rows.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
     if(!rows.length){ body.innerHTML='<tr><td colspan="6" class="rec-empty">尚無異動明細</td></tr>'; return; }
     body.innerHTML=rows.map(r=>{
@@ -242,8 +241,6 @@ function openConsignCustomerEdit(id){
   g('cs-f-addr').value=c?.ship_address||'';
   g('cs-f-note').value=c?.note||'';
   g('cs-f-active').value=String(c?.active||'Y').toUpperCase()==='N'?'N':'Y';
-  // 保證金開關（2026-08-06 加）：空白／Y＝要押（維持舊行為），N＝這家不押
-  { const dp=g('cs-f-dep'); if(dp) dp.value=String(c?.deposit_required||'Y').toUpperCase()==='N'?'N':'Y'; }
   // 例外折：僅在編輯既有客戶時顯示（需 customer_id）
   const w=g('cs-exc-wrap');
   if(editing){ w.style.display='block'; populateConsignSkuSelect('cs-exc-sku'); renderConsignExceptions(id); }
@@ -309,7 +306,10 @@ async function saveConsignCustomerForm(){
   const customer={ customer_id:id, name, default_discount:(disc>0&&disc<=1)?disc:0.75,
     billing_day:g('cs-f-bill'), contact:g('cs-f-contact'), phone:g('cs-f-phone'),
     ship_address:g('cs-f-addr'), note:g('cs-f-note'), active:document.getElementById('cs-f-active').value,
-    deposit_required:(document.getElementById('cs-f-dep')||{}).value||'Y' };
+    /* 保證金欄位已從畫面移除（2026-08-21）。這裡照抄客戶原本的值送回去，避免存檔時
+       把舊資料的 deposit_required 洗掉；新客戶不帶這欄，交給後端維持空白。 */
+    ...(function(){ const old=CS_CUSTOMERS.find(x=>String(x.customer_id)===String(id));
+      return (old && old.deposit_required!=null && old.deposit_required!=='') ? {deposit_required:old.deposit_required} : {}; })() };
   try{
     const d=await apiCall({action:'saveConsignCustomer', token:AUTH_TOKEN, customer, ...customer});
     if(!d.ok) throw new Error(d.error||'儲存失敗');
@@ -351,8 +351,7 @@ function onConsignMoveType(){
   const priceRow=document.getElementById('cs-m-price').closest('.fl');
   if(priceRow) priceRow.style.display=(t==='out')?'block':'none';
   const hint=document.getElementById('cs-m-qtyhint');
-  hint.textContent = t==='deposit_refund' ? '退還保證金的瓶數（通常＝在池瓶數）' : (t==='adjust' ? '可為負數' : '瓶數');
-  csMoveDepositHint();
+  hint.textContent = (t==='adjust' ? '可為負數' : '瓶數');
 }
 /* ---- 鋪貨/補貨多列（一次登記多款酒）---- */
 function csMoveSkuOptions(selectedSku){
@@ -373,7 +372,6 @@ function csDelMoveRow(id){
 }
 function csMoveRowInput(id, key, val){
   const r=csMoveItems.find(x=>x.id===id); if(r) r[key]=val;
-  csMoveRowDepositHint(id);
   if(key==='taster') csMoveGenvfLock();
 }
 /* 2026-08-12 Molly：試飲瓶只會出現在出貨驗收單上，不寫進 consign_ledger——
@@ -386,66 +384,29 @@ function csMoveGenvfLock(){
   if(anyTaster){ cb.checked=true; cb.disabled=true; if(hint) hint.style.display='block'; }
   else { cb.disabled=false; if(hint) hint.style.display='none'; }
 }
-function csMoveRowDepositHint(id){
-  const el=document.getElementById('cs-m-rowdep-'+id); if(!el) return;
-  const r=csMoveItems.find(x=>x.id===id);
-  const u=r?csMoveDepositUnit(r.sku):0;
-  const qty=r?(parseFloat(r.qty)||0):0;
-  el.textContent=(qty>0&&u>0)?('保證金 '+money(qty*u)):'';
-}
 function renderCsMoveItems(){
   const body=document.getElementById('cs-m-items-body'); if(!body) return;
   /* 2026-08-06 Molly：每款鋪貨酒都可以附一支 500ml 試飲瓶。
-     試飲瓶是免費贈送、不進庫存帳、不收保證金——只會出現在出貨驗收單上並標示「試飲」，
+     試飲瓶是免費贈送、不進庫存帳——只會出現在出貨驗收單上並標示「試飲」，
      所以這裡只是一個旗標，不會產生 consign_ledger 異動。 */
   body.innerHTML=csMoveItems.map(r=>`<div style="margin-top:6px">
     <div style="display:flex;gap:8px;align-items:center">
       <select class="fi" style="flex:2" onchange="csMoveRowInput(${r.id},'sku',this.value)">${csMoveSkuOptions(r.sku)}</select>
       <input class="fi" type="number" min="0" style="flex:1" placeholder="數量" value="${(r.qty!=null&&r.qty!=='')?escAttr(r.qty):''}" oninput="csMoveRowInput(${r.id},'qty',this.value)">
-      <span id="cs-m-rowdep-${r.id}" style="font-size:11px;color:#7A5A1E;white-space:nowrap;width:84px"></span>
       <button type="button" class="del" onclick="csDelMoveRow(${r.id})">✕</button>
     </div>
     <label style="display:inline-flex;align-items:center;gap:5px;margin:4px 0 0 2px;font-size:11.5px;color:var(--hint);cursor:pointer">
       <input type="checkbox" ${r.taster?'checked':''} onchange="csMoveRowInput(${r.id},'taster',this.checked)" style="width:14px;height:14px;cursor:pointer">
       附 500ml 試飲瓶
       <input type="number" min="1" value="${(r.tasterQty!=null&&r.tasterQty!=='')?escAttr(r.tasterQty):1}" onchange="csMoveRowInput(${r.id},'tasterQty',this.value)" style="width:46px;border:1px solid var(--bd);border-radius:4px;padding:1px 4px;font-size:11px;font-family:inherit">
-      支（免費贈送，不計價、不收保證金、不進庫存）
+      支（免費贈送，不計價、不進庫存）
     </label>
   </div>`).join('');
-  csMoveItems.forEach(r=>csMoveRowDepositHint(r.id));
 }
 function csGenVerifyNo(customerId){
   const n=new Date(), p=x=>String(x).padStart(2,'0');
   const stamp=n.getFullYear()+p(n.getMonth()+1)+p(n.getDate())+p(n.getHours())+p(n.getMinutes())+p(n.getSeconds());
   return 'CS-'+String(customerId||'').replace(/[^A-Za-z0-9]/g,'')+'-'+stamp;
-}
-/* 這個客戶要不要押保證金（2026-08-06 Molly：不是每家都押）。
-   客戶主檔 deposit_required 空白或 'Y' ＝要押（維持舊行為），'N' ＝不押。 */
-function csCustomerNeedsDeposit(){
-  const c=curConsignCustomer();
-  return String((c&&c.deposit_required)||'Y').toUpperCase()!=='N';
-}
-/* 鋪貨/退貨時即時顯示保證金金額（100ml $50／500ml $250，值來自 consign_terms），不用心算 */
-function csMoveDepositUnit(sku){
-  if(!csCustomerNeedsDeposit()) return 0;   // 這家不押保證金 → 一律不顯示、不計算
-  const p=ownbrandBySku(sku); if(!p||!CONSIGN_TERMS) return 0;
-  const v=String(p.volume||'');
-  if(v==='100ml') return parseFloat(CONSIGN_TERMS.deposit_100ml)||0;
-  if(v==='500ml') return parseFloat(CONSIGN_TERMS.deposit_500ml)||0;
-  return 0;
-}
-function csMoveDepositHint(){
-  const el=document.getElementById('cs-m-dephint'); if(!el) return;
-  const t=document.getElementById('cs-m-type').value;
-  const sku=document.getElementById('cs-m-sku').value;
-  const qty=parseFloat(document.getElementById('cs-m-qty').value)||0;
-  const u=csMoveDepositUnit(sku);
-  let txt='';
-  if(qty>0&&u>0){
-    if(t==='in') txt='💰 此次應收保證金：'+money(qty*u)+'（每瓶 '+money(u)+'）';
-    else if(t==='return'||t==='deposit_refund') txt='💰 此次應退保證金：'+money(qty*u)+'（每瓶 '+money(u)+'）';
-  }
-  el.textContent=txt; el.style.display=txt?'block':'none';
 }
 let _csMoveSaving=false;
 async function saveConsignMove(){
@@ -482,7 +443,7 @@ async function saveConsignMove(){
       const tasterExtra=valid.filter(r=>r.taster).length + tasterOnly.length;
       toast(valid.length
         ? ('已登記鋪貨（共 '+valid.length+' 款）'+(tasterExtra?'，另加 '+tasterExtra+' 款試飲瓶':''))
-        : ('已登記試飲瓶（共 '+tasterOnly.length+' 款，不影響庫存與保證金）'), 'ok');
+        : ('已登記試飲瓶（共 '+tasterOnly.length+' 款，不影響庫存）'), 'ok');
       const genvf=document.getElementById('cs-m-genvf');
       // 只要有任何試飲瓶（鋪貨列附加或單獨列），驗收單留底是唯一查得到「送了幾支、何時送」的地方，
       // 不管使用者有沒有勾，一律強制產生（畫面上的勾選已經被 csMoveGenvfLock 鎖住，這裡是後端保險）。
@@ -494,7 +455,7 @@ async function saveConsignMove(){
       if(movements.length){ csClearMonthly(); loadConsignInventory(); loadConsignLedger(); }
       if(wantVf){
         /* 驗收單的列：正常鋪貨列＋（有勾的話）該款的 500ml 試飲瓶列＋單獨登記的試飲瓶列。
-           試飲瓶只在這張單上出現，不寫進 consign_ledger，所以庫存與保證金都不受影響。 */
+           試飲瓶只在這張單上出現，不寫進 consign_ledger，所以庫存不受影響。 */
         const rowsForVf=[];
         valid.forEach(r=>{
           const p=ownbrandBySku(r.sku);
@@ -529,12 +490,8 @@ async function saveConsignMove(){
   // 超賣/超退提醒（提醒不硬擋，按確定仍可登記，保留彈性）
   const invRow=(CS_INV||[]).find(r=>String(r.sku_id)===String(sku));
   const balNow=invRow?(parseFloat(invRow.balance)||0):0;
-  const poolNow=invRow?(parseFloat(invRow.deposit_pool_qty)||0):0;
   let warn='';
   if((type==='out'||type==='return') && qty>balNow) warn='這支酒在客戶端的庫存只剩 '+balNow+' 瓶，確定要登記'+(type==='out'?'銷售':'退貨')+' '+qty+' 瓶嗎？（登記後庫存會變負數）';
-  if(type==='deposit_refund' && qty>poolNow) warn='保證金在池瓶數只有 '+poolNow+' 瓶，確定要退 '+qty+' 瓶的保證金嗎？';
-  // 這家客戶設定成不押保證金，卻要登記退保證金 → 多半是選錯客戶或選錯類型，先問一下（2026-08-06）
-  if(type==='deposit_refund' && !csCustomerNeedsDeposit()) warn='這個客戶設定為「不押保證金」，確定要登記退保證金嗎？';
   if(warn && !confirm(warn)){ _csMoveSaving=false; return; }
   const movement={ date, customer_id:CS_CUR, sku_id:sku, type, qty, note };
   if(type==='out' && priceRaw!=='') movement.unit_price=parseFloat(priceRaw)||0;

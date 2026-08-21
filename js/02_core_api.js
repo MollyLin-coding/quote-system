@@ -278,7 +278,7 @@ function gotoPage(p){
     report:['月報表','對帳一眼看懂：已收訂金／已收尾款／還沒收的尾款，一頁掌握'],
     verify:['出貨驗收管理','驗收單留底、客戶掃碼回報處理、未回報催單，一頁掌握'],
     cal:['工作行事曆','訂單日程自動連動＋備忘與待辦，防止遺漏'],
-    consign:['寄售管理','公版酒鋪貨・銷售・庫存・保證金・月結，一頁掌握'],
+    consign:['寄售管理','公版酒鋪貨・銷售・庫存・月結，一頁掌握'],
     customer:['客戶管理','每個客戶的聯絡資訊、往來報價單、訂單進度與未收款、驗收客訴，一頁看完']};
   document.getElementById('tb-title').textContent = _titles[p]?_titles[p][0]:'報價單製作';
   document.getElementById('tb-sub').textContent = _titles[p]?_titles[p][1]:'填寫後可即時預覽，並匯出 PDF / Word';

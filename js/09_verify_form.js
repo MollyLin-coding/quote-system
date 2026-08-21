@@ -509,7 +509,7 @@ function buildConsignVerifyModal(){
   if(ttl) ttl.textContent = CONSIGN_VF_EDIT_ID ? '編輯驗收單（產生後取代舊留底）' : '寄售鋪貨・出貨驗收單';
   const inS='border:1px solid var(--bd);border-radius:5px;padding:5px 7px;font-size:12px;font-family:inherit;width:100%';
   const rowsH=d.rows.map((r,i)=>`<tr${r.taster?' style="background:#FBF8F1"':''}>
-    <td><input style="${inS}" data-i="${i}" data-k="name" class="cvfi" value="${escAttr(r.name||'')}">${r.taster?'<div style="font-size:10.5px;color:#7A5A1E;margin-top:3px">試飲瓶（免費贈送，不計價／不收保證金／不進庫存）</div>':''}</td>
+    <td><input style="${inS}" data-i="${i}" data-k="name" class="cvfi" value="${escAttr(r.name||'')}">${r.taster?'<div style="font-size:10.5px;color:#7A5A1E;margin-top:3px">試飲瓶（免費贈送，不計價／不進庫存）</div>':''}</td>
     <td><input style="${inS};width:90px" data-i="${i}" data-k="vol" class="cvfi" value="${escAttr(r.vol||'')}"></td>
     <td><input type="number" min="0" style="${inS};width:80px" data-i="${i}" data-k="qty" class="cvfi" value="${(r.qty!==''&&r.qty!=null)?r.qty:''}"></td>
     <td style="text-align:center"><button class="del" onclick="csVfDelRow(${i})">✕</button></td>
