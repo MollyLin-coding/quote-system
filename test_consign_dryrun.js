@@ -1,3 +1,8 @@
+/* ⚠ 已作廢（2026-08-21）：Molly 決定寄售不再走保證金制，相關 UI／函式（csCustomerNeedsDeposit、
+   csMoveDepositUnit、csMoveDepositHint、保證金餘額、在池瓶數、退保證金異動）全部從前端移除。
+   本檔中與保證金有關的斷言已經不成立，保留只為留存當時的需求紀錄，不要再拿來當回歸測試。
+   現行的寄售回歸測試請看 test_consign_multimove.js 與 test_nodeposit_20260821.js。 */
+if (!process.env.RUN_OBSOLETE) { console.log('SKIPPED（已作廢，見檔案開頭說明；要強制執行請設 RUN_OBSOLETE=1）'); process.exit(0); }
 /* 2026-07-30 寄售系統上線前預跑 → 修正後驗證（離線）
    stub 後端照 gas/v3_ownbrand.gs「v41 修正後」邏輯（月結按 SKU|單價分組、客戶回傳全部含停用）。
    驗證整條流程＋五個 BUG 的修正＋速度改動：

@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260819a">
-<script src="js/00_qrcode.js?v=20260819a"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260821a">
+<script src="js/00_qrcode.js?v=20260821a"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -759,20 +759,19 @@
         <div class="card"><div class="cb">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
             <div style="display:flex;gap:22px;flex-wrap:wrap">
-              <div><div style="font-size:11px;color:var(--hint)">保證金餘額</div><strong id="cs-deposit" style="font-size:20px;color:var(--gold-deep)">$0</strong></div>
               <div><div style="font-size:11px;color:var(--hint)">在客戶端總庫存</div><strong id="cs-totstock" style="font-size:20px;color:var(--ink)">0 瓶</strong></div>
             </div>
             <button class="btn btn-gold" onclick="openConsignMove()"><i class="ti ti-plus"></i>登記異動</button>
           </div>
-          <div style="font-size:11px;color:var(--hint);margin-top:8px">登記類型：鋪貨/補貨（進客戶端＋收保證金）、銷售（客戶賣出）、退貨（退回我方＋退保證金）、盤點調整、退保證金（終止合約/轉模式）</div>
+          <div style="font-size:11px;color:var(--hint);margin-top:8px">登記類型：鋪貨/補貨（進客戶端）、銷售（客戶賣出）、退貨（退回我方）、盤點調整</div>
         </div></div>
 
         <div class="card">
-          <div class="ch"><i class="ti ti-packages"></i><span>目前庫存</span><span class="ch-opt">實體庫存＝進−銷−退±盤點；保證金在池瓶數＝進−退−退保證金（售出不影響）</span></div>
+          <div class="ch"><i class="ti ti-packages"></i><span>目前庫存</span><span class="ch-opt">實體庫存＝進−銷−退±盤點</span></div>
           <div class="tbl-scroll">
             <table class="rec-table mcard">
-              <thead><tr><th>公版酒</th><th style="text-align:center">容量</th><th style="text-align:right">實體庫存</th><th style="text-align:right">保證金在池瓶數</th></tr></thead>
-              <tbody id="cs-inv-body"><tr><td colspan="4" class="rec-empty">請先選擇客戶</td></tr></tbody>
+              <thead><tr><th>公版酒</th><th style="text-align:center">容量</th><th style="text-align:right">實體庫存</th></tr></thead>
+              <tbody id="cs-inv-body"><tr><td colspan="3" class="rec-empty">請先選擇客戶</td></tr></tbody>
             </table>
           </div>
         </div>
@@ -1042,7 +1041,6 @@
       <div class="fl" style="grid-column:span 2"><label>鋪貨/出貨地址 <span class="opt">選填</span></label><input class="fi" id="cs-f-addr"></div>
       <div class="fl" style="grid-column:span 2"><label>備註 <span class="opt">選填</span></label><input class="fi" id="cs-f-note"></div>
       <div class="fl"><label>狀態</label><select class="fi" id="cs-f-active"><option value="Y">啟用中</option><option value="N">已終止/停用</option></select></div>
-      <div class="fl"><label>保證金 <span class="opt">不是每家都押</span></label><select class="fi" id="cs-f-dep"><option value="Y">要押保證金</option><option value="N">不押保證金</option></select></div>
     </div>
     <div id="cs-exc-wrap" style="margin-top:14px;display:none">
       <div class="sub-label">品項例外折數 <span class="ln"></span> <span style="font-style:italic;color:var(--bd);font-weight:400">選填，少數品項與預設折不同時才設</span></div>
@@ -1068,14 +1066,12 @@
       <option value="out">銷售（客戶賣出）</option>
       <option value="return">退貨（退回我方）</option>
       <option value="adjust">盤點調整</option>
-      <option value="deposit_refund">退保證金（終止合約/轉模式）</option>
     </select></div>
     <div class="fl" style="margin-top:8px"><label>日期</label><input class="fi" type="date" id="cs-m-date"></div>
     <!-- 單款登記（鋪貨/補貨以外的類型用這組） -->
     <div id="cs-m-single-wrap">
-      <div class="fl" style="margin-top:8px"><label>公版酒</label><select class="fi" id="cs-m-sku" onchange="csMoveDepositHint()"></select></div>
-      <div class="fl" style="margin-top:8px"><label>數量 <span class="opt" id="cs-m-qtyhint"></span></label><input class="fi" type="number" id="cs-m-qty" placeholder="數量" oninput="csMoveDepositHint()"></div>
-      <div id="cs-m-dephint" style="display:none;margin-top:8px;padding:8px 10px;background:#FBF7EC;border:1px solid #E8DCBB;border-radius:8px;font-size:12.5px;color:#7A5A1E"></div>
+      <div class="fl" style="margin-top:8px"><label>公版酒</label><select class="fi" id="cs-m-sku"></select></div>
+      <div class="fl" style="margin-top:8px"><label>數量 <span class="opt" id="cs-m-qtyhint"></span></label><input class="fi" type="number" id="cs-m-qty" placeholder="數量"></div>
       <div class="fl" style="margin-top:8px"><label>折後單價 <span class="opt">選填，留空由系統依折數自動算（僅銷售用）</span></label><input class="fi" type="number" id="cs-m-price" placeholder="留空自動"></div>
     </div>
     <!-- 多款鋪貨（type=in 時顯示，一次可登記好幾款酒） -->
@@ -1111,19 +1107,19 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260819a"></script>
-<script src="js/01_quote_form.js?v=20260819a"></script>
-<script src="js/01b_quote_preview.js?v=20260819a"></script>
-<script src="js/02_core_api.js?v=20260819a"></script>
-<script src="js/03_quote_custom.js?v=20260819a"></script>
-<script src="js/04_company.js?v=20260819a"></script>
-<script src="js/05_orders.js?v=20260819a"></script>
-<script src="js/06_verify_mgmt.js?v=20260819a"></script>
-<script src="js/07_calendar.js?v=20260819a"></script>
-<script src="js/08_ownbrand.js?v=20260819a"></script>
-<script src="js/09_verify_form.js?v=20260819a"></script>
-<script src="js/10_today.js?v=20260819a"></script>
-<script src="js/11_customers.js?v=20260819a"></script>
-<script src="js/99_boot.js?v=20260819a"></script>
+<script src="js/00_utils.js?v=20260821a"></script>
+<script src="js/01_quote_form.js?v=20260821a"></script>
+<script src="js/01b_quote_preview.js?v=20260821a"></script>
+<script src="js/02_core_api.js?v=20260821a"></script>
+<script src="js/03_quote_custom.js?v=20260821a"></script>
+<script src="js/04_company.js?v=20260821a"></script>
+<script src="js/05_orders.js?v=20260821a"></script>
+<script src="js/06_verify_mgmt.js?v=20260821a"></script>
+<script src="js/07_calendar.js?v=20260821a"></script>
+<script src="js/08_ownbrand.js?v=20260821a"></script>
+<script src="js/09_verify_form.js?v=20260821a"></script>
+<script src="js/10_today.js?v=20260821a"></script>
+<script src="js/11_customers.js?v=20260821a"></script>
+<script src="js/99_boot.js?v=20260821a"></script>
 </body>
 </html>
