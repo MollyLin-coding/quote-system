@@ -37,7 +37,11 @@ const RC_READ_ACTIONS = ['getQuotes','getQuoteById','getCompanyData','getOrderSt
   'listQuotePdfs','listShipments','listCustomQuotes','listCalendarItems','getChangeLog',
   'getOwnbrandProducts','getOwnbrandTiers','getConsignCustomers','getConsignInventory',
   'getConsignLedger','getConsignMonthly','getVerifications','listVerifyForms',
-  'getTodayDigest','getCustomers','verifyHeaders','batch'];
+  'getTodayDigest','getCustomers','verifyHeaders','batch',
+  /* 2026-08-24：syncCalendarNow 只讀 order_status／calendar_items 兩張表、寫的是「外部」Google
+     日曆，不改這兩張表本身，所以不用當成「寫入」清掉 ORDERS_CACHE/CAL_ITEMS——放進白名單，
+     這樣改完出貨日期後背景補打一次才不會平白把畫面快取洗空。 */
+  'syncCalendarNow'];
 const RC_STORE = {};      // key -> {at, data}
 const RC_INFLIGHT = {};   // key -> Promise（同一份資料同時被要時共用）
 const RC_RESETS = [];     // 各模組登記「快取被清掉時，我的衍生資料也要歸零」

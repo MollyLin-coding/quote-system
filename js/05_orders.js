@@ -422,6 +422,9 @@ async function saveOrdEdit(){
     }
     toast(bumped?`進度已儲存，狀態自動更新為「${bumped}」`:'進度已儲存','ok'); closeOrdEdit();
     loadOrders().catch(()=>{});
+    // 2026-08-24 Molly 回報：改出貨日期行事曆沒跟著改——之前只靠每小時排程或手動按「⟳ 同步」才會推到
+    // 真正的 Google 日曆。這裡存檔成功後背景補打一次 syncCalendarNow，讓異動立即反映，不擋存檔流程、失敗也不打擾。
+    if(typeof apiCall==='function' && AUTH_TOKEN) apiCall({ action:'syncCalendarNow', token:AUTH_TOKEN }).catch(()=>{});
   }catch(e){ if(snap&&!ORDERS_CACHE) ORDERS_CACHE=snap; toast(e.message||'儲存失敗','err'); }
   finally{ _busy.ordEdit=false; if(btn){ btn.disabled=false; btn.textContent='儲存進度'; } }
 }

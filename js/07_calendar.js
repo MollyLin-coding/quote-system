@@ -227,6 +227,8 @@ async function calFocusShipSave(no){
     CAL_ITEMS=snap; if(osnap) ORDERS_CACHE=osnap;
     renderCalendar();                              // 畫面即刻反映（這筆已是改好的），背景再同步
     if(typeof loadOrders==='function') loadOrders().catch(()=>{});
+    // 2026-08-24：同 saveOrdEdit，打勾標出貨後背景補一次 syncCalendarNow，不用等每小時排程。
+    if(typeof apiCall==='function' && AUTH_TOKEN) apiCall({ action:'syncCalendarNow', token:AUTH_TOKEN }).catch(()=>{});
     toast('已標記出貨，實際出貨日：'+today+'（要改可到訂單追蹤調整）','ok');
   }catch(e){
     CAL_ITEMS=snap; if(osnap) ORDERS_CACHE=osnap;
