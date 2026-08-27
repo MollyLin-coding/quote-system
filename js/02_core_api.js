@@ -404,6 +404,8 @@ function collectQuote(){
   // 比照免運優惠存成特殊品項列（品項後端全欄保存），Lot 標記放 lot 欄、客戶名稱標籤借放 flavorList 欄，載入時還原
   { const _tl=val('f-tag-lot'), _tc=val('f-tag-cli');
     if(_tl||_tc){ items.push({ itemType:'taglabel', name:'批次標籤', lot:_tl, volume:'', unitPrice:0, deduction:0, logoFee:0, qty:1, unit:'', subtotal:0, flavorList:_tc }); } }
+  // 文件顯示設定（不顯示總計區／圖片大小）：2026-08-27 起存成 docopts 特殊列（flavorList 放 JSON），只在有非預設設定時才加
+  { const _do=(typeof buildDocOptsItem==='function')?buildDocOptsItem():null; if(_do) items.push(_do); }
 
   const numFromText=id=>parseFloat((document.getElementById(id).textContent||'0').replace(/[$,]/g,''))||0;
   const svcMode=g('svc-mode')?g('svc-mode').value:'';
@@ -823,6 +825,7 @@ function loadQuoteIntoForm(q){
   // B4：由後端回傳的 images（base64）還原附加圖片；相容舊資料（無 images 即清空）
   imgs=(Array.isArray(q.images)?q.images:[]).filter(i=>i&&i.data).map(i=>({name:i.name||'圖片', mime:i.mime||'image/jpeg', data:i.data, url:'data:'+(i.mime||'image/jpeg')+';base64,'+i.data}));
   renderImgs();
+  if(typeof applyDocOpts==='function') applyDocOpts(q); // 不顯示總計區／圖片大小（docopts 特殊列）
   // 免運優惠：從 items 的 freeship 特殊列還原（所有單型共用）
   { const _fs=(q.items||[]).find(it=>it.itemType==='freeship'); const fe=document.getElementById('f-freeship'); if(fe) fe.value=_fs?((+_fs.deduction||+_fs.unitPrice||'')||''):''; }
   { const sd=document.getElementById('f-shipdate'); if(sd) sd.value=q.expectedShipDate||''; }
@@ -850,7 +853,7 @@ function loadQuoteIntoForm(q){
     try{ banFreeItems=[]; banAddonItems=[]; flavors={g1:[],g2:[]}; }catch(_){}
     document.getElementById('itbody-bot').innerHTML=''; botItems=[];
     extras=[];
-    const realItems = items.filter(it=>it.itemType!=='extra'&&it.itemType!=='freeship'&&it.itemType!=='taglabel'&&it.itemType!=='svcdetail');
+    const realItems = items.filter(it=>it.itemType!=='extra'&&it.itemType!=='freeship'&&it.itemType!=='taglabel'&&it.itemType!=='svcdetail'&&it.itemType!=='docopts');
     // 贈品／不計價 還原：後端有明確存 noCharge（Y/N）就以它為準；沒存（舊資料空白）才用「有單價有瓶數但小計為0」推斷
     const isGiftItem = it => { const nc=String(it.noCharge||'').toUpperCase(); if(nc==='Y') return true; if(nc==='N') return false;
       return (parseFloat(it.unitPrice)>0 && parseFloat(it.qty)>0 && !(parseFloat(it.subtotal)>0)); };
@@ -874,6 +877,7 @@ function loadQuoteIntoForm(q){
       else if(it.itemType==='freeship'){ /* 免運優惠已於上方共用區還原到 f-freeship，不建品項列 */ }
       else if(it.itemType==='taglabel'){ /* 批次標籤已於上方共用區還原到 f-tag-lot / f-tag-cli，不建品項列 */ }
       else if(it.itemType==='svcdetail'){ /* 服務費拆項＝宴會用特殊列，瓶裝型不會有；防呆跳過不建品項列 */ }
+      else if(it.itemType==='docopts'){ /* 文件顯示設定已於上方 applyDocOpts 還原，不建品項列 */ }
       /* 複檢 2026-08-11 #2：還原 pid（存在 flavorList 欄）＋「載入當下的瓶數」。
          tierBaseQty 的用意：剛開起來時瓶數還沒被動過，這一列的單價就照原單顯示，
          不讓級距價在載入的瞬間把當初談好的價錢改掉；等使用者真的改了瓶數，

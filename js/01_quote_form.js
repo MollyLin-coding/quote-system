@@ -893,7 +893,7 @@ function imgFileToData_(f){
         ctx.drawImage(im,0,0,w,h);
         const mime='image/jpeg';
         const durl=cv.toDataURL(mime, IMG_JPEG_Q);
-        resolve({url:durl, name:f.name, mime, data:(durl.split(',')[1]||'')});
+        resolve({url:durl, name:f.name, mime, data:(durl.split(',')[1]||''), w, h}); // w/h：預覽排版用（框框依比例縮，不留白邊）
       };
       im.src=fr.result;
     };
@@ -915,10 +915,54 @@ async function handleImg(ev){
   if(total>IMG_TOTAL_WARN) toast('圖片總量偏大，儲存可能較慢，建議減少張數或改用較小的圖','err');
 }
 function removeImg(i){imgs.splice(i,1);renderImgs();FORM_DIRTY=true;}
+/* 2026-08-27：報價單圖片大小可調（整張單預設 f-imgsize：s 一排三張／m 一排兩張／l 一排一張；每張圖可個別覆蓋 imgs[i].size）
+   ＋「不顯示總計區」勾選（f-hidetotals）。兩者都存成 docopts 特殊品項列（flavorList 放 JSON），後端一行不用改。 */
+const IMG_SIZE_KEYS={s:'小',m:'中',l:'大'};
+function imgSizeDefault(){ const e=document.getElementById('f-imgsize'); const v=e?e.value:'m'; return IMG_SIZE_KEYS[v]?v:'m'; }
+function imgSizeOf(img){ return (img&&IMG_SIZE_KEYS[img.size])?img.size:imgSizeDefault(); }
+function onImgSizeChange(){ FORM_DIRTY=true; renderImgs(); }
+function setImgSize(i,v){ if(!imgs[i]) return; imgs[i].size=IMG_SIZE_KEYS[v]?v:''; FORM_DIRTY=true; }
+/* 後端載回的圖片沒有寬高：背景量一次存到 imgs[i].w/h，預覽時框框就能照比例縮（量不到就退回固定框） */
+function imgEnsureDims_(img){
+  if(!img||!img.url||(img.w&&img.h)||img._dimLoading) return;
+  img._dimLoading=true;
+  try{ const im=new Image(); im.onload=()=>{ img.w=im.naturalWidth||im.width; img.h=im.naturalHeight||im.height; img._dimLoading=false; }; im.onerror=()=>{ img._dimLoading=false; }; im.src=img.url; }
+  catch(_){ img._dimLoading=false; }
+}
 function renderImgs(){
-  document.getElementById('uprev').innerHTML=imgs.map((img,i)=>
-    `<div class="uth"><img src="${img.url}" alt="${escAttr(img.name||'')}"><button class="rm" onclick="removeImg(${i})">✕</button></div>`
-  ).join('');
+  const def=imgSizeDefault();
+  imgs.forEach(imgEnsureDims_);
+  document.getElementById('uprev').innerHTML=imgs.map((img,i)=>{
+    const cur=IMG_SIZE_KEYS[img.size]?img.size:'';
+    const opt=(v,l)=>`<option value="${v}"${cur===v?' selected':''}>${l}</option>`;
+    return `<div style="display:flex;flex-direction:column;gap:3px;align-items:center">
+      <div class="uth"><img src="${img.url}" alt="${escAttr(img.name||'')}"><button class="rm" onclick="removeImg(${i})">✕</button></div>
+      <select style="width:76px;font-size:11px;padding:2px 3px;border:1px solid var(--bd);border-radius:5px;background:var(--bg);color:var(--ink);font-family:inherit" onchange="setImgSize(${i},this.value)" title="這張圖的大小">
+        ${opt('','預設（'+IMG_SIZE_KEYS[def]+'）')}${opt('s','小')}${opt('m','中')}${opt('l','大')}
+      </select>
+    </div>`;
+  }).join('');
+}
+/* 文件顯示設定 → 存檔用的 docopts 特殊列（沒有任何非預設設定就回 null，不佔品項列） */
+function buildDocOptsItem(){
+  const hide=!!(document.getElementById('f-hidetotals')&&document.getElementById('f-hidetotals').checked);
+  const size=imgSizeDefault();
+  const sizes=imgs.map(i=>(IMG_SIZE_KEYS[i.size]?i.size:''));
+  if(!hide && size==='m' && !sizes.some(Boolean)) return null;
+  const o={hideTotals:hide?1:0, imgSize:size};
+  if(sizes.some(Boolean)) o.imgSizes=sizes;
+  return { itemType:'docopts', name:'文件顯示設定', lot:'', volume:'', unitPrice:0, deduction:0, logoFee:0, qty:1, unit:'', subtotal:0, flavorList:JSON.stringify(o) };
+}
+/* 載入報價單時還原（q.docOpts 物件優先，否則從 items 的 docopts 特殊列解析；舊單沒有就回預設） */
+function applyDocOpts(q){
+  let o=(q&&q.docOpts&&typeof q.docOpts==='object')?q.docOpts:null;
+  if(!o){ const it=((q&&q.items)||[]).find(x=>x&&x.itemType==='docopts'); o=it?parseJsonSafe(it.flavorList,{}):{}; }
+  o=o||{};
+  { const h=document.getElementById('f-hidetotals'); if(h) h.checked=!!(o.hideTotals&&o.hideTotals!=='0'&&o.hideTotals!=='N'); }
+  { const e=document.getElementById('f-imgsize'); if(e) e.value=IMG_SIZE_KEYS[o.imgSize]?o.imgSize:'m'; }
+  const sizes=Array.isArray(o.imgSizes)?o.imgSizes:[];
+  imgs.forEach((im,i)=>{ im.size=IMG_SIZE_KEYS[sizes[i]]?sizes[i]:''; });
+  renderImgs();
 }
 
 function resetAll(skipConfirm){
@@ -937,6 +981,7 @@ function resetAll(skipConfirm){
     else if(!el.readOnly) el.value='';
   });
   botItems=[]; banFreeItems=[]; banAddonItems=[]; extras=[]; imgs=[]; rowId=0;
+  { const h=document.getElementById('f-hidetotals'); if(h) h.checked=false; const e=document.getElementById('f-imgsize'); if(e) e.value='m'; } // 文件顯示設定回到預設
   botDedCache={}; botLogoCache={}; botLotCache={};
   flavors={g1:[],g2:[]};
   colDed=false; colLogo=false; colLot=false; colGift=false;

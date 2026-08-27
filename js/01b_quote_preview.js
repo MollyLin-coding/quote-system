@@ -163,10 +163,20 @@ function buildStdDocParts(){
       ${document.getElementById('f-svc').value?`<span>供酒時間：${escHtml(document.getElementById('f-svc').value)}</span>`:''}
     </div>`:'';
 
-  const imgH=imgs.length?`
-    <div style="margin-top:24px;display:flex;gap:14px;flex-wrap:wrap">
-      ${imgs.map(i=>`<img src="${i.url}" style="max-height:240px;max-width:340px;border-radius:4px;border:1px solid #E5E2D8;object-fit:cover">`).join('')}
-    </div>`:'';
+  /* 附加圖片（2026-08-27）：依大小排成一排排（小＝三張／中＝兩張／大＝一張，可混用），
+     每一排是獨立的尾段區塊，分頁時可以一排一排塞，不會整組圖片一起被擠到下一頁。
+     圖框有明確寬高（知道圖片比例就照比例縮進格子、不裁圖也不留白邊；量不到比例才用固定框＋contain），
+     量測高度才不會受圖片載入時機影響。 */
+  const IMG_BOX={s:{w:198,h:150,f:3}, m:{w:304,h:230,f:2}, l:{w:622,h:400,f:1}};
+  const imgRows=[]; { let cur=[], fill=0;
+    imgs.forEach(i=>{ const k=(typeof imgSizeOf==='function')?imgSizeOf(i):'m'; const b=IMG_BOX[k]||IMG_BOX.m; const u=1/b.f;
+      if(cur.length && fill+u>1.0001){ imgRows.push(cur); cur=[]; fill=0; }
+      let bw=b.w, bh=b.h;
+      if(i.w>0&&i.h>0){ const sc=Math.min(b.w/i.w, b.h/i.h); bw=Math.max(1,Math.round(i.w*sc)); bh=Math.max(1,Math.round(i.h*sc)); }
+      cur.push(`<div style="width:${bw}px;height:${bh}px;flex:0 0 auto;overflow:hidden;border-radius:4px;border:1px solid #E5E2D8;box-sizing:border-box"><img src="${i.url}" style="width:100%;height:100%;display:block;object-fit:contain"></div>`); fill+=u; });
+    if(cur.length) imgRows.push(cur); }
+  const imgBlocks=imgRows.map((r,k)=>`<div style="margin-top:${k?14:24}px;display:flex;gap:14px;align-items:flex-start">${r.join('')}</div>`);
+  const hideTotals=!!(document.getElementById('f-hidetotals')&&document.getElementById('f-hidetotals').checked);
 
   const payH=getPayTerms();
 
@@ -217,7 +227,7 @@ function buildStdDocParts(){
   const contNote = `<div style="font-size:10.5px;color:#A8A69C;letter-spacing:.5px;margin:0">品項明細（承前頁）</div>`;
 
   /* 尾段區塊（總計／圖片／付款條件／備註條款） */
-  const totals=`
+  const totals=hideTotals?'':`
   <div style="display:flex;justify-content:flex-end;margin-top:18px">
     <div style="min-width:250px">
       <div style="display:flex;justify-content:space-between;font-size:12px;color:#6B6B63;padding:5px 2px"><span>${lbsub}</span><span>${tsub}</span></div>
@@ -248,7 +258,7 @@ function buildStdDocParts(){
   </div>`;
 
   return {header, topFirst, contNote, thead:theadStr, rows,
-          tailBlocks:[totals, imgH, payBlock, notesBlock], footer, mkTable,
+          tailBlocks:[totals, ...imgBlocks, payBlock, notesBlock], footer, mkTable,
           font:"-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,'Microsoft JhengHei',sans-serif"};
 }
 
