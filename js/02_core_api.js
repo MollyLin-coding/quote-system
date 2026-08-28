@@ -268,9 +268,10 @@ function gotoPage(p){
   { const e=document.getElementById('page-report'); if(e) e.classList.toggle('on', p==='report'); }
   { const e=document.getElementById('page-verify'); if(e) e.classList.toggle('on', p==='verify'); }
   { const e=document.getElementById('page-consign'); if(e) e.classList.toggle('on', p==='consign'); }
+  { const e=document.getElementById('page-storage'); if(e) e.classList.toggle('on', p==='storage'); }   // 2026-08-28：客戶寄倉獨立頁
   { const e=document.getElementById('page-today'); if(e) e.classList.toggle('on', p==='today'); }
   { const e=document.getElementById('page-customer'); if(e) e.classList.toggle('on', p==='customer'); }
-  document.getElementById('tbr-standard').style.display = (p==='custom'||p==='orders'||p==='report'||p==='cal'||p==='consign'||p==='verify'||p==='today'||p==='customer') ? 'none' : 'flex';
+  document.getElementById('tbr-standard').style.display = (p==='custom'||p==='orders'||p==='report'||p==='cal'||p==='consign'||p==='storage'||p==='verify'||p==='today'||p==='customer') ? 'none' : 'flex';
   document.getElementById('tbr-custom').style.display = p==='custom' ? 'flex' : 'none';
   const _titles={today:['今日待辦','今天該做的事，一頁看完，點下去就能處理'],
     custom:['自訂報價單','自由建立非常規報價單，可儲存到後台備份，並直接匯出 PDF / Word'],
@@ -278,7 +279,8 @@ function gotoPage(p){
     report:['月報表','對帳一眼看懂：已收訂金／已收尾款／還沒收的尾款，一頁掌握'],
     verify:['出貨驗收管理','驗收單留底、客戶掃碼回報處理、未回報催單，一頁掌握'],
     cal:['工作行事曆','訂單日程自動連動＋備忘與待辦，防止遺漏'],
-    consign:['寄售管理','公版酒鋪貨・銷售・庫存・月結＋客戶寄倉，一頁掌握'],
+    consign:['寄售管理','公版酒鋪貨・銷售・庫存・月結，一頁掌握'],
+    storage:['客戶寄倉','客戶買斷後寄放我方倉庫的酒：登記入倉／提領，隨時看剩幾瓶'],
     customer:['客戶管理','每個客戶的聯絡資訊、往來報價單、訂單進度與未收款、驗收客訴，一頁看完']};
   document.getElementById('tb-title').textContent = _titles[p]?_titles[p][0]:'報價單製作';
   document.getElementById('tb-sub').textContent = _titles[p]?_titles[p][1]:'填寫後可即時預覽，並匯出 PDF / Word';
@@ -303,6 +305,7 @@ function gotoPage(p){
   if(p==='verify'){ document.getElementById('nav-verify').classList.add('on'); loadVerifyMgmt().catch(()=>{}); }
   if(p==='cal'){ document.getElementById('nav-cal').classList.add('on'); loadCalendar().catch(()=>{}); }
   if(p==='consign'){ document.getElementById('nav-consign').classList.add('on'); initConsignPage().catch(()=>{}); }
+  if(p==='storage'){ document.getElementById('nav-storage').classList.add('on'); loadStorage().catch(()=>{}); }
   if(p==='customer'){ document.getElementById('nav-customer').classList.add('on'); loadCustomers().catch(()=>{}); }
   if(p==='custom'){
     document.getElementById('nav-custom').classList.add('on');

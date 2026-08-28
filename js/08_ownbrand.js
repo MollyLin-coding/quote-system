@@ -185,8 +185,7 @@ async function initConsignPage(force){
   // 公版酒資料與寄售客戶同時要（以前是一個等一個，等於兩倍時間）
   await Promise.all([
     loadOwnbrandData(force).catch(()=>{}),
-    loadConsignCustomers(force),
-    (typeof loadStorage==='function'?loadStorage(force).catch(()=>{}):Promise.resolve())   // 2026-08-28：客戶寄倉卡片
+    loadConsignCustomers(force)   // 2026-08-28 下午：客戶寄倉已獨立成頁，改由 gotoPage('storage') 自己載
   ]);
 }
 async function loadConsignCustomers(force){

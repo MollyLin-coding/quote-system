@@ -167,3 +167,41 @@ async function stDeleteMove(moveId){
   }catch(e){ toast(e.message||'刪除失敗','err'); }
   finally{ _stDeleting=false; }
 }
+
+/* ============================================================
+   2026-08-28 下午：驗收單 → 寄倉庫存自動登記（設計主軸：輸入一次、其他自動同步）
+   ・資料全部從驗收單帶（客戶／單號／品項／容量／本次出貨數／配送日），使用者不用重打
+   ・聰明預設：該客戶該酒款寄倉已有庫存 → 預設「客戶提走（提領）」；沒有 → 預設「入倉」
+   ・冪等：每筆帶 src='VF:<單號>:<第幾次出貨>'，後端同 src 會跳過，重印驗收單不會重複計
+   ============================================================ */
+/* 某客戶在寄倉的總剩餘（不分酒款）——判斷聰明預設用 */
+function stCustomerTotal(cus){
+  let bal=0;
+  (ST_MOVES||[]).forEach(m=>{
+    if(String(m.customer)!==String(cus)) return;
+    bal += (String(m.direction)==='out' ? -1 : 1) * (parseFloat(m.qty)||0);
+  });
+  return bal;
+}
+/* 驗收單存檔後呼叫：把這批「本次出貨」寫進寄倉帳
+   d：驗收單資料（client/no/shipDate/rows），dir：'in'｜'out'，srcTag：第幾次出貨 */
+async function stSyncFromVerify(d, dir, srcTag){
+  const moves=(d.rows||[])
+    .map(r=>({ qty:parseFloat(r.thisShip)||0, name:r.name, vol:r.vol }))
+    .filter(r=>r.qty>0)
+    .map(r=>({ customer:d.client, sku_id:'', name:r.name, volume:(r.vol?String(r.vol).replace(/ml$/i,'')+'ml':''),
+      direction:dir, qty:r.qty, date:d.shipDate||todayStr(), quote_no:d.no,
+      note:(dir==='in'?'驗收單自動入倉':'驗收單自動提領'),
+      src:'VF:'+d.no+':'+srcTag+':'+r.name+':'+(r.vol||'') }));
+  if(!moves.length) return { ok:true, saved:[], skipped:[] };
+  const r=await apiCall({action:'addStorageMoves', token:AUTH_TOKEN, moves});
+  if(!r.ok) throw new Error(r.error||'寄倉登記失敗');
+  ST_MOVES=null;
+  const nSave=(r.saved||[]).length, nSkip=(r.skipped||[]).length;
+  if(nSave) toast(`已自動${dir==='in'?'入倉':'登記提領'} ${nSave} 個品項到客戶寄倉`,'ok');
+  if(nSkip){
+    const why=(r.skipped||[]).map(x=>x.reason).filter((v,i,a)=>a.indexOf(v)===i).join('；');
+    toast(`寄倉有 ${nSkip} 筆沒登記：${why}`, nSave?'ok':'err');
+  }
+  return r;
+}

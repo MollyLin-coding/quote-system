@@ -81,7 +81,10 @@ async function openVerifyForm(no){
     vfKeyFor(no);   // 複檢 #2-1：順便把 QR 驗證碼抓回來（跟下面兩支平行，不多花時間）
     const [data, formsData] = await Promise.all([
       readCall({ action:'getQuoteById', token:AUTH_TOKEN, quoteNo:no }),
-      readCall({ action:'listVerifyForms', token:AUTH_TOKEN, filters:{} }).catch(()=>null)
+      readCall({ action:'listVerifyForms', token:AUTH_TOKEN, filters:{} }).catch(()=>null),
+      /* 2026-08-28：順手把寄倉現況一起抓（平行、有快取，不多花時間）——
+         這樣開驗收單時才知道這位客戶寄倉還有幾瓶，能給「入倉／提領」聰明預設 */
+      (typeof loadStorage==='function' ? loadStorage().catch(()=>{}) : Promise.resolve())
     ]);
     const q=data.quote;
     if(!q){ toast('查無此單','err'); return; }
@@ -108,7 +111,11 @@ async function openVerifyForm(no){
       });
     });
     const poolLeft=Object.assign({}, shippedSum);   // 每個鍵還沒分配掉的已出貨量
-    VERIFY_DATA={ no:q.quoteNo, client:q.clientName||'', priorCount,
+    /* 2026-08-28：這張報價單有沒有勾「開放客戶寄倉」（docopts 特殊列）→ 驗收單多一個自動登記寄倉的區塊 */
+    let _stOn=false;
+    try{ const _do=(q.items||[]).find(it=>it&&it.itemType==='docopts');
+         if(_do&&_do.flavorList){ const _o=JSON.parse(_do.flavorList); _stOn=!!(_o.storage&&_o.storage!=='0'&&_o.storage!=='N'); } }catch(_){}
+    VERIFY_DATA={ no:q.quoteNo, client:q.clientName||'', priorCount, storage:_stOn,
       rows:items.map(it=>{
         const ordered=parseFloat(it.qty)||0;
         const k=keyOf(it.name, it.volume);
@@ -175,11 +182,37 @@ function buildVerifyModal(hdrLot){
         <tbody>${rowsH}</tbody>
       </table>
     </div>
+    ${vfStorageBlockHtml(d)}
     <p style="font-size:11px;color:var(--hint);margin-top:10px;line-height:1.6">
       「待出貨」＝總受訂數 − 已出貨 − 本次出貨數，系統自動算。<br>
       一次全部出貨用「產生整批驗收單」；分幾次出貨用「產生分批驗收單」（會多印訂購總數／待出貨欄）。PDF 下方含「驗收與品質說明」，右下 QR 供客戶收貨後線上驗收回報。</p>`;
 }
 
+/* 2026-08-28：寄倉自動登記區塊（只有報價單勾了「開放客戶寄倉」才出現）
+   設計主軸：資料全部從這張驗收單帶，使用者不必重打；方向給聰明預設，她只要確認。 */
+function vfStorageBlockHtml(d){
+  if(!d||!d.storage) return '';
+  /* 聰明預設：這個客戶寄倉還有庫存 → 這次多半是「客戶來提貨」；沒有庫存 → 多半是「做好先入倉」 */
+  let bal=0;
+  try{ bal=(typeof stCustomerTotal==='function')?stCustomerTotal(d.client):0; }catch(_){}
+  const defOut = bal>0;
+  const balNote = bal>0 ? `（目前這位客戶寄倉還有 <strong>${bal}</strong> 瓶）` : '（目前這位客戶寄倉沒有庫存）';
+  return `<div id="vf-storage-box" style="margin-top:14px;padding:11px 13px;border:1px solid var(--bd);border-radius:8px">
+    <label style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer">
+      <input type="checkbox" id="vf-st-on" checked style="width:15px;height:15px"> 同步更新「客戶寄倉」庫存
+    </label>
+    <div id="vf-st-opts" style="margin-top:8px;font-size:12.5px;color:var(--sub);line-height:1.9">
+      這張單有開放寄倉${balNote}。本次出貨的數量要記成：
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px">
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="radio" name="vf-st-dir" value="in"${defOut?'':' checked'}> 入倉（做好了先放我方倉庫，客戶暫不提領）</label>
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="radio" name="vf-st-dir" value="out"${defOut?' checked':''}> 提領（客戶這次把酒領走）</label>
+      </div>
+      <div style="font-size:11px;color:var(--hint);margin-top:5px">客戶、酒款、容量、數量、日期全部自動沿用上面的驗收單內容，不用重填；同一張驗收單重印不會重複計。</div>
+    </div>
+  </div>`;
+}
 function toggleLotCol(){
   const on=document.getElementById('vf-showlot');
   const show=!!(on&&on.checked);
@@ -220,6 +253,15 @@ function generateVerifyPdf(mode){
   /* 複檢 2026-08-13 #1-3：留底一定要先存。原本是彈窗被瀏覽器擋掉就直接 return，留底一筆都不會存
      → 下次開同一張單的驗收單，「已出貨」歸零、「本次出貨」又帶成全部訂購量，第二批會印成整批數量。 */
   saveVerifyFormRecord(d);
+  /* 2026-08-28：同步寫進客戶寄倉帳（勾了才做；背景執行不擋列印，冪等所以重印不會重複計） */
+  try{
+    const _stOn=document.getElementById('vf-st-on');
+    if(d.storage && _stOn && _stOn.checked && typeof stSyncFromVerify==='function'){
+      const _dirEl=document.querySelector('input[name="vf-st-dir"]:checked');
+      const _dir=(_dirEl&&_dirEl.value==='out')?'out':'in';
+      stSyncFromVerify(d, _dir, d.shipSeq).catch(e=>toast(e.message||'寄倉登記失敗，請到「客戶寄倉」手動登記','err'));
+    }
+  }catch(_){}
   const seqEl=document.getElementById('vf-shipseq'); if(seqEl) seqEl.value=d.shipSeq+1; // 方便下一次接著填
   /* 複檢 2026-08-13 #3-4：產生完要關掉視窗（寄售那套本來就有關）。原本留在畫面上，想比較版面
      先按「產生分批」再按「產生整批」就會存出兩筆同單號留底，下次開同一張單「已出貨」數量加倍、
