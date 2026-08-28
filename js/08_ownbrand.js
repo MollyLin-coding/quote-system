@@ -23,11 +23,75 @@ function buyoutTiers(){
     .map(t=>({min:parseFloat(t.min_qty)||0, disc:parseFloat(t.discount)||1}))
     .sort((a,b)=>a.min-b.min);
 }
-/* 依「每款瓶數」回傳折率；未達最低級距回傳 1（建議零售） */
+/* ============================================================
+   2026-08-28：一次性採購 量價級距（MOQ）每張單可調
+   ・ob-tieredit 三組「門檻＋折數」欄位，預設帶後端標準級距（getOwnbrandTiers channel=buyout）
+   ・改了只影響這張單：自動套折改讀本單級距；存檔存進 docopts 特殊列（moqTiers），重開單還原
+   ・欄位清空＝該組不用；全部清空＝退回後端標準級距
+   ============================================================ */
+/* 讀本單級距編輯欄（回 {min,disc(0-1)} 陣列，依門檻小到大；沒有任何有效組就回 null → 用後端標準） */
+function obCurrentTiers(){
+  const out=[];
+  for(let i=1;i<=3;i++){
+    const mEl=document.getElementById('ob-t'+i+'-min'), dEl=document.getElementById('ob-t'+i+'-disc');
+    if(!mEl||!dEl) return null;
+    const m=parseFloat(mEl.value), d=parseFloat(dEl.value);
+    if(m>0 && d>0 && d<=10) out.push({min:m, disc:d/10});
+  }
+  return out.length ? out.sort((a,b)=>a.min-b.min) : null;
+}
+/* 本單級距是否跟後端標準一樣（一樣就不用多存進單子） */
+function obTiersAreDefault(){
+  const cur=obCurrentTiers(), std=buyoutTiers().filter(t=>t.min>0);
+  if(!cur) return true;
+  if(!std.length) return false;
+  if(cur.length!==std.length) return false;
+  return cur.every((t,i)=>t.min===std[i].min && Math.abs(t.disc-std[i].disc)<1e-9);
+}
+/* 把級距填進編輯欄：tiers 用 {min,disc(0-1)} 陣列；不給 tiers＝填後端標準；force=false 時只在全空白才填 */
+function obFillTiers(tiers, force){
+  const mEl1=document.getElementById('ob-t1-min'); if(!mEl1) return;
+  if(!force){
+    let any=false;
+    for(let i=1;i<=3;i++){ const e=document.getElementById('ob-t'+i+'-min'); if(e&&e.value!=='') any=true; }
+    if(any) return;   // 已有內容（載入舊單還原的自訂級距）就不要蓋掉
+  }
+  const ts=(tiers||buyoutTiers().filter(t=>t.min>0)).slice(0,3);
+  for(let i=1;i<=3;i++){
+    const m=document.getElementById('ob-t'+i+'-min'), d=document.getElementById('ob-t'+i+'-disc');
+    if(!m||!d) return;
+    if(ts[i-1]){ m.value=ts[i-1].min; d.value=+(ts[i-1].disc*10).toFixed(2); }
+    else { m.value=''; d.value=''; }
+  }
+}
+/* 級距欄被改：未手改折數的列即時重套、更新未達門檻提醒 */
+function obTierEdited(){
+  FORM_DIRTY=true;
+  const auto=document.getElementById('ob-autotier');
+  if(auto && auto.checked) botItems.forEach(id=>autoDiscForRow(id,false));
+  calc();
+}
+/* 還原標準級距（後端 buyout tiers），並重套所有列 */
+function obResetTiers(){
+  obFillTiers(null,true); FORM_DIRTY=true;
+  applyOwnbrandTiers(); calc();
+  toast('已還原標準級距','ok');
+}
+/* 依「每款瓶數」回傳折率；未達最低級距回傳 1（建議零售）。
+   2026-08-28 起：一次性採購先看本單級距編輯欄，沒有自訂才用後端標準。 */
 function buyoutDiscountForQty(qty){
-  const ts=buyoutTiers(); let d=1;
+  const ts=((typeof qType!=='undefined'&&qType==='ownbrand')?obCurrentTiers():null)||buyoutTiers();
+  let d=1;
   ts.forEach(t=>{ if(qty>=t.min && t.min>0) d=t.disc; });
   return d;
+}
+/* ---- 開放客戶寄倉（一次性採購限定）：勾選＋條款文字，印在報價單上、存 docopts ---- */
+const OB_STORAGE_DEFAULT='本單酒品可寄放乙方倉庫並分批提領，提領請於出貨前 3 個工作天通知安排；寄倉期間酒品由乙方妥善保管。';
+function obStorageToggle(){
+  FORM_DIRTY=true;
+  const on=!!(document.getElementById('ob-storage')&&document.getElementById('ob-storage').checked);
+  const ta=document.getElementById('ob-storage-terms');
+  if(ta){ ta.style.display=on?'block':'none'; if(on && !ta.value.trim()) ta.value=OB_STORAGE_DEFAULT; }
 }
 /* 公版酒客製標 折率：預設公版原價（×1）；某款達 300 瓶↑自動 6 折（可手改） */
 function labelDiscountForQty(qty){ return qty>=300 ? 0.6 : 1; }
@@ -40,10 +104,12 @@ async function loadOwnbrandProducts(){
   const info=document.getElementById('ob-tierinfo');
   if(info){
     const ts=buyoutTiers();
-    info.innerHTML=ts.length
+    /* 2026-08-28：一次性採購改用下方「本單可調」級距編輯欄，靜態說明行只留給客製標模式 */
+    info.innerHTML=(qType!=='ownbrand' && ts.length)
       ? 'ℹ️ 量價級距（每款瓶數）：'+ts.filter(t=>t.min>0).map(t=>`${t.min}瓶↑ ${(t.disc*10)}折`).join('　·　')+'　·　未達最低量為建議零售價；皆免運'
       : '';
   }
+  if(qType==='ownbrand') obFillTiers(null,false);   // 編輯欄還空著才帶標準級距（載入舊單的自訂值不會被蓋）
 }
 function ownbrandBySku(sku){ return (OWNBRAND_PRODUCTS||[]).find(p=>String(p.sku_id)===String(sku))||null; }
 
@@ -119,7 +185,8 @@ async function initConsignPage(force){
   // 公版酒資料與寄售客戶同時要（以前是一個等一個，等於兩倍時間）
   await Promise.all([
     loadOwnbrandData(force).catch(()=>{}),
-    loadConsignCustomers(force)
+    loadConsignCustomers(force),
+    (typeof loadStorage==='function'?loadStorage(force).catch(()=>{}):Promise.resolve())   // 2026-08-28：客戶寄倉卡片
   ]);
 }
 async function loadConsignCustomers(force){

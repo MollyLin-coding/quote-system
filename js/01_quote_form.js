@@ -102,6 +102,9 @@ function setType(t){
   document.getElementById('ext-card').style.display=botLike?'block':'none';
   { const e=document.getElementById('company-card'); if(e) e.style.display=(isOwnCat||isConsign)?'none':'block'; }
   { const e=document.getElementById('ownbrand-card'); if(e) e.style.display=isOwnCat?'block':'none'; }
+  // 2026-08-28：本單可調級距＋開放寄倉 只在「一次性採購」顯示
+  { const e=document.getElementById('ob-tieredit'); if(e) e.style.display=isOwn?'block':'none'; }
+  { const e=document.getElementById('ob-storage-wrap'); if(e) e.style.display=isOwn?'block':'none'; }
   { const note=document.getElementById('ob-modenote'); if(note) note.textContent = isOwnLabel
       ? '每列有原價・折數・計價三欄：帶公版原價，某款達 300 瓶↑自動填 6 折（折數可手改），計價＝原價×折自動算；PDF 標〔客製標〕、原廠批號不對客戶顯示、MOQ 300／款提示。'
       : '每列有原價・折數・計價三欄：帶公版原價，依每款瓶數自動填折數（6/5.5/5＝200/500/1000），折數可手改，計價＝原價×折自動算；原廠批號不對客戶顯示。'; }
@@ -306,6 +309,22 @@ function onGiftChange(id){
 /* 貼牌 MOQ 300／款 未達提醒（僅提示、不擋單）——公版買斷模式、已勾貼牌的列 */
 function updateObMoqWarn(){
   const el=document.getElementById('ob-moqwarn'); if(!el) return;
+  /* 2026-08-28：一次性採購也提醒「未達本單最低級距門檻」（門檻可在本單調整；僅提示、不擋單） */
+  if(qType==='ownbrand'){
+    const ts=(typeof obCurrentTiers==='function'?obCurrentTiers():null)||(typeof buyoutTiers==='function'?buyoutTiers().filter(t=>t.min>0):[]);
+    const minTh=ts.length?ts[0].min:0;
+    const warns=[];
+    if(minTh>0) botItems.forEach(id=>{
+      const row=document.getElementById(`r-${id}`); if(!row) return;
+      const q=gv(row,'qty');
+      if(q>0 && q<minTh){
+        const nm=gs(row,'name')||'該品項';
+        warns.push(`⚠ ${escHtml(nm)} 未達本單最低量價門檻 ${minTh} 瓶（目前 ${q} 瓶），以原價計 — 提醒用，照樣可出單`);
+      }
+    });
+    el.innerHTML=warns.map(w=>`<div class="moq-warn">${w}</div>`).join('');
+    return;
+  }
   if(qType!=='ownlabel'){ el.innerHTML=''; return; }   // 客製標整張單皆客製前標，MOQ 300／款提示（每一列）
   const warns=[];
   botItems.forEach(id=>{
@@ -943,14 +962,31 @@ function renderImgs(){
     </div>`;
   }).join('');
 }
-/* 文件顯示設定 → 存檔用的 docopts 特殊列（沒有任何非預設設定就回 null，不佔品項列） */
+/* 文件顯示設定 → 存檔用的 docopts 特殊列（沒有任何非預設設定就回 null，不佔品項列）
+   2026-08-28 起同一列也存：一次性採購的本單自訂級距（moqTiers）＋開放寄倉（storage/storageTerms） */
 function buildDocOptsItem(){
   const hide=!!(document.getElementById('f-hidetotals')&&document.getElementById('f-hidetotals').checked);
   const size=imgSizeDefault();
   const sizes=imgs.map(i=>(IMG_SIZE_KEYS[i.size]?i.size:''));
-  if(!hide && size==='m' && !sizes.some(Boolean)) return null;
   const o={hideTotals:hide?1:0, imgSize:size};
   if(sizes.some(Boolean)) o.imgSizes=sizes;
+  let extra=false;
+  if(qType==='ownbrand'){
+    // 本單級距跟標準不一樣才存（moqTiers：[[門檻,折數(折)],…]）
+    if(typeof obCurrentTiers==='function' && typeof obTiersAreDefault==='function' && !obTiersAreDefault()){
+      const ct=obCurrentTiers();
+      if(ct){ o.moqTiers=ct.map(t=>[t.min, +(t.disc*10).toFixed(2)]); extra=true; }
+    }
+    const stOn=!!(document.getElementById('ob-storage')&&document.getElementById('ob-storage').checked);
+    if(stOn){
+      o.storage=1;
+      const ta=document.getElementById('ob-storage-terms');
+      const txt=(ta?ta.value:'').trim();
+      if(txt && txt!==(typeof OB_STORAGE_DEFAULT!=='undefined'?OB_STORAGE_DEFAULT:'')) o.storageTerms=txt;
+      extra=true;
+    }
+  }
+  if(!hide && size==='m' && !sizes.some(Boolean) && !extra) return null;
   return { itemType:'docopts', name:'文件顯示設定', lot:'', volume:'', unitPrice:0, deduction:0, logoFee:0, qty:1, unit:'', subtotal:0, flavorList:JSON.stringify(o) };
 }
 /* 載入報價單時還原（q.docOpts 物件優先，否則從 items 的 docopts 特殊列解析；舊單沒有就回預設） */
@@ -963,6 +999,18 @@ function applyDocOpts(q){
   const sizes=Array.isArray(o.imgSizes)?o.imgSizes:[];
   imgs.forEach((im,i)=>{ im.size=IMG_SIZE_KEYS[sizes[i]]?sizes[i]:''; });
   renderImgs();
+  /* 2026-08-28：一次性採購 本單自訂級距＋開放寄倉 還原（其他單型把欄位清回預設，避免殘留到下一張單） */
+  if(typeof obFillTiers==='function'){
+    if(Array.isArray(o.moqTiers)&&o.moqTiers.length){
+      obFillTiers(o.moqTiers.map(t=>({min:parseFloat(t[0])||0, disc:(parseFloat(t[1])||10)/10})).filter(t=>t.min>0), true);
+    } else {
+      obFillTiers(null,true);   // 沒存自訂＝這張單用標準級距（後端 tiers 還沒載入時會先清空，載入後自動補）
+    }
+  }
+  { const st=document.getElementById('ob-storage'); if(st) st.checked=!!(o.storage&&o.storage!=='0'&&o.storage!=='N'); }
+  { const ta=document.getElementById('ob-storage-terms');
+    if(ta){ ta.value=(typeof o.storageTerms==='string'&&o.storageTerms.trim())?o.storageTerms:(typeof OB_STORAGE_DEFAULT!=='undefined'?OB_STORAGE_DEFAULT:''); } }
+  if(typeof obStorageToggle==='function'){ const on=!!(document.getElementById('ob-storage')&&document.getElementById('ob-storage').checked); const ta=document.getElementById('ob-storage-terms'); if(ta) ta.style.display=on?'block':'none'; }
 }
 
 function resetAll(skipConfirm){
@@ -982,6 +1030,9 @@ function resetAll(skipConfirm){
   });
   botItems=[]; banFreeItems=[]; banAddonItems=[]; extras=[]; imgs=[]; rowId=0;
   { const h=document.getElementById('f-hidetotals'); if(h) h.checked=false; const e=document.getElementById('f-imgsize'); if(e) e.value='m'; } // 文件顯示設定回到預設
+  // 2026-08-28：本單級距回標準、寄倉勾選取消（tier/條款輸入欄上面的迴圈已清空，這裡補回標準值與勾選狀態）
+  { const st=document.getElementById('ob-storage'); if(st) st.checked=false; const ta=document.getElementById('ob-storage-terms'); if(ta) ta.style.display='none'; }
+  if(typeof obFillTiers==='function') obFillTiers(null,true);
   botDedCache={}; botLogoCache={}; botLotCache={};
   flavors={g1:[],g2:[]};
   colDed=false; colLogo=false; colLot=false; colGift=false;

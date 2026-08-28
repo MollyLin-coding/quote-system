@@ -242,6 +242,16 @@ function buildStdDocParts(){
     <span style="font-weight:700;color:#7C5E32">付款條件</span><br>${payH}
   </div>`:'';
 
+  /* 2026-08-28：開放客戶寄倉（一次性採購勾選才印）——條款文字可在表單改 */
+  let storageBlock='';
+  if(qType==='ownbrand' && document.getElementById('ob-storage') && document.getElementById('ob-storage').checked){
+    const _ta=document.getElementById('ob-storage-terms');
+    const _txt=((_ta?_ta.value:'').trim())||(typeof OB_STORAGE_DEFAULT!=='undefined'?OB_STORAGE_DEFAULT:'');
+    if(_txt) storageBlock=`<div style="margin-top:12px;padding:14px 18px;background:#FAF9F5;border-left:2.5px solid #A6824A;font-size:12.5px;color:#22241F;line-height:1.7">
+    <span style="font-weight:700;color:#7C5E32">寄倉條款</span><br>${escHtml(_txt).replace(/\n/g,'<br>')}
+  </div>`;
+  }
+
   const notesBlock=`
   <div style="margin-top:16px;padding-top:14px;border-top:1px solid #E5E2D8;font-size:11.5px;color:#6B6B63;line-height:1.7">
     ${note?`<p style="margin:0 0 10px">${note}</p>`:''}
@@ -258,7 +268,7 @@ function buildStdDocParts(){
   </div>`;
 
   return {header, topFirst, contNote, thead:theadStr, rows,
-          tailBlocks:[totals, ...imgBlocks, payBlock, notesBlock], footer, mkTable,
+          tailBlocks:[totals, ...imgBlocks, payBlock, storageBlock, notesBlock], footer, mkTable,
           font:"-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,'Microsoft JhengHei',sans-serif"};
 }
 
