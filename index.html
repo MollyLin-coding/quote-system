@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260828b">
-<script src="js/00_qrcode.js?v=20260828b"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260828c">
+<script src="js/00_qrcode.js?v=20260828c"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -196,8 +196,14 @@
         </div>
         <div id="ob-moqwarn"></div>
         <div class="ch-opt" id="ob-modenote" style="margin-top:6px;padding:0">依每款瓶數自動套 6/5.5/5 折（200/500/1000），帶入後每格單價仍可改。</div>
-        <!-- 2026-08-28：開放客戶寄倉（一次性採購限定）：勾了條款會印在報價單上；庫存帳在「寄售管理 → 客戶寄倉」登記 -->
-        <div id="ob-storage-wrap" style="display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--bd)">
+      </div>
+    </div>
+
+    <!-- 2026-08-28：開放客戶寄倉——代工／一次性採購／客製標 三種單型都可勾（同日下午從公版酒卡片搬出來擴充）；
+         勾了條款會印在報價單與正式文件上；成交後到「寄售管理 → 客戶寄倉」登記入倉／提領 -->
+    <div class="card" id="storage-card" style="display:none">
+      <div class="cb">
+        <div id="ob-storage-wrap">
           <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--sub);cursor:pointer">
             <input type="checkbox" id="ob-storage" onchange="obStorageToggle()" style="width:15px;height:15px">
             開放客戶寄倉（勾選後下方條款會印在報價單上；成交後到「寄售管理 → 客戶寄倉」登記入倉／提領）
@@ -1184,20 +1190,20 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260828b"></script>
-<script src="js/01_quote_form.js?v=20260828b"></script>
-<script src="js/01b_quote_preview.js?v=20260828b"></script>
-<script src="js/02_core_api.js?v=20260828b"></script>
-<script src="js/03_quote_custom.js?v=20260828b"></script>
-<script src="js/04_company.js?v=20260828b"></script>
-<script src="js/05_orders.js?v=20260828b"></script>
-<script src="js/06_verify_mgmt.js?v=20260828b"></script>
-<script src="js/07_calendar.js?v=20260828b"></script>
-<script src="js/08_ownbrand.js?v=20260828b"></script>
-<script src="js/09_verify_form.js?v=20260828b"></script>
-<script src="js/10_today.js?v=20260828b"></script>
-<script src="js/11_customers.js?v=20260828b"></script>
-<script src="js/12_storage.js?v=20260828b"></script>
-<script src="js/99_boot.js?v=20260828b"></script>
+<script src="js/00_utils.js?v=20260828c"></script>
+<script src="js/01_quote_form.js?v=20260828c"></script>
+<script src="js/01b_quote_preview.js?v=20260828c"></script>
+<script src="js/02_core_api.js?v=20260828c"></script>
+<script src="js/03_quote_custom.js?v=20260828c"></script>
+<script src="js/04_company.js?v=20260828c"></script>
+<script src="js/05_orders.js?v=20260828c"></script>
+<script src="js/06_verify_mgmt.js?v=20260828c"></script>
+<script src="js/07_calendar.js?v=20260828c"></script>
+<script src="js/08_ownbrand.js?v=20260828c"></script>
+<script src="js/09_verify_form.js?v=20260828c"></script>
+<script src="js/10_today.js?v=20260828c"></script>
+<script src="js/11_customers.js?v=20260828c"></script>
+<script src="js/12_storage.js?v=20260828c"></script>
+<script src="js/99_boot.js?v=20260828c"></script>
 </body>
 </html>

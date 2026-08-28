@@ -3,7 +3,7 @@
    ・未達本單最低門檻 → ob-moqwarn 提醒（不擋單）
    ・存檔：自訂級距＋寄倉勾選存進 docopts 特殊列；全預設不多存
    ・載入：moqTiers／storage／storageTerms 還原；清除回預設
-   ・預覽：勾寄倉 → 印「寄倉條款」；不勾／非一次性採購不印
+   ・預覽：勾寄倉 → 印「寄倉條款」；代工/一次性採購/客製標都可勾（8/28 下午擴充），宴會/寄售不適用
    ・寄倉管理卡片：彙總（入倉−提領＝剩餘）、登記入倉/提領打 addStorageMove、提領超量前端就擋 */
 const { chromium } = require('/opt/node-tools/node_modules/playwright');
 
@@ -73,7 +73,7 @@ function respond(action){
   await page.waitForTimeout(600);   // 等 getOwnbrandTiers 回來、預設級距帶入
   let r = await page.evaluate(() => ({
     tieredit: document.getElementById('ob-tieredit').style.display,
-    storage:  document.getElementById('ob-storage-wrap').style.display,
+    storage:  document.getElementById('storage-card').style.display,
     t1min: document.getElementById('ob-t1-min').value, t1d: document.getElementById('ob-t1-disc').value,
     t2min: document.getElementById('ob-t2-min').value, t2d: document.getElementById('ob-t2-disc').value,
     t3min: document.getElementById('ob-t3-min').value, t3d: document.getElementById('ob-t3-disc').value,
@@ -82,8 +82,9 @@ function respond(action){
   check('一次性採購：級距編輯欄＋寄倉區顯示', r.tieredit==='block' && r.storage==='block');
   check('級距編輯欄預設帶標準值 200/6、500/5.5、1000/5', r.t1min==='200'&&r.t1d==='6'&&r.t2min==='500'&&r.t2d==='5.5'&&r.t3min==='1000'&&r.t3d==='5');
   check('預設狀態 obTiersAreDefault()=true', r.isDef===true);
-  r = await page.evaluate(() => { setType('ownlabel'); const v={te:document.getElementById('ob-tieredit').style.display, st:document.getElementById('ob-storage-wrap').style.display}; setType('bottle'); const v2=document.getElementById('ob-tieredit').style.display; setType('ownbrand'); return {...v, v2}; });
-  check('客製標／瓶裝：級距編輯欄＋寄倉區隱藏', r.te==='none' && r.st==='none' && r.v2==='none');
+  r = await page.evaluate(() => { setType('ownlabel'); const v={te:document.getElementById('ob-tieredit').style.display, st:document.getElementById('storage-card').style.display}; setType('bottle'); const v2=document.getElementById('ob-tieredit').style.display; const st2=document.getElementById('storage-card').style.display; setType('banquet'); const st3=document.getElementById('storage-card').style.display; setType('ownbrand'); return {...v, v2, st2, st3}; });
+  check('客製標／瓶裝：級距編輯欄隱藏、寄倉卡片顯示', r.te==='none' && r.st==='block' && r.v2==='none' && r.st2==='block');
+  check('宴會：寄倉卡片隱藏', r.st3==='none');
 
   /* ---- 2. 自動套折用「本單級距」；改門檻即時重套 ---- */
   await page.waitForTimeout(300);
@@ -174,11 +175,23 @@ function respond(action){
   });
   check('舊單（無 docopts）：級距回標準 200、寄倉不勾', r.t1==='200' && r.st===false);
 
-  /* ---- 10. 非一次性採購：即使殘留勾選也不印寄倉條款、docopts 不存級距 ---- */
+  /* ---- 10a. 代工（瓶裝）單也可勾寄倉：存 docopts、印條款（8/28 下午擴充） ---- */
   r = await page.evaluate(() => {
     resetAll(true); setType('bottle');
     document.getElementById('f-cli').value='瓶裝客戶';
     addBotRow({name:'測試酒', vol:500, price:800, qty:12}); calc();
+    document.getElementById('ob-storage').checked=true; obStorageToggle();
+    const q=collectQuote();
+    const it=(q.items||[]).find(x=>x.itemType==='docopts');
+    const o=it?JSON.parse(it.flavorList):{};
+    openPreview(); const h=document.getElementById('pcon').innerHTML; closePreview();
+    return { st:o.storage===1, hasTiers:'moqTiers' in o, prints: /寄倉條款/.test(h), termShow: document.getElementById('ob-storage-terms').style.display };
+  });
+  check('代工單勾寄倉：docopts 存 storage、不存級距、預覽印條款', r.st===true && r.hasTiers===false && r.prints===true && r.termShow==='block');
+
+  /* ---- 10b. 宴會單：即使殘留勾選也不存不印 ---- */
+  r = await page.evaluate(() => {
+    resetAll(true); setType('banquet');
     document.getElementById('ob-storage').checked=true;   // 硬勾（畫面上看不到）
     const q=collectQuote();
     const it=(q.items||[]).find(x=>x.itemType==='docopts');
@@ -186,7 +199,7 @@ function respond(action){
     document.getElementById('ob-storage').checked=false;
     return { hasDoc: !!it, prints: /寄倉條款/.test(h) };
   });
-  check('瓶裝單：不存 docopts（全預設）、不印寄倉條款', r.hasDoc===false && r.prints===false);
+  check('宴會單：不存 docopts、不印寄倉條款', r.hasDoc===false && r.prints===false);
 
   /* ---- 11. 清除：級距回標準、寄倉取消 ---- */
   r = await page.evaluate(() => {
