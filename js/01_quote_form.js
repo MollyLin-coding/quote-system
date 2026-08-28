@@ -102,9 +102,9 @@ function setType(t){
   document.getElementById('ext-card').style.display=botLike?'block':'none';
   { const e=document.getElementById('company-card'); if(e) e.style.display=(isOwnCat||isConsign)?'none':'block'; }
   { const e=document.getElementById('ownbrand-card'); if(e) e.style.display=isOwnCat?'block':'none'; }
-  // 2026-08-28：本單可調級距＋開放寄倉 只在「一次性採購」顯示
+  // 2026-08-28：本單可調級距 只在「一次性採購」顯示；開放寄倉 代工／一次性採購／客製標 都顯示（寄售、宴會不適用）
   { const e=document.getElementById('ob-tieredit'); if(e) e.style.display=isOwn?'block':'none'; }
-  { const e=document.getElementById('ob-storage-wrap'); if(e) e.style.display=isOwn?'block':'none'; }
+  { const e=document.getElementById('storage-card'); if(e) e.style.display=(t==='bottle'||isOwnCat)?'block':'none'; }
   { const note=document.getElementById('ob-modenote'); if(note) note.textContent = isOwnLabel
       ? '每列有原價・折數・計價三欄：帶公版原價，某款達 300 瓶↑自動填 6 折（折數可手改），計價＝原價×折自動算；PDF 標〔客製標〕、原廠批號不對客戶顯示、MOQ 300／款提示。'
       : '每列有原價・折數・計價三欄：帶公版原價，依每款瓶數自動填折數（6/5.5/5＝200/500/1000），折數可手改，計價＝原價×折自動算；原廠批號不對客戶顯示。'; }
@@ -972,11 +972,14 @@ function buildDocOptsItem(){
   if(sizes.some(Boolean)) o.imgSizes=sizes;
   let extra=false;
   if(qType==='ownbrand'){
-    // 本單級距跟標準不一樣才存（moqTiers：[[門檻,折數(折)],…]）
+    // 本單級距跟標準不一樣才存（moqTiers：[[門檻,折數(折)],…]）——僅一次性採購
     if(typeof obCurrentTiers==='function' && typeof obTiersAreDefault==='function' && !obTiersAreDefault()){
       const ct=obCurrentTiers();
       if(ct){ o.moqTiers=ct.map(t=>[t.min, +(t.disc*10).toFixed(2)]); extra=true; }
     }
+  }
+  // 開放寄倉：代工／一次性採購／客製標 三種單型（2026-08-28 下午擴充）
+  if(qType==='bottle'||qType==='ownbrand'||qType==='ownlabel'){
     const stOn=!!(document.getElementById('ob-storage')&&document.getElementById('ob-storage').checked);
     if(stOn){
       o.storage=1;

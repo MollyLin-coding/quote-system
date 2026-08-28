@@ -242,9 +242,9 @@ function buildStdDocParts(){
     <span style="font-weight:700;color:#7C5E32">付款條件</span><br>${payH}
   </div>`:'';
 
-  /* 2026-08-28：開放客戶寄倉（一次性採購勾選才印）——條款文字可在表單改 */
+  /* 2026-08-28：開放客戶寄倉（代工／一次性採購／客製標 勾選才印）——條款文字可在表單改 */
   let storageBlock='';
-  if(qType==='ownbrand' && document.getElementById('ob-storage') && document.getElementById('ob-storage').checked){
+  if((qType==='bottle'||qType==='ownbrand'||qType==='ownlabel') && document.getElementById('ob-storage') && document.getElementById('ob-storage').checked){
     const _ta=document.getElementById('ob-storage-terms');
     const _txt=((_ta?_ta.value:'').trim())||(typeof OB_STORAGE_DEFAULT!=='undefined'?OB_STORAGE_DEFAULT:'');
     if(_txt) storageBlock=`<div style="margin-top:12px;padding:14px 18px;background:#FAF9F5;border-left:2.5px solid #A6824A;font-size:12.5px;color:#22241F;line-height:1.7">
