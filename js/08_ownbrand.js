@@ -86,7 +86,7 @@ function buyoutDiscountForQty(qty){
   return d;
 }
 /* ---- 開放客戶寄倉（一次性採購限定）：勾選＋條款文字，印在報價單上、存 docopts ---- */
-const OB_STORAGE_DEFAULT='本單酒品可寄放乙方倉庫並分批提領，提領請於出貨前 3 個工作天通知安排；寄倉期間酒品由乙方妥善保管。';
+const OB_STORAGE_DEFAULT='本單酒品可寄放乙方倉庫並分批提領，提領請於出貨前 3 個工作天通知安排；自成交日起免費寄倉一年，期滿未提領部分之倉儲費用由雙方另行議定。';   // 2026-08-28 Molly 定稿；改這裡要跟後端 STORAGE_TERMS_DEFAULT_（程式碼.gs）一起改
 function obStorageToggle(){
   FORM_DIRTY=true;
   const on=!!(document.getElementById('ob-storage')&&document.getElementById('ob-storage').checked);
