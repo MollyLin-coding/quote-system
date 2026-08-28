@@ -69,8 +69,8 @@ function ordPayloads(){
 function buildOrders(qs, cq, os){
   const stMap={}; ((os&&os.orders)||[]).forEach(o=>{ stMap[o.quote_no]=o; });
   const list=[];
-  // 2026-08-28 純報價單（quoteOnly='Y'，後端 v67 起清單帶這欄）不列入訂單追蹤／月報表
-  ((qs&&qs.quotes)||[]).filter(q=>q.status!=='已刪除' && q.quoteOnly!=='Y').forEach(q=>{
+  // 2026-08-28 純報價單（status='純報價'）不列入訂單追蹤／月報表
+  ((qs&&qs.quotes)||[]).filter(q=>q.status!=='已刪除' && q.status!=='純報價' && q.quoteOnly!=='Y').forEach(q=>{
     list.push({ no:q.quoteNo, client:q.clientName||'—', type:q.quoteType==='banquet'?'宴會':'瓶裝',
       typeKey:q.quoteType, total:q.grandTotal||0, quoteDate:q.quoteDate||'', expiry:q.expiryDate||'',
       payDetail:q.paymentDetail||'',   // 複檢 #3：訂金/尾款要以報價單條款上的實際金額為準

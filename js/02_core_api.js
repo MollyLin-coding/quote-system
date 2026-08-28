@@ -437,12 +437,12 @@ function collectQuote(){
     paymentType: String(payTab), paymentDetail: getPayTerms(),
     remark: val('f-note'),
     images: imgs.filter(i=>i&&i.data).map(i=>({name:i.name||'圖片', mime:i.mime||'image/jpeg', data:i.data})), // B4：整組現有圖片以 base64 送後端；後端據此保存並回寫 imageLinks（不再送 imageLinks，避免清空後台已存連結）
-    status: '草稿',
+    status: (document.getElementById('f-quoteonly')?.checked ? '純報價' : '草稿'),   // 2026-08-28：純報價單借用既有狀態欄做記號（取消勾選再存就回「草稿」），不動資料表結構
     venue: val('f-ven'), entryTime: val('f-ent'), serviceTime: val('f-svc'), exitTime: val('f-ext'),
     svcMode: svcMode, svcAmount: svcAmount,
     svcAmt1: svcAmt1, svcAmt2: svcAmt2, svcQty: svcQty,
     tagLot: val('f-tag-lot'), tagCli: val('f-tag-cli'),
-    quoteOnly: (document.getElementById('f-quoteonly')?.checked ? 'Y' : 'N'),   // 2026-08-28 純報價單：後端 v67 起存主表「純報價」欄（舊後端會自動忽略）
+    quoteOnly: (document.getElementById('f-quoteonly')?.checked ? 'Y' : 'N'),   // 2026-08-28 純報價單（給存檔流程判斷用；持久化走上面的 status='純報價'）
     expectedShipDate: val('f-shipdate'), showShipDate: (document.getElementById('f-shipdate-show')?.checked ? 'Y' : 'N'),
     items
   };
@@ -729,7 +729,7 @@ function renderRecords(){
         ? '<span class="rec-badge custom">自訂報價單</span>'
         : '<span class="rec-badge banquet">宴會酒水</span>';
       // 2026-08-28 純報價單標記（後端 v67 起清單才帶 quoteOnly，舊後端拿不到就不顯示）
-      const qoBadge=(q.quoteOnly==='Y')?' <span class="rec-badge" style="background:#F3ECDD;color:#7A5A1E">純報價</span>':'';
+      const qoBadge=(q.status==='純報價'||q.quoteOnly==='Y')?' <span class="rec-badge" style="background:#F3ECDD;color:#7A5A1E">純報價</span>':'';
       const total='$'+Math.round(q.grandTotal||0).toLocaleString();
       if(q._custom){
         // 自訂單：開啟／預覽走自訂報價單頁；後端沒有刪除自訂單的 action，不提供刪除
