@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260828d">
-<script src="js/00_qrcode.js?v=20260828d"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260828e">
+<script src="js/00_qrcode.js?v=20260828e"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -269,6 +269,10 @@
             <div class="fl"><label>客戶名稱標籤</label><input class="fi" id="f-tag-cli" placeholder="如：南野子"></div>
           </div>
         </div>
+        <!-- 2026-08-28：純報價單（僅報價、不建訂單）——存 docopts quoteOnly＋主表「純報價」欄 -->
+        <div style="margin-top:16px;padding:10px 12px;background:#FAF9F5;border:1px dashed var(--bd);border-radius:8px">
+          <label style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;font-weight:600;font-size:13px;line-height:1.5"><input type="checkbox" id="f-quoteonly" style="width:auto;margin:3px 0 0" onchange="onQuoteOnlyChange()"> <span>純報價單<span style="color:var(--hint);font-weight:400">（只是報價、還不是訂單：不會出現在「訂單追蹤」與月報表，也不建行事曆出貨提醒。之後成交時，開啟這張單把勾取消再存檔，就會變回正式單）</span></span></label>
+        </div>
         <div id="ordprog-block" style="margin-top:16px">
           <div class="sub-label">訂單追蹤進度 <span class="ln"></span> <span style="font-style:italic;color:var(--bd);font-weight:400">選填，存檔時一起建立，之後不用再另外跑一趟「訂單追蹤」</span></div>
           <div class="fg fg2">
@@ -441,6 +445,15 @@
         <input class="tax-rate-in" type="number" id="taxrate" value="5" min="0" max="50" oninput="calc()">
         <span style="font-size:11px;color:var(--hint)">%</span>
         <span id="tax-status" style="font-size:11px;color:var(--gold-deep);margin-left:4px">輸入含稅價，自動反推稅額</span>
+      </div>
+      <!-- 2026-08-28：報價單稅金顯示（存 docopts taxDisplay；只影響印出來的報價單，畫面總計照舊） -->
+      <div class="tax-toggle" style="border-top:none;padding-top:0;flex-wrap:wrap">
+        <span>報價單上顯示：</span>
+        <select id="f-taxdisplay" style="font-size:12.5px;padding:4px 8px;border:1px solid var(--bd);border-radius:6px;background:#fff" onchange="onTaxDisplayChange()">
+          <option value="">含稅（照現在：印合計、營業稅、總計）</option>
+          <option value="excl">未稅價（只印合計（未稅），下方註明稅額另計）</option>
+        </select>
+        <span id="taxdisp-hint" style="font-size:11px;color:var(--hint);margin-left:4px"></span>
       </div>
     </div>
 
@@ -1197,20 +1210,20 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260828d"></script>
-<script src="js/01_quote_form.js?v=20260828d"></script>
-<script src="js/01b_quote_preview.js?v=20260828d"></script>
-<script src="js/02_core_api.js?v=20260828d"></script>
-<script src="js/03_quote_custom.js?v=20260828d"></script>
-<script src="js/04_company.js?v=20260828d"></script>
-<script src="js/05_orders.js?v=20260828d"></script>
-<script src="js/06_verify_mgmt.js?v=20260828d"></script>
-<script src="js/07_calendar.js?v=20260828d"></script>
-<script src="js/08_ownbrand.js?v=20260828d"></script>
-<script src="js/09_verify_form.js?v=20260828d"></script>
-<script src="js/10_today.js?v=20260828d"></script>
-<script src="js/11_customers.js?v=20260828d"></script>
-<script src="js/12_storage.js?v=20260828d"></script>
-<script src="js/99_boot.js?v=20260828d"></script>
+<script src="js/00_utils.js?v=20260828e"></script>
+<script src="js/01_quote_form.js?v=20260828e"></script>
+<script src="js/01b_quote_preview.js?v=20260828e"></script>
+<script src="js/02_core_api.js?v=20260828e"></script>
+<script src="js/03_quote_custom.js?v=20260828e"></script>
+<script src="js/04_company.js?v=20260828e"></script>
+<script src="js/05_orders.js?v=20260828e"></script>
+<script src="js/06_verify_mgmt.js?v=20260828e"></script>
+<script src="js/07_calendar.js?v=20260828e"></script>
+<script src="js/08_ownbrand.js?v=20260828e"></script>
+<script src="js/09_verify_form.js?v=20260828e"></script>
+<script src="js/10_today.js?v=20260828e"></script>
+<script src="js/11_customers.js?v=20260828e"></script>
+<script src="js/12_storage.js?v=20260828e"></script>
+<script src="js/99_boot.js?v=20260828e"></script>
 </body>
 </html>
