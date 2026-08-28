@@ -442,6 +442,7 @@ function collectQuote(){
     svcMode: svcMode, svcAmount: svcAmount,
     svcAmt1: svcAmt1, svcAmt2: svcAmt2, svcQty: svcQty,
     tagLot: val('f-tag-lot'), tagCli: val('f-tag-cli'),
+    quoteOnly: (document.getElementById('f-quoteonly')?.checked ? 'Y' : 'N'),   // 2026-08-28 純報價單：後端 v67 起存主表「純報價」欄（舊後端會自動忽略）
     expectedShipDate: val('f-shipdate'), showShipDate: (document.getElementById('f-shipdate-show')?.checked ? 'Y' : 'N'),
     items
   };
@@ -491,8 +492,10 @@ async function saveQuote(){
       quote.quoteNo=data.quoteNo;   // collectQuote() 存的是存檔前的猜測值，這裡校正成後端實際發的單號
       toast('已儲存：'+data.quoteNo,'ok');
       if(wasNewQuote && typeof updateOrdProgVisibility==='function') updateOrdProgVisibility();
-      if(wasNewQuote) await maybeCreateOrderProgressOnSave(data.quoteNo, quote);
-      else await maybeSyncOrderProgressOnEdit(data.quoteNo, quote);
+      // 2026-08-28 純報價單：不建、也不同步訂單追蹤進度
+      const _qOnly=(quote.quoteOnly==='Y');
+      if(wasNewQuote){ if(!_qOnly) await maybeCreateOrderProgressOnSave(data.quoteNo, quote); }
+      else if(!_qOnly) await maybeSyncOrderProgressOnEdit(data.quoteNo, quote);
       runHooks('afterSaveQuote', quote);   // 客戶主檔比對提醒登記在 11_customers.js
     } else {
       toast(data.error||'儲存失敗','err');
@@ -725,6 +728,8 @@ function renderRecords(){
         : q.quoteType==='custom'
         ? '<span class="rec-badge custom">自訂報價單</span>'
         : '<span class="rec-badge banquet">宴會酒水</span>';
+      // 2026-08-28 純報價單標記（後端 v67 起清單才帶 quoteOnly，舊後端拿不到就不顯示）
+      const qoBadge=(q.quoteOnly==='Y')?' <span class="rec-badge" style="background:#F3ECDD;color:#7A5A1E">純報價</span>':'';
       const total='$'+Math.round(q.grandTotal||0).toLocaleString();
       if(q._custom){
         // 自訂單：開啟／預覽走自訂報價單頁；後端沒有刪除自訂單的 action，不提供刪除
@@ -744,7 +749,7 @@ function renderRecords(){
       return `<tr class="clickable" onclick="openRecord('${escAttr(q.quoteNo)}')">
         <td class="mc-main" style="font-weight:600">${escHtml(q.quoteNo||'—')}</td>
         <td data-l="客戶">${escHtml(q.clientName||'—')}</td>
-        <td data-l="類型">${typeBadge}</td>
+        <td data-l="類型">${typeBadge}${qoBadge}</td>
         <td data-l="報價日">${escHtml(q.quoteDate||'—')}</td>
         <td data-l="總計" style="font-weight:600">${total}</td>
         <td data-l="建立者">${escHtml(q.createdBy||'—')}</td>

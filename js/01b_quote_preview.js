@@ -27,13 +27,22 @@ function buildStdDocParts(){
   const text=document.getElementById('t-ext').textContent;
   const freeShip=parseFloat(document.getElementById('f-freeship')?.value)||0; // 免運優惠：顯示用、不計入總計
 
+  /* 2026-08-28：報價單稅金顯示——'excl'＝印未稅價、總計區只印合計（未稅）＋「稅額另計」註記；
+     ''＝照現行（發票格式：合計／營業稅／總計）。含稅輸入＋未稅顯示時，單價／小計自動除以(1+稅率)換算，
+     可能與畫面合計有 1-2 元進位差；輸入未稅價則完全一致。只影響印出來的文件，畫面總計與存檔資料照舊。 */
+  const taxDisp=(document.getElementById('f-taxdisplay')?.value)||'';
+  const _rate=(parseFloat(document.getElementById('taxrate').value)||0)/100;
+  const exFac=(taxDisp==='excl'&&taxMode==='inc'&&_rate>0)?(1/(1+_rate)):1;
+  const cvA=x=>x*exFac;                                    // 金額換算（未稅顯示＋含稅輸入才 ≠1）
+  const cvP=x=>Math.round(cvA(x)*100)/100;                 // 單價：留到小數兩位
+  const taxTag = taxDisp==='excl' ? '（未稅）' : (taxMode==='inc' ? '（含稅）' : '（未稅）');
+
   let colgroup='', theadStr='';
   const rows=[];
   if(qType==='bottle'||qType==='ownbrand'||qType==='ownlabel'||qType==='consign'){
     let headCols = `<th style="padding:10px 12px;text-align:left;color:#6B6B63;font-weight:600;font-size:10.5px;letter-spacing:.3px;border-bottom:1.5px solid #22241F">品名</th>`;
     const showLotDoc = colLot && !colOwn;   // 自有品牌批號為內部記錄用，不顯示給客戶
     if(showLotDoc) headCols += `<th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">批次</th>`;
-    const taxTag = taxMode==='inc' ? '（含稅）' : '（未稅）';
     headCols += `<th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">容量</th>
       <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">單價${taxTag}</th>`;
     if(colDed) headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">前標費</th>`;
@@ -60,12 +69,12 @@ function buildStdDocParts(){
       let cells = `<td style="padding:11px 12px;font-weight:600;color:#22241F">${n||'—'}${_mkTag}</td>`;
       if(showLotDoc) cells += `<td style="padding:11px 8px;text-align:center;color:#6B6B63">${lot}</td>`;
       cells += `<td style="padding:11px 8px;text-align:center;color:#6B6B63">${vol?vol+'ml':'—'}</td>
-        <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+p.toLocaleString():'—'}</td>`;
+        <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+cvP(p).toLocaleString():'—'}</td>`;
       if(colDed) cells += `<td style="padding:11px 8px;text-align:right;color:#6B6B63">${d?d:''}</td>`;
       if(colLogo) cells += `<td style="padding:11px 8px;text-align:right;color:#6B6B63">${l?'$'+l:'—'}</td>`;
       const subCell = _gift
-        ? `<span style="text-decoration:line-through;color:#9a968c">$${Math.round(sub).toLocaleString()}</span> <span style="color:#A6824A;font-weight:700">贈</span>`
-        : `$${Math.round(sub).toLocaleString()}`;
+        ? `<span style="text-decoration:line-through;color:#9a968c">$${Math.round(cvA(sub)).toLocaleString()}</span> <span style="color:#A6824A;font-weight:700">贈</span>`
+        : `$${Math.round(cvA(sub)).toLocaleString()}`;
       cells += `<td style="padding:11px 8px;text-align:right;color:#6B6B63">${q}</td>
         <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">${subCell}</td>`;
       rows.push(`<tr style="border-bottom:1px solid #EEEDE6">${cells}</tr>`);
@@ -75,7 +84,7 @@ function buildStdDocParts(){
       extras.forEach(e=>{
         rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
           <td colspan="${colspan}" style="padding:9px 12px;color:#A6824A;font-style:italic;font-size:12px">${escHtml(e.n)}</td>
-          <td style="padding:9px 8px;text-align:right;color:#6B6B63">${e.a?fmtMoney(e.a):''}</td>
+          <td style="padding:9px 8px;text-align:right;color:#6B6B63">${e.a?fmtMoney(cvA(e.a)):''}</td>
         </tr>`);
       });
     }
@@ -84,7 +93,7 @@ function buildStdDocParts(){
       <th style="padding:10px 12px;text-align:left;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">項目</th>
       <th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">數量</th>
       <th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">單位</th>
-      <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">單價${taxMode==='inc'?'（含稅）':'（未稅）'}</th>
+      <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">單價${taxTag}</th>
       <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">小計</th>
     </tr></thead>`;
     colgroup = `<colgroup><col><col style="width:64px"><col style="width:64px"><col style="width:92px"><col style="width:118px"></colgroup>`;
@@ -101,8 +110,8 @@ function buildStdDocParts(){
         <td style="padding:11px 12px;font-weight:600;color:#22241F">${label}<span style="font-weight:400;color:#6B6B63;font-size:11.5px">${flavorStr}</span></td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${q?q.toLocaleString():'—'}</td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${unit}</td>
-        <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+p.toLocaleString():'—'}</td>
-        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(sub).toLocaleString()}</td>
+        <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+cvP(p).toLocaleString():'—'}</td>
+        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(cvA(sub)).toLocaleString()}</td>
       </tr>`);
     };
     banGroupRow('g1','客製化調酒');
@@ -114,13 +123,13 @@ function buildStdDocParts(){
       const info=banFreeRowInfo(row);
       if(!n&&!info.sub) return;
       const subCell=info.free
-        ? `<span style="text-decoration:line-through;color:#9a968c">$${Math.round(info.sub).toLocaleString()}</span> <span style="color:#A6824A;font-weight:700">免費</span>`
-        : `$${Math.round(info.sub).toLocaleString()}`;
+        ? `<span style="text-decoration:line-through;color:#9a968c">$${Math.round(cvA(info.sub)).toLocaleString()}</span> <span style="color:#A6824A;font-weight:700">免費</span>`
+        : `$${Math.round(cvA(info.sub)).toLocaleString()}`;
       rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
         <td style="padding:11px 12px;font-weight:600;color:#22241F">${n}${note?`<div style="font-size:10.5px;color:#A8A69C;font-weight:400;margin-top:2px">${note}</div>`:''}</td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${q?q.toLocaleString():'—'}</td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${u||'—'}</td>
-        <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+p.toLocaleString():'—'}</td>
+        <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+cvP(p).toLocaleString():'—'}</td>
         <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">${subCell}</td>
       </tr>`);
     });
@@ -136,8 +145,8 @@ function buildStdDocParts(){
         <td style="padding:11px 12px;font-weight:600;color:#22241F">${labelMap[mode]}</td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${q}</td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">位</td>
-        <td style="padding:11px 8px;text-align:right;color:#6B6B63">$${(a1+(mode==='travel'?a2:0)).toLocaleString()}</td>
-        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(sub).toLocaleString()}</td>
+        <td style="padding:11px 8px;text-align:right;color:#6B6B63">$${cvP(a1+(mode==='travel'?a2:0)).toLocaleString()}</td>
+        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(cvA(sub)).toLocaleString()}</td>
       </tr>`);
     }
     // addons
@@ -150,8 +159,8 @@ function buildStdDocParts(){
         <td style="padding:11px 12px;font-weight:600;color:#22241F">${n}</td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${q}</td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${u}</td>
-        <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+p.toLocaleString():'—'}</td>
-        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(sub).toLocaleString()}</td>
+        <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+cvP(p).toLocaleString():'—'}</td>
+        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(cvA(sub)).toLocaleString()}</td>
       </tr>`);
     });
   }
@@ -227,16 +236,26 @@ function buildStdDocParts(){
   const contNote = `<div style="font-size:10.5px;color:#A8A69C;letter-spacing:.5px;margin:0">品項明細（承前頁）</div>`;
 
   /* 尾段區塊（總計／圖片／付款條件／備註條款） */
-  const totals=hideTotals?'':`
+  /* 未稅顯示（taxDisplay='excl'）：總計區只印「合計（未稅）」＋稅額另計註記，不印營業稅／含稅總計 */
+  const freeShipRow=freeShip>0?`<div style="display:flex;justify-content:space-between;font-size:12px;color:#A6824A;padding:5px 2px"><span>免運優惠</span><span>$${Math.round(cvA(freeShip)).toLocaleString()}<span style="color:#9a968c;font-size:10.5px">（本次免收運費，不列入應付）</span></span></div>`:'';
+  const _ratePctTxt=_rate>0?`（${+( _rate*100).toFixed(2)}%）`:'';
+  const totals=hideTotals?'':(taxDisp==='excl'?`
+  <div style="display:flex;justify-content:flex-end;margin-top:18px">
+    <div style="min-width:250px">
+      ${freeShipRow}
+      <div style="display:flex;justify-content:space-between;font-size:18px;color:#22241F;font-weight:700;border-top:1.5px solid #22241F;padding-top:10px;margin-top:4px;letter-spacing:.3px"><span>合計（未稅）</span><span style="color:#A6824A">${tsub}</span></div>
+      <div style="text-align:right;font-size:11.5px;color:#6B6B63;margin-top:6px">以上金額為未稅價，營業稅${_ratePctTxt}另計。</div>
+    </div>
+  </div>`:`
   <div style="display:flex;justify-content:flex-end;margin-top:18px">
     <div style="min-width:250px">
       <div style="display:flex;justify-content:space-between;font-size:12px;color:#6B6B63;padding:5px 2px"><span>${lbsub}</span><span>${tsub}</span></div>
       ${taxVisible?`<div style="display:flex;justify-content:space-between;font-size:12px;color:#6B6B63;padding:5px 2px"><span>${lbtax}</span><span>${ttax}</span></div>`:''}
       ${extVisible?`<div style="display:flex;justify-content:space-between;font-size:12px;color:#6B6B63;padding:5px 2px"><span>額外費用</span><span>${text}</span></div>`:''}
-      ${freeShip>0?`<div style="display:flex;justify-content:space-between;font-size:12px;color:#A6824A;padding:5px 2px"><span>免運優惠</span><span>$${Math.round(freeShip).toLocaleString()}<span style="color:#9a968c;font-size:10.5px">（本次免收運費，不列入應付）</span></span></div>`:''}
+      ${freeShipRow}
       <div style="display:flex;justify-content:space-between;font-size:18px;color:#22241F;font-weight:700;border-top:1.5px solid #22241F;padding-top:10px;margin-top:4px;letter-spacing:.3px"><span>總計</span><span style="color:#A6824A">${tot}</span></div>
     </div>
-  </div>`;
+  </div>`);
 
   const payBlock = payH?`<div style="margin-top:18px;padding:14px 18px;background:#FAF9F5;border-left:2.5px solid #A6824A;font-size:12.5px;color:#22241F;line-height:1.7">
     <span style="font-weight:700;color:#7C5E32">付款條件</span><br>${payH}

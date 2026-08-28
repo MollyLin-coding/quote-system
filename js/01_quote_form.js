@@ -24,7 +24,17 @@ let flavors={g1:[],g2:[]};
    02_core_api.js 的 saveQuote()／maybeCreateOrderProgressOnSave()。 */
 function updateOrdProgVisibility(){
   const box=document.getElementById('ordprog-block'); if(!box) return;
-  box.style.display=(typeof editingQuoteNo!=='undefined' && editingQuoteNo) ? 'none' : 'block';
+  const qo=document.getElementById('f-quoteonly');
+  const hide=(typeof editingQuoteNo!=='undefined' && editingQuoteNo) || (qo && qo.checked); // 純報價單不建訂單追蹤，區塊一併藏起
+  box.style.display=hide ? 'none' : 'block';
+}
+/* 2026-08-28：純報價單勾選（僅報價、不建訂單追蹤／行事曆）＋報價單稅金顯示切換 */
+function onQuoteOnlyChange(){ FORM_DIRTY=true; updateOrdProgVisibility(); }
+function onTaxDisplayChange(){
+  FORM_DIRTY=true;
+  const v=(document.getElementById('f-taxdisplay')||{}).value||'';
+  const h=document.getElementById('taxdisp-hint');
+  if(h) h.textContent = v==='excl' ? (taxMode==='inc'?'輸入的是含稅價：印出時會自動換算成未稅價':'') : '';
 }
 
 /* 訂金比例預設值：瓶裝／OEM代工／公版買斷／公版客製標／寄售一律 50%（酒款對半拆），宴會等其他類型維持 30% */
@@ -989,6 +999,11 @@ function buildDocOptsItem(){
       extra=true;
     }
   }
+  // 2026-08-28：純報價單＋報價單稅金顯示（所有單型）
+  { const qo=document.getElementById('f-quoteonly');
+    if(qo&&qo.checked){ o.quoteOnly=1; extra=true; } }
+  { const td=document.getElementById('f-taxdisplay');
+    if(td&&td.value==='excl'){ o.taxDisplay='excl'; extra=true; } }
   if(!hide && size==='m' && !sizes.some(Boolean) && !extra) return null;
   return { itemType:'docopts', name:'文件顯示設定', lot:'', volume:'', unitPrice:0, deduction:0, logoFee:0, qty:1, unit:'', subtotal:0, flavorList:JSON.stringify(o) };
 }
@@ -1014,6 +1029,11 @@ function applyDocOpts(q){
   { const ta=document.getElementById('ob-storage-terms');
     if(ta){ ta.value=(typeof o.storageTerms==='string'&&o.storageTerms.trim())?o.storageTerms:(typeof OB_STORAGE_DEFAULT!=='undefined'?OB_STORAGE_DEFAULT:''); } }
   if(typeof obStorageToggle==='function'){ const on=!!(document.getElementById('ob-storage')&&document.getElementById('ob-storage').checked); const ta=document.getElementById('ob-storage-terms'); if(ta) ta.style.display=on?'block':'none'; }
+  /* 2026-08-28：純報價單勾選＋稅金顯示還原（沒存＝預設不勾／含稅顯示） */
+  { const qo=document.getElementById('f-quoteonly'); if(qo) qo.checked=!!(o.quoteOnly&&o.quoteOnly!=='0'&&o.quoteOnly!=='N'); }
+  { const td=document.getElementById('f-taxdisplay'); if(td) td.value=(o.taxDisplay==='excl')?'excl':''; }
+  { const h=document.getElementById('taxdisp-hint'); if(h) h.textContent=''; }
+  updateOrdProgVisibility();
 }
 
 function resetAll(skipConfirm){
@@ -1035,6 +1055,7 @@ function resetAll(skipConfirm){
   { const h=document.getElementById('f-hidetotals'); if(h) h.checked=false; const e=document.getElementById('f-imgsize'); if(e) e.value='m'; } // 文件顯示設定回到預設
   // 2026-08-28：本單級距回標準、寄倉勾選取消（tier/條款輸入欄上面的迴圈已清空，這裡補回標準值與勾選狀態）
   { const st=document.getElementById('ob-storage'); if(st) st.checked=false; const ta=document.getElementById('ob-storage-terms'); if(ta) ta.style.display='none'; }
+  { const qo=document.getElementById('f-quoteonly'); if(qo) qo.checked=false; const h=document.getElementById('taxdisp-hint'); if(h) h.textContent=''; } // 純報價勾選回預設（稅金顯示 select 由上方通用迴圈清回''＝含稅）
   if(typeof obFillTiers==='function') obFillTiers(null,true);
   botDedCache={}; botLogoCache={}; botLotCache={};
   flavors={g1:[],g2:[]};
