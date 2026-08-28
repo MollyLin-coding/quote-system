@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260828c">
-<script src="js/00_qrcode.js?v=20260828c"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260828d">
+<script src="js/00_qrcode.js?v=20260828d"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -60,6 +60,7 @@
     <button class="nb" id="nav-today" onclick="gotoPage('today')"><i class="ti ti-checklist"></i>今日待辦</button>
     <button class="nb" id="nav-cal" data-owner-only onclick="gotoPage('cal')"><i class="ti ti-calendar"></i>工作行事曆</button>
     <button class="nb" id="nav-orders" onclick="gotoPage('orders')"><i class="ti ti-truck-delivery"></i>訂單追蹤</button>
+    <button class="nb" id="nav-storage" onclick="gotoPage('storage')"><i class="ti ti-building-warehouse"></i>客戶寄倉</button>
     <button class="nb" id="nav-report" onclick="gotoPage('report')"><i class="ti ti-report-money"></i>月報表</button>
     <button class="nb" id="nav-consign" onclick="gotoPage('consign')"><i class="ti ti-building-warehouse"></i>寄售管理</button>
     <button class="nb parent-active" id="nav-quote" onclick="toggleQuoteMenu()"><i class="ti ti-file-text"></i>報價單<i class="ti ti-chevron-down qm-chev rot" id="qm-chev"></i></button>
@@ -200,13 +201,13 @@
     </div>
 
     <!-- 2026-08-28：開放客戶寄倉——代工／一次性採購／客製標 三種單型都可勾（同日下午從公版酒卡片搬出來擴充）；
-         勾了條款會印在報價單與正式文件上；成交後到「寄售管理 → 客戶寄倉」登記入倉／提領 -->
+         勾了條款會印在報價單與正式文件上；成交後到左側「客戶寄倉」登記入倉／提領 -->
     <div class="card" id="storage-card" style="display:none">
       <div class="cb">
         <div id="ob-storage-wrap">
           <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--sub);cursor:pointer">
             <input type="checkbox" id="ob-storage" onchange="obStorageToggle()" style="width:15px;height:15px">
-            開放客戶寄倉（勾選後下方條款會印在報價單上；成交後到「寄售管理 → 客戶寄倉」登記入倉／提領）
+            開放客戶寄倉（勾選後下方條款會印在報價單上；成交後到左側「客戶寄倉」登記入倉／提領）
           </label>
           <textarea class="fi" id="ob-storage-terms" rows="2" style="display:none;margin-top:7px;resize:vertical" oninput="FORM_DIRTY=true"></textarea>
         </div>
@@ -699,6 +700,55 @@
     </div>
   </div>
 
+  <!-- 2026-08-28：客戶寄倉獨立成頁（原本掛在寄售管理頁最下面；寄倉跨代工／一次性採購／客製標，
+       跟寄售是相反方向的兩套帳，混在同一頁會找不到，Molly 要求拆開）-->
+  <div class="page" id="page-storage">
+    <div class="rec-wrap">
+  <div class="card" id="st-card">
+          <div class="ch"><i class="ti ti-building-warehouse"></i><span>寄倉庫存</span><span class="ch-opt">代工／一次性採購／客製標 買斷後寄放我方倉庫的酒</span></div>
+          <div class="cb">
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+              <div class="fl" style="flex:1;min-width:180px"><label>寄倉客戶</label>
+                <select class="fi" id="st-customer" onchange="stRender()"><option value="">全部客戶</option></select></div>
+              <button class="btn btn-gold" onclick="stOpenForm('in')"><i class="ti ti-plus"></i>登記入倉</button>
+              <button class="btn btn-dk" onclick="stOpenForm('out')"><i class="ti ti-minus"></i>登記提領</button>
+              <button class="btn btn-dk" onclick="loadStorage(true)"><i class="ti ti-refresh"></i>重新整理</button>
+            </div>
+            <div id="st-form" style="display:none;margin-top:12px;padding:12px;border:1px solid var(--bd);border-radius:8px">
+              <div style="font-weight:600;margin-bottom:8px" id="st-form-title">登記入倉</div>
+              <div class="fg fg2">
+                <div class="fl"><label>客戶名稱</label><input class="fi" id="st-f-cus" list="st-cuslist" placeholder="輸入或選既有寄倉客戶"><datalist id="st-cuslist"></datalist></div>
+                <div class="fl"><label>日期</label><input class="fi" type="date" id="st-f-date"></div>
+                <div class="fl"><label>公版酒</label><select class="fi" id="st-f-sku" onchange="stSkuChange()"><option value="">載入中…</option></select></div>
+                <div class="fl" id="st-f-freewrap" style="display:none"><label>自行輸入酒款（名稱／容量）</label>
+                  <div style="display:flex;gap:8px"><input class="fi" id="st-f-name" placeholder="酒款名稱" style="flex:2"><input class="fi" id="st-f-vol" placeholder="容量（例：500ml）" style="flex:1"></div></div>
+                <div class="fl"><label>數量（瓶）</label><input class="fi" type="number" id="st-f-qty" min="1" step="1"></div>
+                <div class="fl"><label>對應報價單號 <span class="opt">選填</span></label><input class="fi" id="st-f-no" placeholder="例：Q20260828-01"></div>
+                <div class="fl" style="grid-column:1/-1"><label>備註 <span class="opt">選填</span></label><input class="fi" id="st-f-note"></div>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:10px">
+                <button class="btn btn-gold" id="st-f-save" onclick="stSaveMove()"><i class="ti ti-check"></i>確認登記</button>
+                <button class="btn btn-dk" onclick="stCloseForm()">取消</button>
+              </div>
+            </div>
+            <div class="tbl-scroll" style="margin-top:12px">
+              <table class="rec-table mcard">
+                <thead><tr><th>客戶</th><th>酒款</th><th style="text-align:center">容量</th><th style="text-align:right">已入倉</th><th style="text-align:right">已提領</th><th style="text-align:right">剩餘</th></tr></thead>
+                <tbody id="st-inv-body"><tr><td colspan="6" class="rec-empty">尚無寄倉紀錄</td></tr></tbody>
+              </table>
+            </div>
+            <div style="font-size:12px;color:var(--sub);margin:14px 0 6px;font-weight:600">寄倉明細（最近在前）</div>
+            <div class="tbl-scroll">
+              <table class="rec-table mcard">
+                <thead><tr><th>日期</th><th>類型</th><th>客戶</th><th>酒款</th><th style="text-align:right">數量</th><th>單號</th><th>備註</th><th></th></tr></thead>
+                <tbody id="st-ledger-body"><tr><td colspan="8" class="rec-empty">尚無寄倉紀錄</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+    </div>
+  </div>
+
   <div class="page" id="page-report">
     <div class="rec-wrap">
       <div class="card"><div class="cb"><div id="rpt-box"></div></div></div>
@@ -839,49 +889,6 @@
         </div>
       </div>
 
-      <!-- 2026-08-28：客戶寄倉（一次性採購買斷後寄放我方倉庫）——跟上面的寄售是兩套帳，互不影響 -->
-      <div class="card" id="st-card" style="margin-top:18px">
-        <div class="ch"><i class="ti ti-building-warehouse"></i><span>客戶寄倉（一次性採購）</span><span class="ch-opt">客戶買斷後寄放我方倉庫的酒：登記入倉／提領，隨時看剩幾瓶</span></div>
-        <div class="cb">
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-            <div class="fl" style="flex:1;min-width:180px"><label>寄倉客戶</label>
-              <select class="fi" id="st-customer" onchange="stRender()"><option value="">全部客戶</option></select></div>
-            <button class="btn btn-gold" onclick="stOpenForm('in')"><i class="ti ti-plus"></i>登記入倉</button>
-            <button class="btn btn-dk" onclick="stOpenForm('out')"><i class="ti ti-minus"></i>登記提領</button>
-            <button class="btn btn-dk" onclick="loadStorage(true)"><i class="ti ti-refresh"></i>重新整理</button>
-          </div>
-          <div id="st-form" style="display:none;margin-top:12px;padding:12px;border:1px solid var(--bd);border-radius:8px">
-            <div style="font-weight:600;margin-bottom:8px" id="st-form-title">登記入倉</div>
-            <div class="fg fg2">
-              <div class="fl"><label>客戶名稱</label><input class="fi" id="st-f-cus" list="st-cuslist" placeholder="輸入或選既有寄倉客戶"><datalist id="st-cuslist"></datalist></div>
-              <div class="fl"><label>日期</label><input class="fi" type="date" id="st-f-date"></div>
-              <div class="fl"><label>公版酒</label><select class="fi" id="st-f-sku" onchange="stSkuChange()"><option value="">載入中…</option></select></div>
-              <div class="fl" id="st-f-freewrap" style="display:none"><label>自行輸入酒款（名稱／容量）</label>
-                <div style="display:flex;gap:8px"><input class="fi" id="st-f-name" placeholder="酒款名稱" style="flex:2"><input class="fi" id="st-f-vol" placeholder="容量（例：500ml）" style="flex:1"></div></div>
-              <div class="fl"><label>數量（瓶）</label><input class="fi" type="number" id="st-f-qty" min="1" step="1"></div>
-              <div class="fl"><label>對應報價單號 <span class="opt">選填</span></label><input class="fi" id="st-f-no" placeholder="例：Q20260828-01"></div>
-              <div class="fl" style="grid-column:1/-1"><label>備註 <span class="opt">選填</span></label><input class="fi" id="st-f-note"></div>
-            </div>
-            <div style="display:flex;gap:8px;margin-top:10px">
-              <button class="btn btn-gold" id="st-f-save" onclick="stSaveMove()"><i class="ti ti-check"></i>確認登記</button>
-              <button class="btn btn-dk" onclick="stCloseForm()">取消</button>
-            </div>
-          </div>
-          <div class="tbl-scroll" style="margin-top:12px">
-            <table class="rec-table mcard">
-              <thead><tr><th>客戶</th><th>酒款</th><th style="text-align:center">容量</th><th style="text-align:right">已入倉</th><th style="text-align:right">已提領</th><th style="text-align:right">剩餘</th></tr></thead>
-              <tbody id="st-inv-body"><tr><td colspan="6" class="rec-empty">尚無寄倉紀錄</td></tr></tbody>
-            </table>
-          </div>
-          <div style="font-size:12px;color:var(--sub);margin:14px 0 6px;font-weight:600">寄倉明細（最近在前）</div>
-          <div class="tbl-scroll">
-            <table class="rec-table mcard">
-              <thead><tr><th>日期</th><th>類型</th><th>客戶</th><th>酒款</th><th style="text-align:right">數量</th><th>單號</th><th>備註</th><th></th></tr></thead>
-              <tbody id="st-ledger-body"><tr><td colspan="8" class="rec-empty">尚無寄倉紀錄</td></tr></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </div>
@@ -1190,20 +1197,20 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260828c"></script>
-<script src="js/01_quote_form.js?v=20260828c"></script>
-<script src="js/01b_quote_preview.js?v=20260828c"></script>
-<script src="js/02_core_api.js?v=20260828c"></script>
-<script src="js/03_quote_custom.js?v=20260828c"></script>
-<script src="js/04_company.js?v=20260828c"></script>
-<script src="js/05_orders.js?v=20260828c"></script>
-<script src="js/06_verify_mgmt.js?v=20260828c"></script>
-<script src="js/07_calendar.js?v=20260828c"></script>
-<script src="js/08_ownbrand.js?v=20260828c"></script>
-<script src="js/09_verify_form.js?v=20260828c"></script>
-<script src="js/10_today.js?v=20260828c"></script>
-<script src="js/11_customers.js?v=20260828c"></script>
-<script src="js/12_storage.js?v=20260828c"></script>
-<script src="js/99_boot.js?v=20260828c"></script>
+<script src="js/00_utils.js?v=20260828d"></script>
+<script src="js/01_quote_form.js?v=20260828d"></script>
+<script src="js/01b_quote_preview.js?v=20260828d"></script>
+<script src="js/02_core_api.js?v=20260828d"></script>
+<script src="js/03_quote_custom.js?v=20260828d"></script>
+<script src="js/04_company.js?v=20260828d"></script>
+<script src="js/05_orders.js?v=20260828d"></script>
+<script src="js/06_verify_mgmt.js?v=20260828d"></script>
+<script src="js/07_calendar.js?v=20260828d"></script>
+<script src="js/08_ownbrand.js?v=20260828d"></script>
+<script src="js/09_verify_form.js?v=20260828d"></script>
+<script src="js/10_today.js?v=20260828d"></script>
+<script src="js/11_customers.js?v=20260828d"></script>
+<script src="js/12_storage.js?v=20260828d"></script>
+<script src="js/99_boot.js?v=20260828d"></script>
 </body>
 </html>

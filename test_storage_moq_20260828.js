@@ -212,8 +212,17 @@ function respond(action){
   });
   check('清除後：級距回標準 200、寄倉不勾、條款欄收合', r.t1==='200' && r.st===false && r.show==='none');
 
-  /* ---- 12. 寄倉管理卡片：彙總＋明細 ---- */
-  await page.evaluate(() => gotoPage('consign'));
+  /* ---- 12. 寄倉管理（2026-08-28 下午起獨立成 storage 頁，不再掛在 consign）---- */
+  r = await page.evaluate(() => {
+    gotoPage('consign');
+    const inConsign = !!document.querySelector('#page-consign #st-card');
+    gotoPage('storage');
+    return { inConsign, onStorage: document.getElementById('page-storage').classList.contains('on'),
+             inStorage: !!document.querySelector('#page-storage #st-card'),
+             navOn: document.getElementById('nav-storage').classList.contains('on') };
+  });
+  check('寄倉卡片已移出寄售頁、獨立成「客戶寄倉」頁＋選單', r.inConsign===false && r.inStorage===true && r.onStorage===true && r.navOn===true);
+  await page.evaluate(() => gotoPage('storage'));
   await page.waitForTimeout(800);
   r = await page.evaluate(() => ({
     inv: document.getElementById('st-inv-body').innerText,
