@@ -79,9 +79,9 @@ function respond(action){
   r = await page.evaluate(() => {
     const q = collectQuote();
     const dop = (q.items||[]).find(i=>i.itemType==='docopts');
-    return { top:q.quoteOnly, dop: dop?JSON.parse(dop.flavorList):null };
+    return { top:q.quoteOnly, st:q.status, dop: dop?JSON.parse(dop.flavorList):null };
   });
-  check('collectQuote：quoteOnly=Y', r.top==='Y');
+  check('collectQuote：quoteOnly=Y 且 status=純報價', r.top==='Y' && r.st==='純報價');
   check('docopts 帶 quoteOnly:1', r.dop && r.dop.quoteOnly===1);
 
   /* ── 3. 存檔：純報價填了訂金日期也不建訂單追蹤 ── */
@@ -150,10 +150,10 @@ function respond(action){
   r = await page.evaluate(() => {
     const q = collectQuote();
     const dop = (q.items||[]).find(i=>i.itemType==='docopts');
-    return { top:q.quoteOnly, dop: dop?JSON.parse(dop.flavorList):null };
+    return { top:q.quoteOnly, st:q.status, dop: dop?JSON.parse(dop.flavorList):null };
   });
   check('taxDisplay=excl 存進 docopts', r.dop && r.dop.taxDisplay==='excl');
-  check('沒勾純報價：quoteOnly=N、docopts 不帶 quoteOnly', r.top==='N' && !(r.dop && r.dop.quoteOnly));
+  check('沒勾純報價：quoteOnly=N、status=草稿、docopts 不帶 quoteOnly', r.top==='N' && r.st==='草稿' && !(r.dop && r.dop.quoteOnly));
 
   /* ── 10. 載入舊單還原 ── */
   await page.evaluate(() => {
@@ -191,19 +191,20 @@ function respond(action){
   r = await page.evaluate(() => {
     const list = buildOrders(
       { quotes:[
-        { quoteNo:'A-1', status:'草稿', quoteOnly:'Y', quoteType:'bottle', grandTotal:100, quoteDate:'2026-08-28' },
+        { quoteNo:'A-1', status:'純報價', quoteType:'bottle', grandTotal:100, quoteDate:'2026-08-28' },
         { quoteNo:'B-1', status:'草稿', quoteOnly:'N', quoteType:'bottle', grandTotal:200, quoteDate:'2026-08-28' },
-        { quoteNo:'C-1', status:'草稿', quoteType:'bottle', grandTotal:300, quoteDate:'2026-08-28' }
+        { quoteNo:'C-1', status:'草稿', quoteType:'bottle', grandTotal:300, quoteDate:'2026-08-28' },
+        { quoteNo:'D-1', status:'已刪除', quoteType:'bottle', grandTotal:400, quoteDate:'2026-08-28' }
       ]}, null, null);
     return list.map(x=>x.no);
   });
-  check('buildOrders：quoteOnly=Y 不進訂單追蹤（舊單沒欄位照常列入）',
-    !r.includes('A-1') && r.includes('B-1') && r.includes('C-1'));
+  check('buildOrders：status=純報價 不進訂單追蹤（一般單照常、已刪除照常排除）',
+    !r.includes('A-1') && r.includes('B-1') && r.includes('C-1') && !r.includes('D-1'));
 
   /* ── 13. 報價紀錄「純報價」標記 ── */
   r = await page.evaluate(() => {
     REC_QUOTES=[
-      { quoteNo:'20260828-01', clientName:'甲', quoteType:'bottle', quoteDate:'2026-08-28', grandTotal:100, status:'草稿', quoteOnly:'Y' },
+      { quoteNo:'20260828-01', clientName:'甲', quoteType:'bottle', quoteDate:'2026-08-28', grandTotal:100, status:'純報價' },
       { quoteNo:'20260828-02', clientName:'乙', quoteType:'bottle', quoteDate:'2026-08-28', grandTotal:200, status:'草稿' }
     ]; REC_CUSTOM=[];
     renderRecords();
