@@ -756,6 +756,7 @@ function renderRecords(){
         <td class="rec-actions" data-l="操作" onclick="event.stopPropagation()">
           <button class="rec-act-btn primary" onclick="openRecord('${escAttr(q.quoteNo)}')">開啟</button>
           <button class="rec-act-btn" onclick="previewRecordQuote('${escAttr(q.quoteNo)}')">預覽</button>
+          <button class="rec-act-btn" onclick="recCopyQuote('${escAttr(q.quoteNo)}')">複製</button>
           ${['bottle','ownbrand','ownlabel','consign'].includes(q.quoteType)?`<button class="rec-act-btn" onclick="openVerifyForm('${escAttr(q.quoteNo)}')">驗收單</button>`:''}
           <button class="rec-act-btn del" onclick="deleteRecord('${escAttr(q.quoteNo)}','${escAttr((q.clientName||'').replace(/'/g,''))}')">刪除</button>
         </td>
@@ -773,6 +774,38 @@ async function openRecord(quoteNo){
     loadQuoteIntoForm(data.quote);
     gotoPage('new');
     toast('已載入 '+quoteNo,'ok');
+  } catch(e){ toast(e.message||'讀取失敗','err'); }
+}
+
+/* ---- 2026-08-28 另存新單／複製 ----
+   共用收尾：把目前表單「斷開」成一張全新單（原單不動）——單號重編、報價日換今天（有效日自動+1月）、
+   流水號帶今天下一個未用值（後端存檔時仍會自己發號，這裡只是畫面預覽用）。 */
+async function detachAsNewQuote_(){
+  editingQuoteNo=null;
+  const dt=document.getElementById('f-dt'); if(dt) dt.value=todayStr();
+  if(typeof onDate==='function') onDate();   // 有效日+1月＋upNo 重編單號（editingQuoteNo 已斷開）
+  if(typeof autoNextSerial==='function'){ try{ await autoNextSerial(); }catch(e){} }
+  if(typeof updateOrdProgVisibility==='function') updateOrdProgVisibility();
+}
+/* 編輯既有單時的「另存新單」鈕：以目前表單內容直接建一張新報價單，原單完全不動 */
+async function saveAsNewQuote(){
+  if(typeof editingQuoteNo==='undefined' || !editingQuoteNo){ toast('這張本來就是新單，直接按「儲存」即可','err'); return; }
+  const origNo=editingQuoteNo;
+  if(!confirm('用目前的內容另存一張「新的」報價單？\n原單 '+origNo+' 不會被改動。')) return;
+  await detachAsNewQuote_();
+  await saveQuote();   // 走 createQuote：後端發新單號；存檔後表單就切到新單上
+}
+/* 報價紀錄的「複製」鈕：把那張單的內容帶進表單當新單（先不存檔，改完自己按儲存） */
+async function recCopyQuote(quoteNo){
+  if(isFormDirty() && !confirm('目前表單尚有未儲存的資料，複製這張單會覆蓋目前內容，確定放棄？')) return;
+  try {
+    const data=await readCall({ action:'getQuoteById', token:AUTH_TOKEN, quoteNo });
+    if(!data.ok){ toast(data.error||'讀取失敗','err'); return; }
+    loadQuoteIntoForm(data.quote);
+    await detachAsNewQuote_();
+    gotoPage('new');
+    FORM_DIRTY=true;   // 複製出來還沒存，離開／關頁要警告
+    toast('已複製 '+quoteNo+' 的內容成一張新單，修改後按「儲存」','ok');
   } catch(e){ toast(e.message||'讀取失敗','err'); }
 }
 

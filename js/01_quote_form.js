@@ -23,10 +23,15 @@ let flavors={g1:[],g2:[]};
    避免她以為改這裡會動到已經存過、可能被手改過的訂單追蹤資料。實際送出邏輯在
    02_core_api.js 的 saveQuote()／maybeCreateOrderProgressOnSave()。 */
 function updateOrdProgVisibility(){
-  const box=document.getElementById('ordprog-block'); if(!box) return;
-  const qo=document.getElementById('f-quoteonly');
-  const hide=(typeof editingQuoteNo!=='undefined' && editingQuoteNo) || (qo && qo.checked); // 純報價單不建訂單追蹤，區塊一併藏起
-  box.style.display=hide ? 'none' : 'block';
+  const editing=(typeof editingQuoteNo!=='undefined' && !!editingQuoteNo);
+  const box=document.getElementById('ordprog-block');
+  if(box){
+    const qo=document.getElementById('f-quoteonly');
+    const hide=editing || (qo && qo.checked); // 純報價單不建訂單追蹤，區塊一併藏起
+    box.style.display=hide ? 'none' : 'block';
+  }
+  // 2026-08-28：「另存新單」鈕只在編輯既有單時顯示（新單直接按儲存就好）
+  { const b=document.getElementById('btn-saveas'); if(b) b.style.display=editing?'':'none'; }
 }
 /* 2026-08-28：純報價單勾選（僅報價、不建訂單追蹤／行事曆）＋報價單稅金顯示切換 */
 function onQuoteOnlyChange(){ FORM_DIRTY=true; updateOrdProgVisibility(); }
