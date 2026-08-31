@@ -98,24 +98,25 @@ function buildStdDocParts(){
     </tr></thead>`;
     colgroup = `<colgroup><col><col style="width:64px"><col style="width:64px"><col style="width:92px"><col style="width:118px"></colgroup>`;
 
-    // 兩組客製化調酒（計價方式：杯或 ml；手動小計＝談好的整包價）
-    const banGroupRow=(g,label)=>{
-      const p=parseFloat(document.getElementById(`ban-${g}-price`).value)||0;
-      const q=parseFloat(document.getElementById(`ban-${g}-qty`).value)||0;
-      const sub=banGroupSub(g);
-      if(!p&&!q&&!sub) return;
+    // 兩組客製化調酒：2026-08-31 起每一款各自一列（各自數量／單價／手動小計），不再整組共用一個價
+    const banGroupRow=(g)=>{
       const unit=(banUnitOf(g)==='ml')?'ml':'杯';
-      const flavorStr = flavors[g].length ? `（${flavors[g].map(escHtml).join('、')}）` : '';
-      rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
-        <td style="padding:11px 12px;font-weight:600;color:#22241F">${label}<span style="font-weight:400;color:#6B6B63;font-size:11.5px">${flavorStr}</span></td>
+      banGroupItems(g).forEach(id=>{
+        const row=document.getElementById(`bg-${g}-${id}`); if(!row) return;
+        const n=escHtml(gs(row,'name')),p=gv(row,'price'),q=gv(row,'qty');
+        const info=banGroupRowInfo(row);
+        if(!n&&!info.sub) return;
+        rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
+        <td style="padding:11px 12px;font-weight:600;color:#22241F">${n||'—'}</td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${q?q.toLocaleString():'—'}</td>
         <td style="padding:11px 8px;text-align:center;color:#6B6B63">${unit}</td>
         <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+cvP(p).toLocaleString():'—'}</td>
-        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(cvA(sub)).toLocaleString()}</td>
+        <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">$${Math.round(cvA(info.sub)).toLocaleString()}</td>
       </tr>`);
+      });
     };
-    banGroupRow('g1','客製化調酒');
-    banGroupRow('g2','客製化無酒精雞尾酒');
+    banGroupRow('g1');
+    banGroupRow('g2');
     banFreeItems.forEach(id=>{
       const row=document.getElementById(`bf-${id}`); if(!row) return;
       const n=escHtml(gs(row,'name')),u=escHtml(gs(row,'unit')),p=gv(row,'price'),q=gv(row,'qty');

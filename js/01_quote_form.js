@@ -1,7 +1,7 @@
 let qType='bottle', taxMode='inc', payTab=0;
 let LOADED_PAY_DETAIL=null; // 載入舊單時記住已存的付款條件文字，未重新編輯付款前直接沿用，避免重算改掉客戶看到的條件
 let FORM_DIRTY=false; // 標準報價單是否有「使用者實際輸入、尚未儲存」的內容（供離開頁面前提醒；程式帶入值不算）
-let botItems=[],banFreeItems=[],banAddonItems=[],extras=[],imgs=[],rowId=0;
+let botItems=[],banFreeItems=[],banAddonItems=[],banG1Items=[],banG2Items=[],extras=[],imgs=[],rowId=0;
 /* 付款條件 Tab0（比例訂金＋尾款）計算用的快照，由 calc() 每次算完後寫入：
    LAST_WINE_SUB＝酒款金額（品項表小計 rawSub，不含額外費用）
    LAST_EXT_POS／LAST_EXT_NEG＝額外費用列拆成正數項（檢驗費、條碼費…）與負數項（運費折抵…）
@@ -9,7 +9,6 @@ let botItems=[],banFreeItems=[],banAddonItems=[],extras=[],imgs=[],rowId=0;
 let LAST_WINE_SUB=0, LAST_EXT_POS=[], LAST_EXT_NEG=[], LAST_BASE=0, LAST_GRAND=0;
 let customItems=[],previewKind='std';
 let colDed=false, colLogo=false, colLot=false, colMark=false, colOwn=false, colGift=false;
-let flavors={g1:[],g2:[]};
 
 
 (()=>{
@@ -400,36 +399,36 @@ function moveBotRow(id,dir){
   reorderBotDom(); calc();
 }
 
-// ── BANQUET 計價方式（杯／ML）與手動小計 ──
-/* 兩組客製化調酒可切換「以杯計價」或「以 ML 計價」（大桶出貨、談整包價的宴會單用）；
-   勾「手動小計」可直接填談好的整包價（例：40,000ml 共 $39,000），不用單價×數量。 */
+// ── BANQUET 計價方式（杯／ML）＋每款各自數量／單價 ──
+/* 2026-08-31 起：兩組客製化調酒改成每一款酒各自填數量／單價（見 addBanGroupRow），
+   不再整組共用一個價（Molly 反映：不同酒款成本不同，硬綁同一個價不合理）。
+   「以杯計價」或「以 ML 計價」仍是整組共用的顯示單位（大桶出貨、談整包價的宴會單用）；
+   每一款仍可勾「手動小計」直接填談好的整包價，不用單價×數量。 */
 function banUnitOf(g){ const e=document.getElementById(`ban-${g}-unit`); return (e&&e.value==='ml')?'ml':'cup'; }
-function banManualOn(g){ const e=document.getElementById(`ban-${g}-man`); return !!(e&&e.checked); }
 function onBanUnitChange(g){
   const ml=banUnitOf(g)==='ml';
-  const lb=document.getElementById(`ban-${g}-qtylabel`); if(lb) lb.textContent=ml?'總ML數':'總杯數';
-  const qi=document.getElementById(`ban-${g}-qty`); if(qi) qi.placeholder=ml?'40000':(g==='g1'?'90':'0');
+  const ph=ml?'總ML數':(g==='g1'?'90':'0');
+  document.querySelectorAll(`#ban-${g}-body [data-f="qty"]`).forEach(i=>{ i.placeholder=ph; });
   calcBan();
 }
-function toggleBanManual(g){
-  const on=banManualOn(g);
-  const mi=document.getElementById(`ban-${g}-subman`);
-  if(mi){
-    mi.style.display=on?'':'none';
-    if(on && !mi.value){   // 勾起時先帶入目前的自動小計當起點，再讓人改成談好的整包價
-      const p=parseFloat(document.getElementById(`ban-${g}-price`).value)||0;
-      const q=parseFloat(document.getElementById(`ban-${g}-qty`).value)||0;
-      if(p*q) mi.value=Math.round(p*q);
-    }
+function banGroupItems(g){ return g==='g1'?banG1Items:banG2Items; }
+/* 該款小計＋手動旗標（collectQuote／預覽／calcBan 共用，比照 banFreeRowInfo） */
+function banGroupRowInfo(row){
+  const manual=!!(row.querySelector('[data-f="manual"]')&&row.querySelector('[data-f="manual"]').checked);
+  const subInput=row.querySelector('[data-f="subval"]');
+  let sub;
+  if(manual){ sub=(subInput&&subInput.value!=='')?(parseFloat(subInput.value)||0):0; }
+  else {
+    sub=(parseFloat(row.querySelector('[data-f="price"]')?.value)||0)*(parseFloat(row.querySelector('[data-f="qty"]')?.value)||0);
+    if(subInput) subInput.value=sub?Math.round(sub):'';
   }
-  calcBan();
+  return {manual, sub};
 }
-/* 該組小計：手動小計優先，否則單價×數量（杯或 ML 都一樣） */
+/* 該組小計＝組內每一款小計加總 */
 function banGroupSub(g){
-  if(banManualOn(g)) return parseFloat(document.getElementById(`ban-${g}-subman`)?.value)||0;
-  const p=parseFloat(document.getElementById(`ban-${g}-price`)?.value)||0;
-  const q=parseFloat(document.getElementById(`ban-${g}-qty`)?.value)||0;
-  return p*q;
+  let s=0;
+  banGroupItems(g).forEach(id=>{ const row=document.getElementById(`bg-${g}-${id}`); if(row) s+=banGroupRowInfo(row).sub; });
+  return s;
 }
 
 // ── BANQUET FREE ITEMS ──
@@ -509,40 +508,68 @@ function delBanAddonRow(id){
   banAddonItems=banAddonItems.filter(i=>i!==id); calc();
 }
 
-// ── FLAVOR TAGS ──
-function addFlavor(g){
+// ── BANQUET GROUP ROWS（每一款酒各自一列：品名／數量／單價／小計，比照 banFreeRow 版型）──
+function addBanGroupRow(g,prefill){
+  prefill=prefill||{};
+  rowId++;
+  const id=rowId;
+  const manual=!!prefill.manual;
+  const div=document.createElement('div');
+  div.id=`bg-${g}-${id}`;
+  div.className='crow';
+  const qtyPh=(banUnitOf(g)==='ml')?'總ML數':(g==='g1'?'90':'0');
+  div.innerHTML=`
+    <div class="crow-top" style="grid-template-columns:3fr 66px 86px 86px 26px;min-width:0">
+      <input placeholder="酒款名稱（如：甘蔗檸檬Mojito）" oninput="calcBan()" data-f="name" value="${escAttr(prefill.name||'')}">
+      <input type="number" placeholder="${qtyPh}" oninput="calcBan()" data-f="qty" value="${prefill.qty!=null?prefill.qty:''}">
+      <input type="number" placeholder="單價" oninput="calcBan()" data-f="price" value="${prefill.price!=null?prefill.price:''}">
+      <input type="number" placeholder="—" data-f="subval" value="${prefill.subval!=null?prefill.subval:''}" oninput="calcBan()" ${manual?'':'readonly'}>
+      <button class="del" onclick="delBanGroupRow('${g}',${id})">✕</button>
+    </div>
+    <div class="crow-bottom">
+      <div class="crow-flags">
+        <label title="這一款談好的整包價直接填小計，不用單價×數量"><input type="checkbox" data-f="manual" ${manual?'checked':''} onchange="toggleBanGroupRowManual('${g}',${id})">手動小計</label>
+      </div>
+    </div>`;
+  document.getElementById(`ban-${g}-body`).appendChild(div);
+  banGroupItems(g).push(id);
+}
+function toggleBanGroupRowManual(g,id){
+  const row=document.getElementById(`bg-${g}-${id}`); if(!row) return;
+  const man=row.querySelector('[data-f="manual"]').checked;
+  row.querySelector('[data-f="subval"]').readOnly=!man;
+  calcBan();
+}
+function delBanGroupRow(g,id){
+  const el=document.getElementById(`bg-${g}-${id}`); if(el) el.remove();
+  if(g==='g1') banG1Items=banG1Items.filter(i=>i!==id); else banG2Items=banG2Items.filter(i=>i!==id);
+  calcBan();
+}
+/* 輸入框 Enter／貼上多行＝一次新增多款（沿用原本「貼上多行自動拆成多筆」的手感），
+   每款各自留白數量／單價讓她填，不再像以前套用整組同一個價。 */
+function addBanGroupRowFromInput(g){
   const inp=document.getElementById(`ban-${g}-input`);
   const lines=inp.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
   if(!lines.length) return;
-  flavors[g].push(...lines);
+  lines.forEach(name=>addBanGroupRow(g,{name}));
   inp.value='';
-  renderFlavors(g);
+  calcBan();
 }
-function handleFlavorKeydown(ev,g){
+function handleBanGroupKeydown(ev,g){
   if(ev.key!=='Enter') return;
   if(ev.shiftKey) return;
   ev.preventDefault();
-  addFlavor(g);
+  addBanGroupRowFromInput(g);
 }
-function handleFlavorPaste(ev,g){
+function handleBanGroupPaste(ev,g){
   const text=(ev.clipboardData||window.clipboardData).getData('text');
   if(!text || !/\r?\n/.test(text)) return;
   ev.preventDefault();
   const lines=text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
   if(!lines.length) return;
-  flavors[g].push(...lines);
-  renderFlavors(g);
+  lines.forEach(name=>addBanGroupRow(g,{name}));
+  calcBan();
 }
-function removeFlavor(g,idx){
-  flavors[g].splice(idx,1);
-  renderFlavors(g);
-}
-function renderFlavors(g){
-  document.getElementById(`ban-${g}-flavors`).innerHTML = flavors[g].map((f,i)=>
-    `<div class="flavor-tag">${escHtml(f)}<button onclick="removeFlavor('${g}',${i})">✕</button></div>`
-  ).join('') || `<span style="font-size:11px;color:var(--hint);font-style:italic">尚未新增品名（選填，可不填）</span>`;
-}
-renderFlavors('g1'); renderFlavors('g2');
 
 // ── SERVICE FEE MODE ──
 function onSvcModeChange(){
@@ -1056,14 +1083,13 @@ function resetAll(skipConfirm){
     else if(el.tagName==='SELECT') el.value='';
     else if(!el.readOnly) el.value='';
   });
-  botItems=[]; banFreeItems=[]; banAddonItems=[]; extras=[]; imgs=[]; rowId=0;
+  botItems=[]; banFreeItems=[]; banAddonItems=[]; banG1Items=[]; banG2Items=[]; extras=[]; imgs=[]; rowId=0;
   { const h=document.getElementById('f-hidetotals'); if(h) h.checked=false; const e=document.getElementById('f-imgsize'); if(e) e.value='m'; } // 文件顯示設定回到預設
   // 2026-08-28：本單級距回標準、寄倉勾選取消（tier/條款輸入欄上面的迴圈已清空，這裡補回標準值與勾選狀態）
   { const st=document.getElementById('ob-storage'); if(st) st.checked=false; const ta=document.getElementById('ob-storage-terms'); if(ta) ta.style.display='none'; }
   { const qo=document.getElementById('f-quoteonly'); if(qo) qo.checked=false; const h=document.getElementById('taxdisp-hint'); if(h) h.textContent=''; } // 純報價勾選回預設（稅金顯示 select 由上方通用迴圈清回''＝含稅）
   if(typeof obFillTiers==='function') obFillTiers(null,true);
   botDedCache={}; botLogoCache={}; botLotCache={};
-  flavors={g1:[],g2:[]};
   colDed=false; colLogo=false; colLot=false; colGift=false;
   colMark=false;
   colOwn=(qType==='ownbrand'||qType==='ownlabel');
@@ -1077,15 +1103,9 @@ function resetAll(skipConfirm){
   document.getElementById('ban-addon-body').innerHTML='';
   document.getElementById('ext-list').innerHTML='';
   document.getElementById('uprev').innerHTML='';
-  renderFlavors('g1'); renderFlavors('g2');
-  // 宴會計價方式還原：杯計價、手動小計關閉（通用清空迴圈會把 select 設成空值，這裡補回預設）
-  ['g1','g2'].forEach(g=>{
-    const u=document.getElementById(`ban-${g}-unit`); if(u) u.value='cup';
-    const m=document.getElementById(`ban-${g}-man`); if(m) m.checked=false;
-    const s=document.getElementById(`ban-${g}-subman`); if(s){ s.value=''; s.style.display='none'; }
-    const lb=document.getElementById(`ban-${g}-qtylabel`); if(lb) lb.textContent='總杯數';
-    const qi=document.getElementById(`ban-${g}-qty`); if(qi) qi.placeholder=(g==='g1'?'90':'0');
-  });
+  document.getElementById('ban-g1-body').innerHTML=''; document.getElementById('ban-g2-body').innerHTML='';
+  // 宴會計價方式還原：杯計價（通用清空迴圈會把 select 設成空值，這裡補回預設）
+  ['g1','g2'].forEach(g=>{ const u=document.getElementById(`ban-${g}-unit`); if(u) u.value='cup'; });
   document.getElementById('svc-detail-wrap').classList.remove('on');
   addBotRow();
   if(qType==='banquet'){ addBanFreeRow(); addBanAddonRow(); }

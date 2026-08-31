@@ -365,13 +365,18 @@ function collectQuote(){
         listPrice:(colOwn&&_lpEl?(parseFloat(_lpEl.value)||''):''), discount:(colOwn&&_diEl?_diEl.value.trim():'') });
     });
   } else {
-    // banquet groups（unit 依計價方式存「杯」或「ml」；手動小計時 subtotal＝談好的整包價）
-    const g1p=num('ban-g1-price'),g1q=num('ban-g1-qty'),g1sub=Math.round(banGroupSub('g1'));
-    if(g1p||g1q||g1sub) items.push({ itemType:'banquet_group', name:'客製化調酒', lot:'', volume:'',
-      unitPrice:g1p, deduction:0, logoFee:0, qty:g1q, unit:(banUnitOf('g1')==='ml'?'ml':'杯'), subtotal:g1sub, flavorList:flavors.g1.join('、') });
-    const g2p=num('ban-g2-price'),g2q=num('ban-g2-qty'),g2sub=Math.round(banGroupSub('g2'));
-    if(g2p||g2q||g2sub) items.push({ itemType:'banquet_group', name:'客製化無酒精雞尾酒', lot:'', volume:'',
-      unitPrice:g2p, deduction:0, logoFee:0, qty:g2q, unit:(banUnitOf('g2')==='ml'?'ml':'杯'), subtotal:g2sub, flavorList:flavors.g2.join('、') });
+    // banquet groups（2026-08-31 起：每一款各自一列，每列各自單價／數量；unit 依計價方式存「杯」或「ml」；
+    //   借用向來沒用到的 lot 欄存 'g1'/'g2' 分組記號，供載入時歸回原本的組——後端品項表不印 lot，這欄純前端內部用）
+    ['g1','g2'].forEach(g=>{
+      const gu=(banUnitOf(g)==='ml'?'ml':'杯');
+      banGroupItems(g).forEach(rid=>{
+        const row=document.getElementById(`bg-${g}-${rid}`); if(!row) return;
+        const name=gs(row,'name'); const info=banGroupRowInfo(row); const sub=Math.round(info.sub);
+        if(!name && !sub) return;
+        items.push({ itemType:'banquet_group', name, lot:g, volume:'',
+          unitPrice:gv(row,'price'), deduction:0, logoFee:0, qty:gv(row,'qty'), unit:gu, subtotal:sub, flavorList:'' });
+      });
+    });
     banFreeItems.forEach(rid=>{
       const row=document.getElementById(`bf-${rid}`); if(!row) return;
       const name=gs(row,'name'); const info=banFreeRowInfo(row); const sub=Math.round(info.sub);
@@ -457,7 +462,8 @@ function quoteHasItems(){
   if(check(botItems,'r')) return true;
   if(check(banFreeItems,'bf')) return true;
   if(check(banAddonItems,'ba')) return true;
-  if((parseFloat(document.getElementById('ban-g1-qty')?.value)||0)||(parseFloat(document.getElementById('ban-g2-qty')?.value)||0)) return true;
+  if(check(banG1Items,'bg-g1')) return true;
+  if(check(banG2Items,'bg-g2')) return true;
   return false;
 }
 async function saveQuote(){
@@ -884,14 +890,12 @@ function loadQuoteIntoForm(q){
        開完一張宴會單再開一張瓶裝單、然後把單型改成「宴會酒水」，上一張宴會單的調酒組金額、
        免費列、加購列會整批冒出來並計進總計，直接存檔就把別張單的品項寫進這張。 */
     ['g1','g2'].forEach(g=>{
-      set(`ban-${g}-price`,''); set(`ban-${g}-qty`,'');
       const _us=document.getElementById(`ban-${g}-unit`); if(_us) _us.value='cup';
-      const _m=document.getElementById(`ban-${g}-man`); if(_m) _m.checked=false;
-      const _s=document.getElementById(`ban-${g}-subman`); if(_s){ _s.value=''; _s.style.display='none'; }
+      const _gb=document.getElementById(`ban-${g}-body`); if(_gb) _gb.innerHTML='';
     });
     { const _fb=document.getElementById('ban-free-body'); if(_fb) _fb.innerHTML=''; }
     { const _ab=document.getElementById('ban-addon-body'); if(_ab) _ab.innerHTML=''; }
-    try{ banFreeItems=[]; banAddonItems=[]; flavors={g1:[],g2:[]}; }catch(_){}
+    try{ banFreeItems=[]; banAddonItems=[]; banG1Items=[]; banG2Items=[]; }catch(_){}
     document.getElementById('itbody-bot').innerHTML=''; botItems=[];
     extras=[];
     const realItems = items.filter(it=>it.itemType!=='extra'&&it.itemType!=='freeship'&&it.itemType!=='taglabel'&&it.itemType!=='svcdetail'&&it.itemType!=='docopts');
@@ -936,36 +940,39 @@ function loadQuoteIntoForm(q){
     document.getElementById('itbody-bot').innerHTML=''; botItems=[];
     extras=[]; renderExt();
     botDedCache={}; botLogoCache={}; botLotCache={};
-    flavors={g1:[],g2:[]};
     document.getElementById('ban-free-body').innerHTML=''; banFreeItems=[];
     document.getElementById('ban-addon-body').innerHTML=''; banAddonItems=[];
-    // 先清掉兩組群組的殘留值（含計價方式／手動小計），沒存到的組才不會留上一張單的數字
+    // 先清掉兩組群組的殘留列（含計價方式），沒存到的組才不會留上一張單的資料
     ['g1','g2'].forEach(g=>{
-      set(`ban-${g}-price`,''); set(`ban-${g}-qty`,'');
+      const gb=document.getElementById(`ban-${g}-body`); if(gb) gb.innerHTML='';
+      if(g==='g1') banG1Items=[]; else banG2Items=[];
       const us=document.getElementById(`ban-${g}-unit`); if(us) us.value='cup';
-      const m=document.getElementById(`ban-${g}-man`); if(m) m.checked=false;
-      const s=document.getElementById(`ban-${g}-subman`); if(s){ s.value=''; s.style.display='none'; }
       if(typeof onBanUnitChange==='function') onBanUnitChange(g);
     });
-    // 宴會群組還原：計價方式（杯／ml）看存下的 unit；手動小計靠「subtotal ≠ 單價×數量」判定（相容舊單）
-    const restoreBanGroup=(g,it)=>{
-      set(`ban-${g}-price`,it.unitPrice); set(`ban-${g}-qty`,it.qty);
+    /* 宴會群組還原（2026-08-31 起每一款各自一列）：
+       - 新格式（存檔時 lot 記了 'g1'/'g2'）：it.name 就是這一款的名字，直接各自建一列。
+       - 舊格式（8/31 以前存的單，lot 是空的）：整組共用一個價，品名清單存在 flavorList——
+         整包還原成「一列」，name 用當初的品名清單（沒填就退回組名本身），數量／單價／手動小計沿用舊值。
+       計價方式（杯／ml）看存下的 unit；手動小計靠「subtotal ≠ 單價×數量」判定（相容舊單，跟 8/31 以前邏輯一致）。 */
+    const restoreBanGroupItem=(it)=>{
+      const g=(it.lot==='g1'||it.lot==='g2')?it.lot:(it.name==='客製化無酒精雞尾酒'?'g2':'g1');
       const us=document.getElementById(`ban-${g}-unit`); if(us) us.value=(String(it.unit).toLowerCase()==='ml')?'ml':'cup';
       if(typeof onBanUnitChange==='function') onBanUnitChange(g);
-      const auto=Math.round((parseFloat(it.unitPrice)||0)*(parseFloat(it.qty)||0));
+      const price=parseFloat(it.unitPrice)||0, qty=parseFloat(it.qty)||0;
+      const auto=Math.round(price*qty);
       const st=Math.round(parseFloat(it.subtotal)||0);
       /* 複檢 2026-08-13 #3-1：原本是 if(st && …)，手動小計填 0（整組招待／併入其他費用不另計）
          會因為 0 是 falsy 而沒被勾回，重新開啟這張單就自己變回「單價×杯數」，總計無聲變大。 */
       const hasSt=(it.subtotal!=null && String(it.subtotal).trim()!=='');
-      if(hasSt && st!==auto){
-        const m=document.getElementById(`ban-${g}-man`); if(m) m.checked=true;
-        const s=document.getElementById(`ban-${g}-subman`); if(s){ s.style.display=''; s.value=st; }
-      }
-      flavors[g]=it.flavorList?String(it.flavorList).split('、').filter(Boolean):[];
+      const manual=hasSt && st!==auto;
+      const isNewFmt=(it.lot==='g1'||it.lot==='g2');
+      const rowName=isNewFmt?(it.name||''):(it.flavorList||it.name||'');
+      addBanGroupRow(g, {name:rowName, qty:it.qty, price:it.unitPrice, manual, subval:(manual?st:'')});
+      calcBan();   // 補算，更新這組小計顯示（onBanUnitChange 在建這一列之前就跑過，不會算到剛加的列）
     };
     items.forEach(it=>{
       if(it.itemType==='banquet_group'){
-        restoreBanGroup(it.name==='客製化調酒'?'g1':'g2', it);
+        restoreBanGroupItem(it);
       } else if(it.itemType==='banquet_free'){
         const free=String(it.noCharge||'').toUpperCase()==='Y';
         const disp=free?(parseFloat(it.deduction)||0):(parseFloat(it.subtotal)||0);
@@ -992,7 +999,6 @@ function loadQuoteIntoForm(q){
       }
       calcBan();
     }
-    renderFlavors('g1'); renderFlavors('g2');
   }
   // payment
   // 舊單若存過已移除的 Tab5（酒款訂金＋其他費用，2026-08-05 併回 Tab0），一律回到 Tab0；
@@ -1024,8 +1030,8 @@ function isFormDirty(){
   if(hasRowData(botItems,'r')) return true;
   if(hasRowData(banFreeItems,'bf')) return true;
   if(hasRowData(banAddonItems,'ba')) return true;
-  if((parseFloat(document.getElementById('ban-g1-price').value)||0) || (parseFloat(document.getElementById('ban-g1-qty').value)||0)) return true;
-  if((parseFloat(document.getElementById('ban-g2-price').value)||0) || (parseFloat(document.getElementById('ban-g2-qty').value)||0)) return true;
+  if(hasRowData(banG1Items,'bg-g1')) return true;
+  if(hasRowData(banG2Items,'bg-g2')) return true;
   if(document.getElementById('svc-mode').value) return true;
   if(document.getElementById('f-note').value.trim()) return true;
   return false;
