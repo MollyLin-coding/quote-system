@@ -500,7 +500,13 @@ function buildVerifyDocHtml(d,opts){
 
   const pages=buildVerifyPages({headerBlockHtml, theadCols, rowsHtml, footBlockHtml});
 
-  return `<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8"><title>驗收單_${escHtml(d.no)}</title>
+  /* 2026-08-31 Molly：另存 PDF 的預設檔名（title 標籤＝瀏覽器「列印/另存為 PDF」的建議檔名）
+     要加客戶批號（LOT，vf-lot 欄）＋第幾次出貨，方便同一張單多次出貨時分辨檔案。
+     客戶批號選填、常是空的，空的就不印那一段。 */
+  const fnLot=(d.lot&&String(d.lot).trim())?('_'+escHtml(String(d.lot).trim())):'';
+  const docTitle=`驗收單_${escHtml(d.no)}${fnLot}_第${shipSeq}次出貨`;
+
+  return `<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8"><title>${docTitle}</title>
 <style>${verifyDocStyleBlock()}</style></head><body>
 <div class="noprint">${isPreview?'<span class="pvtag">預覽・尚未留底</span>':''}<button onclick="window.print()">列印 / 另存 PDF</button></div>
 ${pages}
