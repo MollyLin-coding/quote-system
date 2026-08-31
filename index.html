@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260831a">
-<script src="js/00_qrcode.js?v=20260831a"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260831b">
+<script src="js/00_qrcode.js?v=20260831b"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -319,52 +319,42 @@
     <div class="card" id="banquet-items-card" style="display:none">
       <div class="ch"><i class="ti ti-list-details"></i><span>必要品項</span></div>
       <div class="cb">
-        <!-- group 1: 客製化調酒 -->
+        <!-- group 1: 客製化調酒（2026-08-31 起：每款各自填數量／單價，不再整組共用一個價） -->
         <div class="item-group">
           <div class="ig-head">
             <span class="ig-name">客製化調酒</span>
-            <input class="ig-price" type="number" id="ban-g1-price" placeholder="150" oninput="calcBan()">
             <select class="ig-unit-sel" id="ban-g1-unit" onchange="onBanUnitChange('g1')" title="計價方式：以杯計價或以 ML 計價">
-              <option value="cup">元 / 杯</option>
-              <option value="ml">元 / ml</option>
+              <option value="cup">以杯計價</option>
+              <option value="ml">以 ml 計價</option>
             </select>
           </div>
           <div class="ig-body">
-            <div class="flavor-list" id="ban-g1-flavors"></div>
+            <div id="ban-g1-body"></div>
             <div class="flavor-add">
-              <textarea id="ban-g1-input" rows="1" placeholder="輸入品名後按 Enter 新增（如：櫻花白柚mojito）；可貼上多行自動拆成多筆，或 Shift+Enter 換行後一次新增多筆" onkeydown="handleFlavorKeydown(event,'g1')" onpaste="handleFlavorPaste(event,'g1')"></textarea>
-              <button onclick="addFlavor('g1')">+ 新增品名</button>
+              <textarea id="ban-g1-input" rows="1" placeholder="輸入酒款名稱後按 Enter 新增一款（如：甘蔗檸檬Mojito），各自填數量／單價；可貼上多行一次新增多款" onkeydown="handleBanGroupKeydown(event,'g1')" onpaste="handleBanGroupPaste(event,'g1')"></textarea>
+              <button onclick="addBanGroupRowFromInput('g1')">+ 新增酒款</button>
             </div>
-            <div class="ig-qty-row">
-              <label id="ban-g1-qtylabel">總杯數</label>
-              <input type="number" id="ban-g1-qty" placeholder="90" oninput="calcBan()">
-              <label class="ig-man" title="談好的整包價直接填，不用單價×數量"><input type="checkbox" id="ban-g1-man" onchange="toggleBanManual('g1')">手動小計</label>
-              <input type="number" id="ban-g1-subman" class="ig-subman" style="display:none" placeholder="整包價" oninput="calcBan()">
+            <div class="ig-qty-row" style="justify-content:flex-end">
               <span class="ig-sub" id="ban-g1-sub">$0</span>
             </div>
           </div>
         </div>
-        <!-- group 2: 客製化無酒精雞尾酒 -->
+        <!-- group 2: 客製化無酒精雞尾酒（同上，每款各自填數量／單價） -->
         <div class="item-group">
           <div class="ig-head">
             <span class="ig-name">客製化無酒精雞尾酒</span>
-            <input class="ig-price" type="number" id="ban-g2-price" placeholder="120" oninput="calcBan()">
             <select class="ig-unit-sel" id="ban-g2-unit" onchange="onBanUnitChange('g2')" title="計價方式：以杯計價或以 ML 計價">
-              <option value="cup">元 / 杯</option>
-              <option value="ml">元 / ml</option>
+              <option value="cup">以杯計價</option>
+              <option value="ml">以 ml 計價</option>
             </select>
           </div>
           <div class="ig-body">
-            <div class="flavor-list" id="ban-g2-flavors"></div>
+            <div id="ban-g2-body"></div>
             <div class="flavor-add">
-              <textarea id="ban-g2-input" rows="1" placeholder="輸入品名後按 Enter 新增；可貼上多行自動拆成多筆，或 Shift+Enter 換行後一次新增多筆" onkeydown="handleFlavorKeydown(event,'g2')" onpaste="handleFlavorPaste(event,'g2')"></textarea>
-              <button onclick="addFlavor('g2')">+ 新增品名</button>
+              <textarea id="ban-g2-input" rows="1" placeholder="輸入酒款名稱後按 Enter 新增一款；各自填數量／單價；可貼上多行一次新增多款" onkeydown="handleBanGroupKeydown(event,'g2')" onpaste="handleBanGroupPaste(event,'g2')"></textarea>
+              <button onclick="addBanGroupRowFromInput('g2')">+ 新增酒款</button>
             </div>
-            <div class="ig-qty-row">
-              <label id="ban-g2-qtylabel">總杯數</label>
-              <input type="number" id="ban-g2-qty" placeholder="0" oninput="calcBan()">
-              <label class="ig-man" title="談好的整包價直接填，不用單價×數量"><input type="checkbox" id="ban-g2-man" onchange="toggleBanManual('g2')">手動小計</label>
-              <input type="number" id="ban-g2-subman" class="ig-subman" style="display:none" placeholder="整包價" oninput="calcBan()">
+            <div class="ig-qty-row" style="justify-content:flex-end">
               <span class="ig-sub" id="ban-g2-sub">$0</span>
             </div>
           </div>
@@ -1211,20 +1201,20 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260831a"></script>
-<script src="js/01_quote_form.js?v=20260831a"></script>
-<script src="js/01b_quote_preview.js?v=20260831a"></script>
-<script src="js/02_core_api.js?v=20260831a"></script>
-<script src="js/03_quote_custom.js?v=20260831a"></script>
-<script src="js/04_company.js?v=20260831a"></script>
-<script src="js/05_orders.js?v=20260831a"></script>
-<script src="js/06_verify_mgmt.js?v=20260831a"></script>
-<script src="js/07_calendar.js?v=20260831a"></script>
-<script src="js/08_ownbrand.js?v=20260831a"></script>
-<script src="js/09_verify_form.js?v=20260831a"></script>
-<script src="js/10_today.js?v=20260831a"></script>
-<script src="js/11_customers.js?v=20260831a"></script>
-<script src="js/12_storage.js?v=20260831a"></script>
-<script src="js/99_boot.js?v=20260831a"></script>
+<script src="js/00_utils.js?v=20260831b"></script>
+<script src="js/01_quote_form.js?v=20260831b"></script>
+<script src="js/01b_quote_preview.js?v=20260831b"></script>
+<script src="js/02_core_api.js?v=20260831b"></script>
+<script src="js/03_quote_custom.js?v=20260831b"></script>
+<script src="js/04_company.js?v=20260831b"></script>
+<script src="js/05_orders.js?v=20260831b"></script>
+<script src="js/06_verify_mgmt.js?v=20260831b"></script>
+<script src="js/07_calendar.js?v=20260831b"></script>
+<script src="js/08_ownbrand.js?v=20260831b"></script>
+<script src="js/09_verify_form.js?v=20260831b"></script>
+<script src="js/10_today.js?v=20260831b"></script>
+<script src="js/11_customers.js?v=20260831b"></script>
+<script src="js/12_storage.js?v=20260831b"></script>
+<script src="js/99_boot.js?v=20260831b"></script>
 </body>
 </html>
