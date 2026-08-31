@@ -100,7 +100,7 @@ function buildStdDocParts(){
 
     // 兩組客製化調酒：2026-08-31 起每一款各自一列（各自數量／單價／手動小計），不再整組共用一個價
     const banGroupRow=(g)=>{
-      const unit=(banUnitOf(g)==='ml')?'ml':'杯';
+      const unit=banUnitLabel(g);
       banGroupItems(g).forEach(id=>{
         const row=document.getElementById(`bg-${g}-${id}`); if(!row) return;
         const n=escHtml(gs(row,'name')),p=gv(row,'price'),q=gv(row,'qty');

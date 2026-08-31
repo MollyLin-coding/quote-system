@@ -404,10 +404,12 @@ function moveBotRow(id,dir){
    不再整組共用一個價（Molly 反映：不同酒款成本不同，硬綁同一個價不合理）。
    「以杯計價」或「以 ML 計價」仍是整組共用的顯示單位（大桶出貨、談整包價的宴會單用）；
    每一款仍可勾「手動小計」直接填談好的整包價，不用單價×數量。 */
-function banUnitOf(g){ const e=document.getElementById(`ban-${g}-unit`); return (e&&e.value==='ml')?'ml':'cup'; }
+function banUnitOf(g){ const e=document.getElementById(`ban-${g}-unit`); const v=e?e.value:''; return (v==='ml'||v==='keg')?v:'cup'; }
+/* 存檔／預覽／正式文件用的單位字：杯／ml／桶（桶＝10 公升整桶出貨，2026-08-31 加） */
+function banUnitLabel(g){ const u=banUnitOf(g); return u==='ml'?'ml':(u==='keg'?'桶':'杯'); }
+function banQtyPlaceholder(g){ const u=banUnitOf(g); return u==='ml'?'總ML數':(u==='keg'?'桶數':(g==='g1'?'90':'0')); }
 function onBanUnitChange(g){
-  const ml=banUnitOf(g)==='ml';
-  const ph=ml?'總ML數':(g==='g1'?'90':'0');
+  const ph=banQtyPlaceholder(g);
   document.querySelectorAll(`#ban-${g}-body [data-f="qty"]`).forEach(i=>{ i.placeholder=ph; });
   calcBan();
 }
@@ -517,7 +519,7 @@ function addBanGroupRow(g,prefill){
   const div=document.createElement('div');
   div.id=`bg-${g}-${id}`;
   div.className='crow';
-  const qtyPh=(banUnitOf(g)==='ml')?'總ML數':(g==='g1'?'90':'0');
+  const qtyPh=banQtyPlaceholder(g);
   div.innerHTML=`
     <div class="crow-top" style="grid-template-columns:3fr 66px 86px 86px 26px;min-width:0">
       <input placeholder="酒款名稱（如：甘蔗檸檬Mojito）" oninput="calcBan()" data-f="name" value="${escAttr(prefill.name||'')}">

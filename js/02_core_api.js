@@ -368,7 +368,7 @@ function collectQuote(){
     // banquet groups（2026-08-31 起：每一款各自一列，每列各自單價／數量；unit 依計價方式存「杯」或「ml」；
     //   借用向來沒用到的 lot 欄存 'g1'/'g2' 分組記號，供載入時歸回原本的組——後端品項表不印 lot，這欄純前端內部用）
     ['g1','g2'].forEach(g=>{
-      const gu=(banUnitOf(g)==='ml'?'ml':'杯');
+      const gu=banUnitLabel(g);
       banGroupItems(g).forEach(rid=>{
         const row=document.getElementById(`bg-${g}-${rid}`); if(!row) return;
         const name=gs(row,'name'); const info=banGroupRowInfo(row); const sub=Math.round(info.sub);
@@ -956,7 +956,7 @@ function loadQuoteIntoForm(q){
        計價方式（杯／ml）看存下的 unit；手動小計靠「subtotal ≠ 單價×數量」判定（相容舊單，跟 8/31 以前邏輯一致）。 */
     const restoreBanGroupItem=(it)=>{
       const g=(it.lot==='g1'||it.lot==='g2')?it.lot:(it.name==='客製化無酒精雞尾酒'?'g2':'g1');
-      const us=document.getElementById(`ban-${g}-unit`); if(us) us.value=(String(it.unit).toLowerCase()==='ml')?'ml':'cup';
+      const us=document.getElementById(`ban-${g}-unit`); if(us){ const _u=String(it.unit||'').toLowerCase(); us.value=(_u==='ml')?'ml':(_u==='桶'?'keg':'cup'); }
       if(typeof onBanUnitChange==='function') onBanUnitChange(g);
       const price=parseFloat(it.unitPrice)||0, qty=parseFloat(it.qty)||0;
       const auto=Math.round(price*qty);
