@@ -389,6 +389,11 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
 .td-ch .n.zero{background:#E8E5DD;color:var(--hint)}
 .td-row{display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid #F1EFE8;padding:13px 16px;cursor:pointer;font:inherit;color:inherit;transition:.12s}
 .td-row:last-child{border-bottom:none}
+/* 2026-09-01 #20：出貨列右邊多一顆「驗收單」，整列包在 flex 容器裡；分隔線改畫在容器上 */
+.td-rowwrap{border-bottom:1px solid #F1EFE8}
+/* 手機：畫面窄時「驗收單」鈕自己換到下一行，整列維持全寬可點 */
+@media (max-width:520px){ .td-rowwrap .rec-act-btn{margin:0 0 10px 16px} }
+.td-rowwrap:last-child{border-bottom:none}
 .td-row:hover{background:var(--gold-pale)}
 .td-r1{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:15px;font-weight:600;line-height:1.4}
 .td-r2{margin-top:4px;font-size:12px;color:var(--sub);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
