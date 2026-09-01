@@ -138,7 +138,7 @@ function renderVerifyMgmt(){
   const wrap=document.getElementById('vm-body'); if(!wrap) return;
   if(!VM_DATA){ wrap.innerHTML=sklBlock(4); return; }
   const c=vmCounts();
-  const fs=[['pending','待處理回報',c.pending],['all','全部回報',c.all],['noreport','未回報催單',c.noreport],['forms','驗收單留底',c.forms],['taster','🍷 試飲瓶記錄',c.taster]];
+  const fs=[['pending','待處理回報',c.pending],['all','全部回報',c.all],['noreport','未回報催單',c.noreport],['forms','已開過的驗收單',c.forms],['taster','🍷 試飲瓶記錄',c.taster]];
   document.getElementById('vm-filters').innerHTML=fs.map(([k,l,n])=>
     `<button class="fchip${VM_TAB===k?' on':''}" onclick="setVmTab('${k}')">${l} <b>${n}</b></button>`).join('');
   let warn='';
@@ -379,8 +379,18 @@ function fillVmNoList(){
   const dl=document.getElementById('vmm-nolist'); if(!dl||!ORDERS_CACHE) return;
   dl.innerHTML=ORDERS_CACHE.slice(0,300).map(o=>`<option value="${escAttr(o.no)}">${escAttr((o.client||'').split('｜')[0])}</option>`).join('');
 }
+/* 2026-09-01 複檢 #24：選了單號就把客戶帶出來（下拉選項上本來就印著客戶名，
+   卻還要她再打一次；客戶名打得跟報價單不一樣，客戶管理那邊的歸戶就會漏掉這筆）。 */
+function vmManualNoChanged(){
+  const noEl=document.getElementById('vmm-no'), cliEl=document.getElementById('vmm-client');
+  if(!noEl||!cliEl) return;
+  const no=String(noEl.value||'').trim(); if(!no) return;
+  if(cliEl.value.trim() && cliEl.dataset.auto!=='1') return;   // 她自己打過的不覆蓋
+  const cli=(typeof vmClientOf==='function')?(vmClientOf(no)||''):'';
+  if(cli){ cliEl.value=cli; cliEl.dataset.auto='1'; }
+}
 function openVmManual(){
-  ['vmm-no','vmm-client','vmm-item','vmm-desc','vmm-reporter'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  ['vmm-no','vmm-client','vmm-item','vmm-desc','vmm-reporter'].forEach(id=>{ const e=document.getElementById(id); if(e){ e.value=''; delete e.dataset.auto; } });
   document.getElementById('vmm-type').value='回報問題';
   fillVmNoList();
   document.getElementById('vmm-overlay').style.display='flex';

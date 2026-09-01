@@ -555,14 +555,14 @@ function cusSyncPrompt(quote){
   const box=document.getElementById('cus-sync-overlay'); if(!box) return;
   document.getElementById('cus-sync-name').textContent='「'+r.name+'」';
   document.querySelector('#cus-sync-overlay .v2h span').textContent =
-    r.master ? '這張單的客戶資料跟主檔不一樣' : '這是主檔還沒有的客戶';
+    r.master ? '這張單的客戶資料跟「客戶管理」裡的不一樣' : '這是「客戶管理」還沒有的客戶';
   const rows=r.diffs.map((d,i)=>`<label class="cus-diff">
       <input type="checkbox" checked data-i="${i}">
       <span class="k">${escHtml(d.label)}</span>
       <span class="v">${d.from?`<s>${escHtml(d.from)}</s> → `:''}<b>${escHtml(d.to)}</b></span>
     </label>`).join('');
   document.getElementById('cus-sync-diff').innerHTML =
-    (r.master ? '' : '<div class="ob info" style="display:inline-block;margin-bottom:8px">按「更新主檔」就會把這個客戶建進客戶主檔</div>') +
+    (r.master ? '' : '<div class="ob info" style="display:inline-block;margin-bottom:8px">按下面的按鈕就會把這個客戶建進「客戶管理」</div>') +
     (rows || '<div style="font-size:12.5px;color:#6B6B63">這張單只有客戶名稱，其他欄位空白。</div>');
   box.style.display='flex';
 }

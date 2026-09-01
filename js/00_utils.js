@@ -234,6 +234,30 @@ function vmArr(v){ if(v==null||v==='') return []; if(Array.isArray(v)) return v;
      btnBusy('st-f-save', false)           → 還原原本的文字（含裡面的 icon）
    找不到按鈕就安靜跳過，絕不能因為回饋失敗擋掉真正的儲存。
    ------------------------------------------------------------------ */
+/* ---- 重複行程：這一天算不算命中（2026-09-01 複檢 #12）--------------
+   月曆（07_calendar）與今日待辦（10_today）原本各寫一份，而且月曆是嚴格比對、
+   今日待辦有做 Number() 轉型 → 舊資料把 weekday/day 存成字串時，
+   **整條每週固定行程在月曆上會完全消失，只有今日待辦看得到**。
+   兩邊改成呼叫這一支，規則只有一份。 */
+function recurHitsOn(item, d){
+  try{
+    const r=(item && item.recur_json!=null) ? parseJsonSafe(item.recur_json,{}) : (item||{});
+    const num=v=>(v==null||v==='')?null:Number(v);
+    if(r.freq==='weekly'){
+      const w=num(r.weekday); return w!=null && d.getDay()===w;
+    }
+    if(r.freq==='monthly'){
+      const day=num(r.day); if(day==null || d.getDate()!==day) return false;
+      return (typeof monthlyIntervalHit==='function') ? !!monthlyIntervalHit(r,d) : true;
+    }
+    if(r.freq==='yearly'){
+      const mo=num(r.month), day=num(r.day);
+      return mo!=null && day!=null && (d.getMonth()+1)===mo && d.getDate()===day;
+    }
+    return false;
+  }catch(e){ return false; }
+}
+
 const BTN_BUSY_HTML = {};
 function btnBusy(id, on, busyText){
   try{

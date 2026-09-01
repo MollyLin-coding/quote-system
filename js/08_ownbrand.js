@@ -722,7 +722,17 @@ function prefetchCommon(){
     if(!AUTH_TOKEN) return;
     // 五份一起要 → 走後端 v37 的 batch 合併成一個請求：平均比平行快，
     // 更重要的是不會偶爾卡到十幾秒，也不會跟你當下在看的畫面搶連線。
-    readCallMany(prefetchPayloads()).catch(()=>{});
+    /* 2026-09-01 複檢 #17：今日待辦的「寄售請款日」卡片是用 rcPeek 讀寄售客戶，
+       但登入當下畫面就已經畫完、而這批預抓要 2.5 秒後才回來，且回來後沒有人重畫
+       → 那張卡片在登入後的第一個畫面永遠不會出現。抓完補畫一次。 */
+    readCallMany(prefetchPayloads())
+      .then(()=>{
+        /* ⚠ 用 setTimeout 跳出這條 promise 鏈再重畫：直接接在 .then 裡會多佔一個 microtask，
+           把「資料寫進快取」往後推一點點，剛好在切頁的當下就可能讓別處誤判成快取還沒好而重打一次
+           （test_cache 的「切走再切回訂單追蹤：完全不打後端」就是這樣被我弄得更容易踩到）。 */
+        setTimeout(()=>{ try{ if(typeof currentPage!=='undefined' && currentPage==='today' && typeof renderToday==='function') renderToday(); }catch(e){} }, 0);
+      })
+      .catch(()=>{});
   }, 2500);
 }
 onCacheClear(function(){ OWNBRAND_PRODUCTS=null; OWNBRAND_TIERS=null; CONSIGN_TERMS=null; });

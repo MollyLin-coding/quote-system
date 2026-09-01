@@ -132,7 +132,14 @@ async function openVerifyForm(no){
         return { name:it.name||'', lot:it.lot||'', vol:it.volume||'', ordered, mfg:'',
           thisShip: shipped>0 ? (remain>0?remain:0) : ordered, shipped };
       }) };
-    buildVerifyModal('');
+    /* 2026-09-01 複檢 #22：客戶批號其實訂單追蹤裡就有一欄（而且「驗收單→訂單追蹤」那個方向
+       8/28 就做了自動帶入，只做了一半）。這裡把反方向補上：訂單追蹤有填就帶進來，她可以再改。 */
+    let _hdrLot='';
+    try{
+      const _o=(ORDERS_CACHE||[]).find(x=>String(x.no)===String(no));
+      if(_o && typeof ordCustLot==='function') _hdrLot=ordCustLot(_o)||'';
+    }catch(_){}
+    buildVerifyModal(_hdrLot);
     document.getElementById('vf-overlay').style.display='flex';
     /* 複檢 2026-08-06 #24：留底是用「品名＋容量」跟報價單品項比對的，報價單存檔後若改過
        品名或容量（例如 500→550），舊留底就對不上任何一列 → 已出貨全部歸零、本次出貨又帶
@@ -146,6 +153,13 @@ async function openVerifyForm(no){
   }catch(e){ toast(e.message||'讀取失敗','err'); }
 }
 
+/* 2026-09-01 複檢 #22：PM 每開一張都要重打。記住上一次填的，下一張自動帶（可改）。
+   只存在這台瀏覽器（localStorage），不進後端資料。 */
+let VF_LAST_PM=(function(){ try{ return localStorage.getItem('qs_vf_pm')||''; }catch(e){ return ''; } })();
+function vfRememberPm(v){
+  VF_LAST_PM=String(v||'').trim();
+  try{ if(VF_LAST_PM) localStorage.setItem('qs_vf_pm', VF_LAST_PM); }catch(e){}
+}
 function buildVerifyModal(hdrLot){
   ensureVerifyOverlay();
   const ttl=document.querySelector('#vf-overlay .v2h span');
@@ -169,7 +183,7 @@ function buildVerifyModal(hdrLot){
       <div class="fl"><label>客戶批號</label><input class="fi" id="vf-lot" value="${escHtml(hdrLot||'')}" placeholder="客戶自己的批號／貨號（選填）"></div>
       <div class="fl"><label>單號</label><input class="fi ro" value="${escHtml(d.no)}" readonly></div>
       <div class="fl"><label>配送日期</label><input class="fi" type="date" id="vf-shipdate" value="${today}"></div>
-      <div class="fl"><label>專案經理 PM</label><input class="fi" id="vf-shipper" placeholder="PM 姓名"></div>
+      <div class="fl"><label>專案經理 PM</label><input class="fi" id="vf-shipper" value="${escAttr(typeof VF_LAST_PM!=='undefined'?(VF_LAST_PM||''):'')}" placeholder="PM 姓名"></div>
       <div class="fl"><label>此次配送總箱數</label><input class="fi" type="number" min="0" id="vf-boxes" placeholder="箱數"></div>
       <div class="fl"><label>第幾次出貨（分批用）</label><input class="fi" type="number" min="1" id="vf-shipseq" value="${(d.priorCount||0)+1}"></div>
     </div>
@@ -257,6 +271,7 @@ function generateVerifyPdf(mode){
   d.mode=(mode==='partial')?'partial':'full';
   const gvl=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
   d.lot=gvl('vf-lot'); d.shipDate=gvl('vf-shipdate'); d.shipper=gvl('vf-shipper'); d.boxes=gvl('vf-boxes');
+  vfRememberPm(d.shipper);   // 2026-09-01：記住 PM，下一張自動帶
   d.shipSeq=parseInt(gvl('vf-shipseq'),10)||1; // 「第幾次出貨」改成人工填，不再自動算
   if(!vfKeyReady(d.no)) return;   // 複檢 #2-1：沒有 QR 驗證碼就先別印
   /* 複檢 2026-08-13 #1-3：留底一定要先存。原本是彈窗被瀏覽器擋掉就直接 return，留底一筆都不會存

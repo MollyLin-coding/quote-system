@@ -164,10 +164,8 @@ async function tdBuildFallback(){
       let hit = false;
       if(it.kind === 'memo') hit = (vmLocalYmd(it.date) === today && it.done !== 'Y');
       else if(it.kind === 'recur'){
-        const r = parseJsonSafe(it.recur_json, {});
-        hit = (r.freq==='weekly' && d.getDay()===(r.weekday==null?-1:Number(r.weekday)))
-           || (r.freq==='monthly' && d.getDate()===Number(r.day||0) && monthlyIntervalHit(r,d))
-           || (r.freq==='yearly' && (d.getMonth()+1)===Number(r.month||0) && d.getDate()===Number(r.day||0));
+        // 2026-09-01 複檢 #12：與月曆共用同一份判斷（js/00_utils.js recurHitsOn）
+        hit = recurHitsOn(it, d);
       }
       if(hit) out.calendar.push({ item_id:it.item_id, title:it.title, category:it.category||'', time:(it.all_day!=='Y'&&it.time)?String(it.time):'', all_day:it.all_day==='Y' });
     });
@@ -196,6 +194,11 @@ function tdSkeletonHtml(){
 }
 
 /* ---- 點擊：先確保資料在，再開既有的編輯彈窗 ---- */
+/* 2026-09-01 複檢 #20：從今日待辦直接開這張單的驗收單 */
+function tdOpenVerifyForm(no){
+  if(typeof openVerifyForm!=='function'){ toast('驗收單功能還沒載入完成，請稍候再試','err'); return; }
+  openVerifyForm(no);
+}
 async function tdOpenOrder(no){
   try{ if(!ORDERS_CACHE) await loadOrders(); }catch(e){}
   if(!ORDERS_CACHE || !ORDERS_CACHE.find(x=>x.no===no)){ toast('找不到這張訂單，請到訂單追蹤看看','err'); return; }
@@ -289,11 +292,20 @@ function renderToday(){
   }
 
   // 1. 今天／逾期要出貨
-  const shipRows = tdRowsHtml(shipDue, (o,dim)=>`<button type="button" class="td-row${dim?' dim':''}" onclick="tdOpenOrder('${escAttr(o.quote_no)}')">
-      <div class="td-r1">${escHtml(o.client||o.quote_no||'—')}
-        <span class="td-tag ${o.overdue_days>0?'red':'warn'}">${o.overdue_days>0?('逾期 '+o.overdue_days+' 天'):'今天'}</span></div>
-      <div class="td-r2">${escHtml(o.quote_no||'')}　預計出貨 ${escHtml(o.plan_ship_date||'—')}</div>
-    </button>`);
+  /* 2026-09-01 複檢 #20：早上從這裡點今天要出貨的那一列，跳出來的是「編輯進度」，
+     不是驗收單——她得先關掉彈窗再去別頁找。這裡直接多一顆「驗收單」。 */
+  /* 2026-09-01 複檢 #20：早上從這裡點今天要出貨的那一列，跳出來的是「編輯進度」，不是驗收單。
+     ⚠ 這一列本身要**維持是 <button class="td-row">**（整列可點、手機版全寬都靠它，
+       roleSweep 也是靠 .td-row 判斷「只拿掉點擊、不要整列藏起來」）——所以驗收單鈕放在外層
+       包一個 flex 容器當「兄弟」，不要把 td-row 改成 div 包在裡面（我第一版就這樣改壞了兩個既有行為）。 */
+  const shipRows = tdRowsHtml(shipDue, (o,dim)=>`<div class="td-rowwrap" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-right:12px">
+      <button type="button" class="td-row${dim?' dim':''}" style="flex:1 1 280px;min-width:0;border-bottom:none" onclick="tdOpenOrder('${escAttr(o.quote_no)}')">
+        <div class="td-r1">${escHtml(o.client||o.quote_no||'—')}
+          <span class="td-tag ${o.overdue_days>0?'red':'warn'}">${o.overdue_days>0?('逾期 '+o.overdue_days+' 天'):'今天'}</span></div>
+        <div class="td-r2">${escHtml(o.quote_no||'')}　預計出貨 ${escHtml(o.plan_ship_date||'—')}</div>
+      </button>
+      <button type="button" class="rec-act-btn" style="flex:0 0 auto;white-space:nowrap" title="開這張單的出貨驗收單" onclick="event.stopPropagation();tdOpenVerifyForm('${escAttr(o.quote_no)}')">驗收單</button>
+    </div>`);
 
   // 2. 該催的尾款（金額為推估時標明，只顯示不寫回後端）
   const finalRows = tdRowsHtml(finalDue, (o,dim)=>`<button type="button" class="td-row${dim?' dim':''}" onclick="tdOpenOrder('${escAttr(o.quote_no)}')">

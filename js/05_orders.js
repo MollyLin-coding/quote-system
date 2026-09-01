@@ -324,6 +324,7 @@ function openOrdEdit(no){
   // v31 分批出貨：每次開單重置為收合、未載入
   shpReset();
   document.getElementById('oe-overlay').style.display='flex';
+  ORD_EDIT_SNAP=ordEditSnapshot();   // 2026-09-01 #25：記下開啟當下的內容，關閉前比對有沒有改過
 }
 /* ── 複檢 2026-08-06 #3：訂金/尾款以「報價單條款上實際印的金額」為準 ──────────────
    2026-08-05 付款條件改版後，訂金＝酒款×比例＋其他費用全額（不再是總計×比例），
@@ -392,7 +393,27 @@ function fillHalf(){
   document.getElementById('oe-final_amt').value=gt-dep;
   toast(`已依付款規則帶入（訂金 ${pct}%）：訂金 ${money(dep)}／尾款 ${money(gt-dep)}`,'ok');
 }
-function closeOrdEdit(){ document.getElementById('oe-overlay').style.display='none'; ORD_EDITING=null; }
+/* 2026-09-01 複檢 #25：這是欄位最多的視窗（發票四段、訂金、尾款、七個日期），
+   原本按「取消」或 ✕ 會靜默把剛填的全部丟掉。關閉前先比對有沒有改過。 */
+function ordEditSnapshot(){
+  const ks=['status','cust_lot','grand_total','deposit_amt','deposit_date','ship_date_est','ship_date_actual',
+    'invoice_no','invoice_date','invoice_last5','invoice_detail','final_amt','final_date_est','final_date','track_note'];
+  return ks.map(k=>{ const e=document.getElementById('oe-'+k); return e?String(e.value||''):''; }).join('\u241F');
+}
+let ORD_EDIT_SNAP='';
+function closeOrdEdit(force){
+  if(force!==true && ORD_EDITING && ORD_EDIT_SNAP && ordEditSnapshot()!==ORD_EDIT_SNAP){
+    if(!confirm('這個視窗有改過但還沒儲存，關掉就會不見。\n\n按「確定」＝不儲存，直接關閉\n按「取消」＝回去繼續編輯')) return;
+  }
+  document.getElementById('oe-overlay').style.display='none'; ORD_EDITING=null; ORD_EDIT_SNAP='';
+}
+/* 2026-09-01 複檢 #20：從「編輯進度」直接開這張單的驗收單 */
+function ordOpenVerifyForm(){
+  const no=ORD_EDITING; if(!no) return;
+  if(typeof openVerifyForm!=='function'){ toast('驗收單功能還沒載入完成，請稍候再試','err'); return; }
+  closeOrdEdit(true);
+  openVerifyForm(no);
+}
 async function saveOrdEdit(){
   if(!ORD_EDITING) return;
   if(typeof needOwner==='function' && !needOwner('修改訂單進度')) return;   // 2026-09-01：第二道防線
@@ -422,7 +443,7 @@ async function saveOrdEdit(){
       renderOrders();
       if(typeof renderReport==='function' && currentPage==='report') renderReport();
     }
-    toast(bumped?`進度已儲存，狀態自動更新為「${bumped}」`:'進度已儲存','ok'); closeOrdEdit();
+    toast(bumped?`進度已儲存，狀態自動更新為「${bumped}」`:'進度已儲存','ok'); closeOrdEdit(true);
     loadOrders().catch(()=>{});
     // 2026-08-24 Molly 回報：改出貨日期行事曆沒跟著改——之前只靠每小時排程或手動按「⟳ 同步」才會推到
     // 真正的 Google 日曆。這裡存檔成功後背景補打一次 syncCalendarNow，讓異動立即反映，不擋存檔流程、失敗也不打擾。

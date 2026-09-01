@@ -65,7 +65,18 @@ function stRender(){
   const cur=cusSel.value;
   const cus=stCustomers();
   cusSel.innerHTML='<option value="">全部客戶</option>'+cus.map(c=>`<option value="${escAttr(c)}"${c===cur?' selected':''}>${escHtml(c)}</option>`).join('');
-  { const dl=document.getElementById('st-cuslist'); if(dl) dl.innerHTML=cus.map(c=>`<option value="${escAttr(c)}">`).join(''); }
+  /* 2026-09-01 複檢 #23：原本清單只有「已經有寄倉紀錄的客戶」，第一次替某位客戶登記一定得手打，
+     而寄倉是拿客戶名稱當帳本的 key ——「南野子」跟「南野子 」（多一個空白）會變成兩本帳。
+     這裡把客戶主檔（登入時就抓好了）一起放進建議清單。 */
+  { const dl=document.getElementById('st-cuslist');
+    if(dl){
+      const extra=[];
+      try{ (typeof CUS_DATA!=='undefined' && CUS_DATA ? (CUS_DATA.customers||CUS_DATA||[]) : []).forEach(c=>{
+        const nm=String((c&&(c.name||c.client||c.company))||'').trim();
+        if(nm && cus.indexOf(nm)<0 && extra.indexOf(nm)<0) extra.push(nm);
+      }); }catch(e){}
+      dl.innerHTML=cus.concat(extra).map(c=>`<option value="${escAttr(c)}">`).join('');
+    } }
   const filter=cusSel.value;
   const sum=stSummary(filter);
   const inv=document.getElementById('st-inv-body');

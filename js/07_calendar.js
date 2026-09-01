@@ -48,10 +48,9 @@ function eventsOn(dstr){
       if(it.date===dstr) evs.push({t:'memo', txt:'📌 '+timeTxt+it.title, item:it, done:it.done==='Y', time:timeTxt?it.time:''});
     }
     if(it.kind==='recur' && CAL_KINDS.recur && calCatOn(it.category)){
-      const r=parseJsonSafe(it.recur_json,{});
-      const hit=(r.freq==='weekly'&&d.getDay()===(r.weekday??-1))
-        || (r.freq==='monthly'&&d.getDate()===(r.day||0)&&monthlyIntervalHit(r,d))
-        || (r.freq==='yearly'&&d.getMonth()+1===(r.month||0)&&d.getDate()===(r.day||0));
+      /* 2026-09-01 複檢 #12：改用共用的 recurHitsOn（含字串轉數字），
+         原本嚴格比對會讓「weekday 存成字串」的舊資料整條在月曆上消失。 */
+      const hit=recurHitsOn(it, d);
       if(hit) evs.push({t:'recur', txt:'🔁 '+timeTxt+it.title, item:it, time:timeTxt?it.time:''});
     }
   });
@@ -144,6 +143,11 @@ function renderTodayFocus(){
   });
   (ORDERS_CACHE||[]).forEach(o=>{
     const s=effOrdStatus(o.st);
+    /* 2026-09-01 複檢 #12：原本 paid（已收尾款）直接跳過，於是「錢收了、發票還沒開」
+       在行事曆上完全不會提醒（今日待辦有列）。發票是稅務要件，這裡補上。 */
+    if(s==='paid' && !(o.st&&o.st.invoice_no) && o.st&&o.st.ship_date_actual){
+      items.push({o:99,h:`<span class="ob red">待開發票</span> 🧾 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）尾款已收`,click:`gotoPage('orders')`});
+    }
     if(s==='cancelled'||s==='closed'||s==='paid') return;
     if(o.st?.ship_date_est&&!o.st?.ship_date_actual){
       const d=daysBetween(o.st.ship_date_est);
@@ -191,7 +195,7 @@ async function toggleTodoDone(id){
   catch(e){
     CAL_ITEMS=snap; if(osnap&&!ORDERS_CACHE) ORDERS_CACHE=osnap;
     it.done=prevDone; it.done_date=prevDate; renderCalendar();   // 回復畫面，避免以為打勾了其實沒存到
-    toast('同步失敗，已還原：'+e.message,'err');
+    toast('沒有存成功，畫面已改回原樣。請檢查網路後再打勾一次（'+e.message+'）','err');
   }
 }
 /* 今日焦點的「打勾＝完成」：備忘標成已完成（跟待辦清單同一套存法，可到月曆點該筆再取消） */
@@ -411,7 +415,17 @@ async function saveCalItem(){
 async function deleteCalItem(){
   if(!CAL_EDIT_ID) return;
   if(typeof needOwner==='function' && !needOwner('刪除行事曆事項')) return;   // 2026-09-01：第二道防線
-  if(!confirm('確定刪除這個事項？')) return;
+  /* 2026-09-01 複檢 #26：原本只寫「確定刪除這個事項？」，看不出刪的是哪一筆；
+     如果那是「每月 5 號跟廠商對帳」，刪掉的是整條、以後每個月都不會再出現。 */
+  {
+    const _it=(CAL_ITEMS||[]).find(x=>String(x.item_id)===String(CAL_EDIT_ID));
+    const _title=_it?(_it.title||''):'';
+    const _isRecur=!!(_it && _it.kind==='recur');
+    const _msg=_isRecur
+      ? `確定刪除「${_title}」？\n\n⚠ 這是重複行程，刪掉的是整條——以後每一次都不會再出現。\n只想跳過某一天的話請改用編輯，不要刪除。`
+      : (_title ? `確定刪除「${_title}」？刪掉後無法復原。` : '確定刪除這個事項？刪掉後無法復原。');
+    if(!confirm(_msg)) return;
+  }
   const delId=CAL_EDIT_ID, snap=CAL_ITEMS, osnap=ORDERS_CACHE;   // apiCall（寫入類）會把 CAL_ITEMS/ORDERS_CACHE 清空，先各留一份
   btnBusy('ce-del',true,'刪除中…');
   try{

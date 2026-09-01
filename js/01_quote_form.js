@@ -197,7 +197,7 @@ function rebuildBotHeader(){
   document.getElementById('th-ded').style.display = colDed?'':'none';
   document.getElementById('th-logo').style.display = colLogo?'':'none';
   const tm=document.getElementById('th-mark');
-  if(tm){ tm.style.display = colMark?'':'none'; tm.textContent = 'OEM'; }
+  if(tm){ tm.style.display = colMark?'':'none'; tm.textContent = '代工／貼牌'; }   // 2026-09-01 #27：白話文（index.html 改了會被這行蓋掉）
 }
 /* 保留現有品項列內容（含 OEM/貼牌 勾選、公版 sku/售價）重建整表——切換模式或增減欄位時用 */
 function snapshotBotRows(){
@@ -1084,7 +1084,7 @@ function resetAll(skipConfirm){
   if(!skipConfirm && !confirm('確定清除這張報價單的內容？（只會清空目前這張新報價單，其他頁面不受影響）')) return;
   document.querySelectorAll('#page-new input:not([readonly]),#page-new textarea,#page-new select').forEach(el=>{
     if(el.type==='number'&&el.id==='f-ser') el.value='1';
-    else if(el.id==='f-hdl') el.value='Molly';
+    else if(el.id==='f-hdl') el.value=((typeof USER_NAME!=='undefined' && USER_NAME) ? USER_NAME : 'Molly');   // 2026-09-01 #22：清單後也要帶目前登入的人，不要寫死
     else if(el.type==='number'&&el.id==='dep-pct') el.value=defaultDepPct();
     else if(el.type==='number'&&el.id==='taxrate') el.value='5';
     else if(el.type==='number'&&el.id==='p2-mon') el.value='1';

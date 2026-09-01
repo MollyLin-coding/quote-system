@@ -97,6 +97,12 @@ function applyRoleUI(){
 function setUser(role, name){
   USER_ROLE = (role === 'general') ? 'general' : 'owner';
   USER_NAME = name || '';
+  /* 2026-09-01 複檢 #22：報價單的「處理人員」原本寫死 Molly，阿軒或 Vic 開的單，
+     客戶收到的 PDF 上會印她的名字。系統知道現在登入的是誰，直接帶入（仍可手改）。 */
+  try{
+    const _h=document.getElementById('f-hdl');
+    if(_h && USER_NAME && (!_h.value.trim() || _h.value.trim()==='Molly')) _h.value=USER_NAME;
+  }catch(e){}
   try{
     sessionStorage.setItem('quote_role', USER_ROLE);
     sessionStorage.setItem('quote_name', USER_NAME);
@@ -864,7 +870,7 @@ async function previewRecordQuote(quoteNo){
 /* ---- 刪除報價單 ---- */
 async function deleteRecord(quoteNo, cliName){
   if(typeof needOwner==='function' && !needOwner('刪除報價單')) return;   // 2026-09-01：第二道防線（真正把關在後端 OWNER_ONLY_ACTIONS_）
-  if(!confirm(`確定刪除報價單 ${quoteNo}（${cliName}）？\n此動作會將其標記為已刪除。`)) return;
+  if(!confirm(`確定刪除報價單 ${quoteNo}（${cliName}）？\n\n刪掉後就不會出現在報價紀錄、訂單追蹤與月報表。\n資料本身還留著，要救回來請找工程師。`)) return;
   try {
     const data=await apiCall({ action:'deleteQuote', token:AUTH_TOKEN, quoteNo });
     if(data.ok){ toast('已刪除 '+quoteNo,'ok'); loadRecords(); }
@@ -1124,6 +1130,26 @@ function buildExportFilename(){
 
 /* ---- 標準模式：PDF 匯出（瀏覽器列印；每頁固定 A4，與預覽分頁完全一致）---- */
 function exportPDF(){
+  /* 2026-09-01 複檢 #9：這是最顯眼的金色按鈕，原本完全不檢查有沒有存檔。
+     畫面上的單號是前端先猜的，真正的單號要按「儲存」才由後端發 → 沒存就寄給客戶的話，
+     這張單在系統裡不存在（訂單追蹤／月報表／驗收單都查不到），而且**下一張新單會拿到同一個號碼**。
+     旁邊不顯眼的「正式文件」本來就有擋，偏偏這顆沒有。 */
+  if(currentPage==='new'){
+    const _dirty=(typeof FORM_DIRTY!=='undefined' && FORM_DIRTY);
+    if(!editingQuoteNo || _dirty){
+      const _msg = !editingQuoteNo
+        ? '這張報價單還沒儲存。\n\n畫面上的單號只是暫時的——沒存檔的話這張單不會進系統，下一張新單還會用到同一個號碼。\n\n按「確定」＝先儲存再匯出\n按「取消」＝先不匯出'
+        : '這張單改過還沒儲存。\n\n按「確定」＝先儲存再匯出（存檔後的內容才是系統裡的版本）\n按「取消」＝先不匯出';
+      if(!confirm(_msg)) return;
+      if(typeof saveQuote==='function'){
+        Promise.resolve(saveQuote()).then(()=>{
+          if(editingQuoteNo && !(typeof FORM_DIRTY!=='undefined' && FORM_DIRTY)) exportPDF();
+          else toast('存檔沒有成功，先不匯出。請確認錯誤訊息後再試一次','err');
+        }).catch(e=>toast((e&&e.message)||'存檔失敗，先不匯出','err'));
+        return;
+      }
+    }
+  }
   const pages = buildStdPagesHtml();
   const w=window.open('','_blank');
   if(!w){ toast('瀏覽器擋住了新視窗，請允許本站彈出視窗後再匯出','err'); return; }
