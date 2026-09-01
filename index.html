@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260831d">
-<script src="js/00_qrcode.js?v=20260831d"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260901a">
+<script src="js/00_qrcode.js?v=20260901a"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -98,9 +98,8 @@
       <button class="btn btn-dk" id="btn-gendoc" onclick="generateOfficialDocument()"><i class="ti ti-file-text"></i>正式文件</button>
     </div>
     <div class="tb-right" id="tbr-custom" style="display:none">
-      <button class="btn btn-dk" onclick="saveCustomToBackend()"><i class="ti ti-cloud-upload"></i>儲存到後台</button>
+      <button class="btn btn-dk" id="c-save-backend" onclick="saveCustomToBackend()"><i class="ti ti-cloud-upload"></i>儲存到後台</button>
       <button class="btn btn-g" onclick="resetCustom()"><i class="ti ti-refresh"></i>清除</button>
-      <button class="btn btn-g" onclick="loadKKBarSample()"><i class="ti ti-wand"></i>載入 KKBar 範例</button>
       <button class="btn btn-dk" onclick="openCustomPreview()"><i class="ti ti-eye"></i>預覽</button>
       <button class="btn btn-gold" onclick="exportCustomPDF()"><i class="ti ti-download"></i>匯出 PDF</button>
       <button class="btn btn-dk" onclick="exportCustomWord()"><i class="ti ti-file-text"></i>匯出 Word</button>
@@ -904,7 +903,7 @@
   <div class="v2box">
     <div class="v2h"><span id="oe-title">編輯進度</span><button class="v2x" onclick="closeOrdEdit()">✕</button></div>
     <div id="oe-timeline"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+    <div class="fgm2">
       <div class="fl"><label>狀態（走到哪一關）</label><select class="fi" id="oe-status">
         <option value="quoted">報價中</option><option value="deposit">已收訂金</option><option value="production">排產中</option><option value="shipped">已出貨</option>
         <option value="invoiced">已開發票</option><option value="paid">已收尾款</option><option value="closed">結案</option><option value="cancelled">取消</option></select></div>
@@ -993,7 +992,7 @@
   <div class="v2box" style="max-width:520px">
     <div class="v2h"><span id="vmp-title">處理客戶回報</span><button class="v2x" onclick="closeVmProc()">✕</button></div>
     <div id="vmp-info" style="font-size:12px;color:var(--sub);background:var(--gold-pale);border-radius:8px;padding:10px 12px;margin-bottom:12px;line-height:1.6"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+    <div class="fgm2">
       <div class="fl"><label>處理狀態</label><select class="fi" id="vmp-status">
         <option value="待處理">待處理</option><option value="退費">退費</option><option value="補發">補發</option><option value="結案">結案（無需處理）</option></select></div>
       <div class="fl"><label>金額（退費／補發，選填）</label><input class="fi" type="number" id="vmp-amount" placeholder="例 1200"></div>
@@ -1002,7 +1001,7 @@
       <div class="fl" style="grid-column:1/-1"><label>處理說明／內部備註</label><textarea class="fi" id="vmp-handle_note" rows="3" style="resize:vertical" placeholder="例：已寄補發 6 瓶，宅配單號…"></textarea></div>
     </div>
     <div style="display:flex;gap:10px;margin-top:14px">
-      <button class="btn btn-gold" onclick="saveVmProc()">儲存處理</button>
+      <button class="btn btn-gold" id="vmp-save" onclick="saveVmProc()">儲存處理</button>
       <button class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63" onclick="closeVmProc()">取消</button>
     </div>
   </div>
@@ -1011,7 +1010,7 @@
   <div class="v2box" style="max-width:520px">
     <div class="v2h"><span>登記客訴／回報（手動）</span><button class="v2x" onclick="closeVmManual()">✕</button></div>
     <div style="font-size:12px;color:var(--sub);margin-bottom:12px;line-height:1.6">客戶用 LINE／電話反映、沒走掃碼時，在這裡手動補一筆進系統，方便一起追蹤處理。</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+    <div class="fgm2">
       <div class="fl"><label>訂單單號</label><input class="fi" id="vmm-no" list="vmm-nolist" placeholder="輸入或選單號"><datalist id="vmm-nolist"></datalist></div>
       <div class="fl"><label>客戶</label><input class="fi" id="vmm-client" placeholder="客戶名稱"></div>
       <div class="fl"><label>回報類型</label><select class="fi" id="vmm-type"><option value="回報問題">回報問題</option><option value="驗收無誤">驗收無誤</option><option value="其他">其他</option></select></div>
@@ -1021,7 +1020,7 @@
       <div></div>
     </div>
     <div style="display:flex;gap:10px;margin-top:14px">
-      <button class="btn btn-gold" onclick="saveVmManual()">登記</button>
+      <button class="btn btn-gold" id="vmm-save" onclick="saveVmManual()">登記</button>
       <button class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63" onclick="closeVmManual()">取消</button>
     </div>
   </div>
@@ -1127,7 +1126,7 @@
 <div class="v2ov" id="cs-cus-overlay">
   <div class="v2box" style="max-width:560px">
     <div class="v2h"><span id="cs-cus-title">新增寄售客戶</span><button class="v2x" onclick="closeConsignCustomerEdit()">✕</button></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+    <div class="fgm2">
       <div class="fl"><label>客戶代碼 <span class="opt">英數，建立後不改</span></label><input class="fi" id="cs-f-id" placeholder="如 CS001"></div>
       <div class="fl"><label>客戶名稱</label><input class="fi" id="cs-f-name" placeholder="客戶顯示名稱"></div>
       <div class="fl"><label>預設折數 <span class="opt">0–1，標準 0.75</span></label><input class="fi" type="number" step="0.01" min="0" max="1" id="cs-f-disc" placeholder="0.75"></div>
@@ -1148,7 +1147,7 @@
       </div>
     </div>
     <div style="display:flex;gap:10px;margin-top:16px">
-      <button class="btn btn-gold" onclick="saveConsignCustomerForm()">儲存</button>
+      <button class="btn btn-gold" id="cs-cus-save" onclick="saveConsignCustomerForm()">儲存</button>
       <button class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63" onclick="closeConsignCustomerEdit()">取消</button>
     </div>
   </div>
@@ -1183,7 +1182,7 @@
     </div>
     <div class="fl" style="margin-top:8px"><label>備註 <span class="opt">選填</span></label><input class="fi" id="cs-m-note"></div>
     <div style="display:flex;gap:10px;margin-top:16px">
-      <button class="btn btn-gold" onclick="saveConsignMove()">儲存</button>
+      <button class="btn btn-gold" id="cs-mv-save" onclick="saveConsignMove()">儲存</button>
       <button class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63" onclick="closeConsignMove()">取消</button>
     </div>
   </div>
@@ -1203,20 +1202,20 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260831d"></script>
-<script src="js/01_quote_form.js?v=20260831d"></script>
-<script src="js/01b_quote_preview.js?v=20260831d"></script>
-<script src="js/02_core_api.js?v=20260831d"></script>
-<script src="js/03_quote_custom.js?v=20260831d"></script>
-<script src="js/04_company.js?v=20260831d"></script>
-<script src="js/05_orders.js?v=20260831d"></script>
-<script src="js/06_verify_mgmt.js?v=20260831d"></script>
-<script src="js/07_calendar.js?v=20260831d"></script>
-<script src="js/08_ownbrand.js?v=20260831d"></script>
-<script src="js/09_verify_form.js?v=20260831d"></script>
-<script src="js/10_today.js?v=20260831d"></script>
-<script src="js/11_customers.js?v=20260831d"></script>
-<script src="js/12_storage.js?v=20260831d"></script>
-<script src="js/99_boot.js?v=20260831d"></script>
+<script src="js/00_utils.js?v=20260901a"></script>
+<script src="js/01_quote_form.js?v=20260901a"></script>
+<script src="js/01b_quote_preview.js?v=20260901a"></script>
+<script src="js/02_core_api.js?v=20260901a"></script>
+<script src="js/03_quote_custom.js?v=20260901a"></script>
+<script src="js/04_company.js?v=20260901a"></script>
+<script src="js/05_orders.js?v=20260901a"></script>
+<script src="js/06_verify_mgmt.js?v=20260901a"></script>
+<script src="js/07_calendar.js?v=20260901a"></script>
+<script src="js/08_ownbrand.js?v=20260901a"></script>
+<script src="js/09_verify_form.js?v=20260901a"></script>
+<script src="js/10_today.js?v=20260901a"></script>
+<script src="js/11_customers.js?v=20260901a"></script>
+<script src="js/12_storage.js?v=20260901a"></script>
+<script src="js/99_boot.js?v=20260901a"></script>
 </body>
 </html>
