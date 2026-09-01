@@ -74,7 +74,8 @@ function renderCalendar(){
   if(CAL_VIEW==='month') renderCalMonth(el);
   else if(CAL_VIEW==='week') renderCalList(el, 7, '本週起 7 天');
   else renderCalList(el, 30, '未來 30 天');
-  renderTodoList();
+  /* 2026-09-02 Molly：「待辦清單（不指定日期）」卡片與「☑ 待辦」類型已拿掉（renderTodoList 移除、
+     index.html 的 #cal-todos 與 todo 選項移除）。舊的 todo 資料仍留在 calendar_items 表，只是不顯示。 */
 }
 function calEvHtml(e){
   const cls={ship:'ship',exp:'exp',memo:'memo',recur:'recur'}[e.t];
@@ -173,17 +174,6 @@ function renderTodayFocus(){
   items.sort((a,b)=>a.o-b.o);
   el.innerHTML=`<div class="ph" style="font-weight:700;font-size:13px;margin-bottom:6px">今日焦點 — ${fmtD(new Date()).slice(5)}<span style="color:#A8A69C;font-weight:400;font-size:11px">　今天＋未來 7 天；逾期自動標紅；📌 備忘、🚚 出貨做完了就點左邊圈圈打勾</span></div>`+
     (items.length?items.map(i=>`<div class="focus-row"${i.calId!=null?` data-cal-id="${escAttr(i.calId)}"`:''} onclick="${i.click}">${i.h}</div>`).join(''):'<div style="color:#A8A69C;font-size:12.5px">目前沒有需要注意的事項 ✓</div>');
-}
-function renderTodoList(){
-  const el=document.getElementById('cal-todos'); if(!el) return;
-  const todos=CAL_ITEMS.filter(it=>it.kind==='todo');
-  el.innerHTML=`<div class="ph" style="font-weight:700;font-size:13px;margin-bottom:4px">待辦清單（不指定日期）<span style="color:#A8A69C;font-weight:400;font-size:11px">　做完打勾</span></div>`+
-    (todos.length?todos.sort((a,b)=>(a.done||'N').localeCompare(b.done||'N')||(b.priority==='high')-(a.priority==='high')).map(it=>
-      `<div class="todo-row${it.done==='Y'?' done':''}">
-        <span class="tbox" data-id="${escAttr(it.item_id)}" onclick="toggleTodoDone(this.dataset.id)">${it.done==='Y'?'✓':''}</span>
-        <span class="ttl" data-id="${escAttr(it.item_id)}" onclick="openCalEdit(this.dataset.id)">${escHtml(it.title)}${it.priority==='high'?' <span class="ob warn">優先</span>':''}</span>
-      </div>`).join(''):'<div style="color:#A8A69C;font-size:12.5px">目前沒有待辦</div>')+
-    `<div style="margin-top:8px"><button class="rec-act-btn" onclick="openCalAdd('', 'todo')">＋ 新增待辦</button></div>`;
 }
 async function toggleTodoDone(id){
   const it=CAL_ITEMS.find(x=>String(x.item_id)===String(id)); if(!it) return;
