@@ -386,9 +386,18 @@ function applyAutoRules(){
     /* 複檢 2026-08-06 #19：
        (a) max 填成空字串時 `t.max==null` 為 false、`q<=''` 恆假，該級距永遠比不中 → 一併當「沒有上限」。
        (b) 級距沒涵蓋低量區間時（例如只填 min:100），瓶數從 150 改回 50 會找不到級距，
-           原本就「維持現價」不動，等於停在低量卻收高量的優惠價（少收）。改成回退到主檔 unit_price。 */
+           原本就「維持現價」不動，等於停在低量卻收高量的優惠價（少收）。改成回退到主檔 unit_price。
+       (c) 2026-09-01：原本用 find()＝取「陣列裡第一個」符合的級距，只填 min 沒填 max 時
+           每一段都會符合，等於永遠命中排最前面的那一段（例：100瓶↑/500瓶↑ 都沒上限，
+           下 600 瓶卻套到 100 瓶那段的價 → 少折給客戶／報錯價）。改成在所有符合的級距裡
+           取「門檻(min)最大」的一段，與陣列順序無關；級距有正確 max 時行為完全不變。 */
     const noMax=v=>(v==null||v===''||isNaN(parseFloat(v)));
-    const t=tiers.find(t=> q>=(parseFloat(t.min)||0) && (noMax(t.max) || q<=parseFloat(t.max)));
+    const tmin=t=>(parseFloat(t.min)||0);
+    let t=null;
+    tiers.forEach(c=>{
+      if(!(q>=tmin(c) && (noMax(c.max) || q<=parseFloat(c.max)))) return;
+      if(!t || tmin(c)>tmin(t)) t=c;
+    });
     const target=t ? t.price : ((prod.unit_price!=null&&prod.unit_price!=='')?prod.unit_price:null);
     if(target!=null && parseFloat(pi.value)!==parseFloat(target)){ pi.value=target; pi.dataset.src=target; changed=true; }
   });

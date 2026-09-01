@@ -70,8 +70,11 @@ function buildStdDocParts(){
       if(showLotDoc) cells += `<td style="padding:11px 8px;text-align:center;color:#6B6B63">${lot}</td>`;
       cells += `<td style="padding:11px 8px;text-align:center;color:#6B6B63">${vol?vol+'ml':'—'}</td>
         <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+cvP(p).toLocaleString():'—'}</td>`;
-      if(colDed) cells += `<td style="padding:11px 8px;text-align:right;color:#6B6B63">${d?d:''}</td>`;
-      if(colLogo) cells += `<td style="padding:11px 8px;text-align:right;color:#6B6B63">${l?'$'+l:'—'}</td>`;
+      /* 2026-09-01 複檢：未稅顯示時前標費／LOGO 這兩欄原本印含稅原值，
+         但單價與小計都已換算成未稅 → 客戶自己把「單價＋前標費＋LOGO」×瓶數 加不出小計。
+         這兩欄本來就是每瓶加價，跟單價同性質，一律走 cvP()。 */
+      if(colDed) cells += `<td style="padding:11px 8px;text-align:right;color:#6B6B63">${d?cvP(d).toLocaleString():''}</td>`;
+      if(colLogo) cells += `<td style="padding:11px 8px;text-align:right;color:#6B6B63">${l?'$'+cvP(l).toLocaleString():'—'}</td>`;
       const subCell = _gift
         ? `<span style="text-decoration:line-through;color:#9a968c">$${Math.round(cvA(sub)).toLocaleString()}</span> <span style="color:#A6824A;font-weight:700">贈</span>`
         : `$${Math.round(cvA(sub)).toLocaleString()}`;

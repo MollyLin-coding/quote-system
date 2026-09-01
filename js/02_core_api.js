@@ -827,10 +827,20 @@ async function openRecord(quoteNo){
    流水號帶今天下一個未用值（後端存檔時仍會自己發號，這裡只是畫面預覽用）。 */
 async function detachAsNewQuote_(){
   editingQuoteNo=null;
+  /* 2026-09-01 複檢：另存新單／複製時要解除「沿用原單付款條款文字」的凍結。
+     原本 LOADED_PAY_DETAIL 還掛著原單存檔當下的整段文字（含當時的訂金金額、日期），
+     金額若剛好一樣就永遠不會被 syncLoadedPayDetail 解凍 → 新單印出原單的舊條款。
+     先把天數／比例／備註從舊文字解析回輸入欄（不讓 Molly 重打），再清掉凍結改回即時計算。 */
+  if(typeof LOADED_PAY_DETAIL!=='undefined' && LOADED_PAY_DETAIL!=null){
+    try{ if(typeof restorePayFieldsFromText==='function') restorePayFieldsFromText(LOADED_PAY_DETAIL); }catch(e){}
+    LOADED_PAY_DETAIL=null;
+    if(typeof LOADED_PAY_SIG!=='undefined') LOADED_PAY_SIG=null;
+  }
   const dt=document.getElementById('f-dt'); if(dt) dt.value=todayStr();
   if(typeof onDate==='function') onDate();   // 有效日+1月＋upNo 重編單號（editingQuoteNo 已斷開）
   if(typeof autoNextSerial==='function'){ try{ await autoNextSerial(); }catch(e){} }
   if(typeof updateOrdProgVisibility==='function') updateOrdProgVisibility();
+  if(typeof calc==='function') calc();   // 付款條款解凍後要重算一次，預覽/存檔才拿得到新文字
 }
 /* 編輯既有單時的「另存新單」鈕：以目前表單內容直接建一張新報價單，原單完全不動 */
 async function saveAsNewQuote(){
