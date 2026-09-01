@@ -151,19 +151,29 @@ async function apiCall(payload){
   // 只要不是「純讀取」（存單／改進度／刪除／登入…），一律把讀取快取清掉，
   // 下一次進任何頁面都會拿到最新資料，不會出現「明明存好了卻還顯示舊的」。
   if(!rcIsRead(payload && payload.action)) rcClear();
+  // 2026-08-31：這趟正常回應（不管 ok 是 true 還是業務上的 false）代表通行證還有效，
+  // 順手把「記住我」的到期時間往後推——只要這台裝置持續在用就不會過期，
+  // 真的擱置很久沒開才會需要重新輸入 PIN（見 rememberTouch 的說明）。
+  if(typeof rememberTouch==='function') rememberTouch();
   return data;
 }
 
 /* ---- 「在這台裝置記住我」------------------------------------------
-   後端發的通行證本來就有 8 小時效期，只是原本存在 sessionStorage，
-   分頁一關就沒了，所以每次回來都要重打 PIN（而登入這一趟就要 2.5 秒）。
-   勾了才會改存 localStorage，8 小時內回到網站直接進去。
-   ⚠ 這是使用者自己選的：勾了等於「這台裝置在 8 小時內免 PIN」，
+   2026-08-31 起改成「除非登出，不必再打 PIN」：勾了會把通行證存進
+   localStorage（不像 sessionStorage 分頁一關就沒了），到期時間設一個很長的
+   上限（REMEMBER_TTL_MS，目前 90 天）；只要這台裝置持續在用，每趟 apiCall
+   成功就會透過 rememberTouch() 把到期時間往後推（見 apiCall 尾端），
+   等於「一直在用就一直不用打 PIN」。真的擱置超過 90 天沒開，或按「登出」，
+   才會清掉、下次要重新輸入 PIN。
+   ⚠ 後端（GAS）的通行證也要對應延長，否則前端記得住、後端還是會判過期
+     （見 generateToken_／validateToken_ 的 TOKEN_TTL_MS）。
+   ⚠ 這是使用者自己選的：勾了等於「這台裝置除非登出都不用再打 PIN」，
      所以只在自己的電腦勾；側邊選單有「登出」可以隨時清掉。
    ------------------------------------------------------------------ */
 const REMEMBER_KEY = 'qs_session_v1';
+const REMEMBER_TTL_MS = 90 * 24 * 60 * 60 * 1000;   // 90 天；要跟後端 TOKEN_TTL_MS 對齊
 function rememberSave(token){
-  try{ localStorage.setItem(REMEMBER_KEY, JSON.stringify({ t:token, exp:Date.now()+8*60*60*1000, r:USER_ROLE, n:USER_NAME })); }catch(e){}
+  try{ localStorage.setItem(REMEMBER_KEY, JSON.stringify({ t:token, exp:Date.now()+REMEMBER_TTL_MS, r:USER_ROLE, n:USER_NAME })); }catch(e){}
 }
 function rememberClear(){ try{ localStorage.removeItem(REMEMBER_KEY); }catch(e){} }
 function rememberRead(){
@@ -173,6 +183,18 @@ function rememberRead(){
     if(c.r) setUser(c.r, c.n);
     return c.t;
   }catch(e){ rememberClear(); return null; }
+}
+// 有勾「記住我」時，每趟成功的 apiCall 都呼叫這支，把到期時間往後推 90 天
+// （滑動視窗）；沒勾（localStorage 裡沒存）就什麼都不做。
+function rememberTouch(){
+  try{
+    const raw = localStorage.getItem(REMEMBER_KEY);
+    if(!raw) return;
+    const c = JSON.parse(raw);
+    if(!c || !c.t) return;
+    c.exp = Date.now() + REMEMBER_TTL_MS;
+    localStorage.setItem(REMEMBER_KEY, JSON.stringify(c));
+  }catch(e){}
 }
 function doLogout(){
   AUTH_TOKEN = null;
