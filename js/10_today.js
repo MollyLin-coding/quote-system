@@ -161,6 +161,7 @@ async function tdBuildFallback(){
   try{
     const d = new Date(today + 'T00:00:00');
     (CAL_ITEMS||[]).forEach(it=>{
+      if(typeof calIsPrivate==='function' && calIsPrivate(it)) return;   // 2026-09-02：私人行程不進今日待辦
       let hit = false;
       if(it.kind === 'memo') hit = (vmLocalYmd(it.date) === today && it.done !== 'Y');
       else if(it.kind === 'recur'){
@@ -276,7 +277,8 @@ function renderToday(){
      但登入回應夾帶的 digest 會把當天的行事曆事項（含「私人」分類）一起送出來，
      阿軒／Vic 登入的第一個畫面就看得到。前端先擋掉；後端也要一起補（見複檢報告第二級）。 */
   const cal       = ((typeof isOwner==='function' && !isOwner()) ? [] : (d.calendar  || []))
-                      .filter(it=>!/^ship-/.test(String(it.item_id||'')));
+                      .filter(it=>!/^ship-/.test(String(it.item_id||'')))
+                      .filter(it=>String(it.category||'')!=='私人');   // 2026-09-02：私人行程不進今日待辦（後端 v73 也擋一層）
   const csBill    = tdConsignBilling();
   const total = shipDue.length + finalDue.length + noScan.length + noInvoice.length + cal.length + csBill.length;
 

@@ -47,7 +47,6 @@ const CAL_CATEGORY_COLORS = {
   '採購': {bg:'#F7EFDD', fg:'#8A6A2E', bd:'#E9D9B5'},
   '出貨物流': {bg:'#E4F2F2', fg:'#1F7A7A', bd:'#C2E0E0'},
   '收款提醒': {bg:'#F9ECEA', fg:'#B03A2E', bd:'#E8C7C2'},
-  '私人': {bg:'#F1EAF9', fg:'#6B3FA0', bd:'#DDCBEF'},
   '其他': {bg:'#EDEDED', fg:'#5A5A5A', bd:'#D6D6D6'}
 };
 let _rulesBusy = false;

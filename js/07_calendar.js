@@ -30,6 +30,10 @@ function calShipMemoDup(it){
   return !!(o && o.st && (o.st.ship_date_est||o.st.ship_date_actual));
 }
 /* 產生某日的全部事件 */
+/* 2026-09-02 Molly：「把我的 Google 日曆與此系統分開」→ 分類「私人」的行程整個從系統畫面移除
+   （下拉選項也拿掉了，不會再有新的）。**資料仍留在 calendar_items 表**，只是不顯示、不進今日待辦、
+   後端也不再推上「南坡萬」Google 日曆。要真的刪掉要另外處理，別在這裡偷偷刪。 */
+function calIsPrivate(it){ return String((it&&it.category)||'')==='私人'; }
 function eventsOn(dstr){
   const evs=[];
   const d=new Date(dstr+'T00:00:00');
@@ -44,6 +48,7 @@ function eventsOn(dstr){
   }
   CAL_ITEMS.forEach(it=>{
     const timeTxt = (it.all_day!=='Y' && it.time) ? it.time+' ' : '';
+    if(calIsPrivate(it)) return;
     if(it.kind==='memo' && CAL_KINDS.memo && calCatOn(it.category) && !calShipMemoDup(it)){
       if(it.date===dstr) evs.push({t:'memo', txt:'📌 '+timeTxt+it.title, item:it, done:it.done==='Y', time:timeTxt?it.time:''});
     }
@@ -75,7 +80,7 @@ function calEvHtml(e){
   const cls={ship:'ship',exp:'exp',memo:'memo',recur:'recur'}[e.t];
   /* event.stopPropagation()：月曆檢視下事件標籤疊在「當日格子」上面，格子本身也有 onclick（新增事項），
      沒擋住冒泡的話點標籤會先開編輯視窗、又立刻被冒泡上去的「新增事項」蓋掉，變成永遠打不開編輯/刪除 */
-  const click=e.no?`onclick="event.stopPropagation();gotoPage('orders')"`:(e.item?`onclick="event.stopPropagation();openCalEdit('${escHtml(e.item.item_id)}')"`:'');
+  const click=e.no?`onclick="event.stopPropagation();gotoPage('orders')"`:(e.item?`data-id="${escAttr(e.item.item_id)}" onclick="event.stopPropagation();openCalEdit(this.dataset.id)"`:'');
   /* memo／recur 依「分類」上色；ship／exp（訂單自動事件）維持原本固定配色 */
   let style='';
   if((e.t==='memo'||e.t==='recur') && e.item){
@@ -135,17 +140,19 @@ function renderTodayFocus(){
   const el=document.getElementById('cal-focus'); if(!el) return;
   const items=[];
   // 逾期備忘（未完成）；左邊有個圈圈，打勾＝完成，之後不再出現在焦點
-  CAL_ITEMS.filter(it=>it.kind==='memo'&&it.done!=='Y'&&it.date&&!calShipMemoDup(it)).forEach(it=>{
+  CAL_ITEMS.filter(it=>it.kind==='memo'&&it.done!=='Y'&&it.date&&!calShipMemoDup(it)&&!calIsPrivate(it)).forEach(it=>{
     const d=daysBetween(it.date);
-    const box=`<span class="fdone" title="打勾＝標記完成，不再顯示於焦點" onclick="event.stopPropagation();calFocusDone('${escAttr(it.item_id)}')"></span>`;
-    if(d!=null&&d<0) items.push({o:d,h:`${box}<span class="ob red">逾期 ${-d} 天</span> 📌 ${escHtml(it.title)}`,click:`openCalEdit('${escHtml(it.item_id)}')`});
-    else if(d!=null&&d<=7) items.push({o:d,h:`${box}<span class="ob warn">${d===0?'今天':d+' 天後'}</span> 📌 ${escHtml(it.title)}`,click:`openCalEdit('${escHtml(it.item_id)}')`});
+    const box=`<span class="fdone" title="打勾＝標記完成，不再顯示於焦點" data-id="${escAttr(it.item_id)}" onclick="event.stopPropagation();calFocusDone(this.dataset.id)"></span>`;
+    if(d!=null&&d<0) items.push({o:d,h:`${box}<span class="ob red">逾期 ${-d} 天</span> 📌 ${escHtml(it.title)}`,click:`openCalEdit(this.dataset.calId)`, calId:it.item_id});
+    else if(d!=null&&d<=7) items.push({o:d,h:`${box}<span class="ob warn">${d===0?'今天':d+' 天後'}</span> 📌 ${escHtml(it.title)}`,click:`openCalEdit(this.dataset.calId)`, calId:it.item_id});
   });
   (ORDERS_CACHE||[]).forEach(o=>{
     const s=effOrdStatus(o.st);
     /* 2026-09-01 複檢 #12：原本 paid（已收尾款）直接跳過，於是「錢收了、發票還沒開」
        在行事曆上完全不會提醒（今日待辦有列）。發票是稅務要件，這裡補上。 */
-    if(s==='paid' && !(o.st&&o.st.invoice_no) && o.st&&o.st.ship_date_actual){
+    /* 2026-09-02：判斷要跟 effOrdStatus 一致——它是用 invoice_date || invoice_no 認定「已開發票」。
+       原本只看 invoice_no，於是「發票開了、只是沒登號碼」的單會一直掛著清不掉的紅字提醒。 */
+    if(s==='paid' && !(o.st&&(o.st.invoice_no||o.st.invoice_date)) && o.st&&o.st.ship_date_actual){
       items.push({o:99,h:`<span class="ob red">待開發票</span> 🧾 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）尾款已收`,click:`gotoPage('orders')`});
     }
     if(s==='cancelled'||s==='closed'||s==='paid') return;
@@ -165,7 +172,7 @@ function renderTodayFocus(){
   });
   items.sort((a,b)=>a.o-b.o);
   el.innerHTML=`<div class="ph" style="font-weight:700;font-size:13px;margin-bottom:6px">今日焦點 — ${fmtD(new Date()).slice(5)}<span style="color:#A8A69C;font-weight:400;font-size:11px">　今天＋未來 7 天；逾期自動標紅；📌 備忘、🚚 出貨做完了就點左邊圈圈打勾</span></div>`+
-    (items.length?items.map(i=>`<div class="focus-row" onclick="${i.click}">${i.h}</div>`).join(''):'<div style="color:#A8A69C;font-size:12.5px">目前沒有需要注意的事項 ✓</div>');
+    (items.length?items.map(i=>`<div class="focus-row"${i.calId!=null?` data-cal-id="${escAttr(i.calId)}"`:''} onclick="${i.click}">${i.h}</div>`).join(''):'<div style="color:#A8A69C;font-size:12.5px">目前沒有需要注意的事項 ✓</div>');
 }
 function renderTodoList(){
   const el=document.getElementById('cal-todos'); if(!el) return;
@@ -173,8 +180,8 @@ function renderTodoList(){
   el.innerHTML=`<div class="ph" style="font-weight:700;font-size:13px;margin-bottom:4px">待辦清單（不指定日期）<span style="color:#A8A69C;font-weight:400;font-size:11px">　做完打勾</span></div>`+
     (todos.length?todos.sort((a,b)=>(a.done||'N').localeCompare(b.done||'N')||(b.priority==='high')-(a.priority==='high')).map(it=>
       `<div class="todo-row${it.done==='Y'?' done':''}">
-        <span class="tbox" onclick="toggleTodoDone('${escHtml(it.item_id)}')">${it.done==='Y'?'✓':''}</span>
-        <span class="ttl" onclick="openCalEdit('${escHtml(it.item_id)}')">${escHtml(it.title)}${it.priority==='high'?' <span class="ob warn">優先</span>':''}</span>
+        <span class="tbox" data-id="${escAttr(it.item_id)}" onclick="toggleTodoDone(this.dataset.id)">${it.done==='Y'?'✓':''}</span>
+        <span class="ttl" data-id="${escAttr(it.item_id)}" onclick="openCalEdit(this.dataset.id)">${escHtml(it.title)}${it.priority==='high'?' <span class="ob warn">優先</span>':''}</span>
       </div>`).join(''):'<div style="color:#A8A69C;font-size:12.5px">目前沒有待辦</div>')+
     `<div style="margin-top:8px"><button class="rec-act-btn" onclick="openCalAdd('', 'todo')">＋ 新增待辦</button></div>`;
 }
@@ -494,7 +501,7 @@ function setCalView(v){ CAL_VIEW=v; renderCalendar(); }
 /* ---- 勾選式篩選：類型與分類都可個別開關 ---- */
 function calCatList(){
   const set=new Set(Object.keys(CAL_CATEGORY_COLORS));
-  CAL_ITEMS.forEach(it=>{ if((it.kind==='memo'||it.kind==='recur') && it.category) set.add(it.category); });  // 舊資料的自訂分類也列出
+  CAL_ITEMS.forEach(it=>{ if((it.kind==='memo'||it.kind==='recur') && it.category && !calIsPrivate(it)) set.add(it.category); });  // 舊資料的自訂分類也列出
   return [...set];
 }
 function calCatOn(cat){ return CAL_CATS[cat||'其他']!==false; }
@@ -507,7 +514,10 @@ function renderCalCatBar(){
     const c=CAL_CATEGORY_COLORS[cat]||{bg:'#EDEDED',fg:'#5A5A5A',bd:'#D6D6D6'};
     const on=calCatOn(cat);
     const st=on?`background:${c.bg};color:${c.fg};border:1px solid ${c.bd}`:'background:#F4F3EF;color:#B5B3A8;border:1px dashed #D6D3C8';
-    return `<button class="fchip" style="${st}" onclick="toggleCalCat('${escHtml(cat)}')">${on?'✓ ':''}${escHtml(cat)}</button>`;
+    /* 2026-09-02：分類名稱／item_id 是自由文字，含單引號時「塞進 inline onclick 的 JS 字串字面值」
+       一定會壞掉（HTML 跳脫救不了，&#39; 解析回來還是 '，JS 語法照樣斷）。
+       改成放在 data-* 屬性、handler 從 dataset 讀 —— 值永遠不會變成 JS 原始碼的一部分。 */
+    return `<button class="fchip" style="${st}" data-cat="${escAttr(cat)}" onclick="toggleCalCat(this.dataset.cat)">${on?'✓ ':''}${escHtml(cat)}</button>`;
   }).join('');
 }
 

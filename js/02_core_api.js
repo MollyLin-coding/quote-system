@@ -41,13 +41,13 @@ const OWNER_ONLY_FNS = [
   'openCalAdd','openCalEdit','saveCalItem','deleteCalItem','syncGCal','toggleTodoDone',
   // 今日待辦上的入口（點下去會開 owner-only 的編輯彈窗，儲存鈕被藏＝填半天存不進去）
   'tdOpenOrder','tdOpenCal',
-  // 客戶寄倉（2026-09-01 複檢補：原本整頁對員工全開，連刪除鈕都在）
-  //   ⚠ 只擋「刪除」，登記入倉／提領仍開放給員工（倉庫現場要用）。要一起鎖起來就把 stSaveMove 也加進來。
-  'stDeleteMove',
+  /* 客戶寄倉：2026-09-02 Molly 定案「其他使用者可登記可編輯，但都須留底」
+     → 整頁對員工開放（登記入倉／提領／作廢），因為刪除已經改成「作廢」：
+       紀錄留著、標示誰在什麼時候作廢的，餘額不算它。所以這裡不再列管 stDeleteMove。 */
   // 今日焦點的打勾（等同於改訂單追蹤的實際出貨日／完成狀態，訂單對員工是唯讀）
   'calFocusShip','calFocusDone',
   // 刪除類
-  'deleteRecord','vmDelForm','vmDelReport'
+  'deleteRecord','deleteCustomRecord','vmDelForm','vmDelReport'
 ];
 const OWNER_FN_RE = new RegExp('\\b(' + OWNER_ONLY_FNS.join('|') + ')\\s*\\(');
 
@@ -542,6 +542,12 @@ async function saveQuote(){
       if(wasNewQuote){ if(!_qOnly) await maybeCreateOrderProgressOnSave(data.quoteNo, quote); }
       else if(!_qOnly) await maybeSyncOrderProgressOnEdit(data.quoteNo, quote);
       runHooks('afterSaveQuote', quote);   // 客戶主檔比對提醒登記在 11_customers.js
+      /* 2026-09-02：存檔後背景補打一次 Google 日曆同步，改了「預計出貨日」不用等每小時的排程
+         （跟 saveOrdEdit／calFocusShipSave 同一套做法）。純報價單不建行事曆，跳過。
+         唯讀 action、失敗不影響存檔，所以不 await、也不跳錯誤提示。 */
+      if(!_qOnly && isOwner()){
+        try{ apiCall({action:'syncCalendarNow', token:AUTH_TOKEN}).catch(()=>{}); }catch(e){}
+      }
     } else {
       toast(data.error||'儲存失敗','err');
     }
@@ -777,7 +783,7 @@ function renderRecords(){
       const qoBadge=(q.status==='純報價'||q.quoteOnly==='Y')?' <span class="rec-badge" style="background:#F3ECDD;color:#7A5A1E">純報價</span>':'';
       const total='$'+Math.round(q.grandTotal||0).toLocaleString();
       if(q._custom){
-        // 自訂單：開啟／預覽走自訂報價單頁；後端沒有刪除自訂單的 action，不提供刪除
+        // 自訂單：開啟／預覽走自訂報價單頁；2026-09-02 起後端有 deleteCustomQuote，補上刪除鈕（老闆專用）
         return `<tr class="clickable" onclick="recOpenCustom('${escAttr(q.quoteNo)}')">
           <td class="mc-main" style="font-weight:600">${escHtml(q.quoteNo||'—')}</td>
           <td data-l="客戶">${escHtml(q.clientName||'—')}</td>
@@ -788,6 +794,7 @@ function renderRecords(){
           <td class="rec-actions" data-l="操作" onclick="event.stopPropagation()">
             <button class="rec-act-btn primary" onclick="recOpenCustom('${escAttr(q.quoteNo)}')">開啟</button>
             <button class="rec-act-btn" onclick="recPreviewCustom('${escAttr(q.quoteNo)}')">預覽</button>
+            <button class="rec-act-btn danger" onclick="deleteCustomRecord('${escAttr(q.quoteNo)}','${escAttr(q.clientName||'')}')">刪除</button>
           </td>
         </tr>`;
       }
@@ -875,6 +882,17 @@ async function previewRecordQuote(quoteNo){
     gotoPage('new');
     openPreview();
   } catch(e){ toast(e.message||'讀取失敗','err'); }
+}
+
+/* ---- 刪除自訂報價單（2026-09-02 新增；後端 deleteCustomQuote 會先把整列快照寫進異動日誌再刪）---- */
+async function deleteCustomRecord(quoteNo, cliName){
+  if(typeof needOwner==='function' && !needOwner('刪除自訂報價單')) return;
+  if(!confirm(`確定刪除自訂報價單 ${quoteNo}（${cliName||'—'}）？\n\n刪掉後就不會出現在報價紀錄。\n原始內容會留在異動日誌裡，要救回來請找工程師。`)) return;
+  try {
+    const data=await apiCall({ action:'deleteCustomQuote', token:AUTH_TOKEN, quoteNo });
+    if(data.ok){ toast('已刪除 '+quoteNo,'ok'); loadRecords(); }
+    else toast(data.error||'刪除失敗','err');
+  } catch(e){ toast(e.message||'刪除失敗','err'); }
 }
 
 /* ---- 刪除報價單 ---- */

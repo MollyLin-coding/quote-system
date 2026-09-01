@@ -37,9 +37,13 @@ function stSameItem(m, skuId, name, vol){
   return (skuId && m.sku_id) ? (String(m.sku_id)===String(skuId))
                              : (stNm(m.name)===stNm(name) && stVol(m.volume)===stVol(vol));
 }
+/* 2026-09-02 Molly 定案「都須留底」：寄倉紀錄不再真的刪掉，改成標記作廢。
+   已作廢的列仍留在明細裡（灰色刪除線＋誰在什麼時候作廢的），但不列入餘額與彙總。 */
+function stVoided(m){ return !!(m && String(m.void_at||'')!==''); }
 function stSummary(filterCus){
   const map={};
   (ST_MOVES||[]).forEach(m=>{
+    if(stVoided(m)) return;
     if(filterCus && String(m.customer)!==filterCus) return;
     const k=stKey(m);
     if(!map[k]) map[k]={customer:m.customer, name:m.name||m.sku_id||'—', volume:m.volume||'', in:0, out:0};
@@ -53,6 +57,7 @@ function stSummary(filterCus){
 function stBalanceFor(cus, skuId, name, vol){
   let bal=0;
   (ST_MOVES||[]).forEach(m=>{
+    if(stVoided(m)) return;
     if(String(m.customer)!==String(cus)) return;
     if(!stSameItem(m, skuId, name, vol)) return;
     const q=parseFloat(m.qty)||0;
@@ -93,6 +98,15 @@ function stRender(){
   const lg=document.getElementById('st-ledger-body');
   if(lg) lg.innerHTML=rows.length?rows.map(m=>{
     const isOut=String(m.direction)==='out';
+    const vd=stVoided(m);
+    const vTip=vd?('已作廢'+(m.void_by?('／'+m.void_by):'')+(m.void_at?('　'+String(m.void_at).slice(0,16).replace('T',' ')):'')+(m.void_note?('　'+m.void_note):'')):'';
+    if(vd) return `<tr style="opacity:.55"><td data-l="日期" style="text-decoration:line-through">${escHtml(m.date||'')}</td>
+      <td data-l="類型"><span style="font-weight:600;color:var(--hint)">${isOut?'提領':'入倉'}（已作廢）</span></td>
+      <td data-l="客戶" style="text-decoration:line-through">${escHtml(m.customer||'')}</td>
+      <td data-l="酒款" style="text-decoration:line-through">${escHtml((m.name||m.sku_id||'—')+(m.volume?('（'+m.volume+'）'):''))}</td>
+      <td data-l="數量" style="text-align:right;text-decoration:line-through">${(parseFloat(m.qty)||0).toLocaleString()}</td>
+      <td data-l="單號">${escHtml(m.quote_no||'—')}</td>
+      <td data-l="備註" colspan="2" style="color:var(--hint);font-size:12px">${escHtml(vTip)}</td></tr>`;
     return `<tr><td data-l="日期">${escHtml(m.date||'')}</td>
       <td data-l="類型"><span style="font-weight:600;color:${isOut?'#B0483A':'#4A7A46'}">${isOut?'提領':'入倉'}</span></td>
       <td data-l="客戶">${escHtml(m.customer||'')}</td>
@@ -100,7 +114,7 @@ function stRender(){
       <td data-l="數量" style="text-align:right">${(parseFloat(m.qty)||0).toLocaleString()}</td>
       <td data-l="單號">${escHtml(m.quote_no||'—')}</td>
       <td data-l="備註">${escHtml(m.note||'')}</td>
-      <td style="text-align:right"><button class="rec-act-btn" title="刪除這筆（登記錯了才用）" onclick="stDeleteMove('${escAttr(m.move_id)}')">✕</button></td></tr>`;
+      <td style="text-align:right"><button class="rec-act-btn" title="作廢這筆（登記錯了才用；紀錄會留著）" onclick="stDeleteMove('${escAttr(m.move_id)}')">作廢</button></td></tr>`;
   }).join(''):'<tr><td colspan="8" class="rec-empty">尚無寄倉紀錄</td></tr>';
 }
 /* ---- 登記表單 ---- */
@@ -161,7 +175,7 @@ async function stSaveMove(){
     } else { toast('請選公版酒（或選「其他」自行輸入）','err'); return; }
     if(ST_DIR==='out'){
       const bal=stBalanceFor(cus, skuId, name, vol);
-      if(qty>bal){ toast(`提領超過剩餘量（${escHtml(cus)}／${escHtml(name)} 目前剩 ${bal} 瓶）。登記錯了可在明細用 ✕ 刪掉重登。`,'err'); return; }
+      if(qty>bal){ toast(`提領超過剩餘量（${escHtml(cus)}／${escHtml(name)} 目前剩 ${bal} 瓶）。登記錯了可在明細按「作廢」再重登。`,'err'); return; }
     }
     const r=await apiCall({action:'addStorageMove', token:AUTH_TOKEN,
       date:date, customer:cus, sku_id:skuId, name:name, volume:vol,
@@ -174,17 +188,21 @@ async function stSaveMove(){
   finally{ _stSaving=false; btnBusy('st-f-save',false); }
 }
 let _stDeleting=false;
+/* 2026-09-02 Molly 定案：其他使用者也可以登記與更正，但都要留底。
+   所以這裡不再是老闆專用，也不再真的刪掉——改成「作廢」：那一列會留著（灰色刪除線），
+   記下誰、什麼時候、為什麼作廢；餘額與彙總都不算它。要更正就作廢舊的、再登記一筆正確的。 */
 async function stDeleteMove(moveId){
   if(!moveId||_stDeleting) return;
-  if(typeof needOwner==='function' && !needOwner('刪除寄倉紀錄')) return;   // 2026-09-01：第二道防線（真正把關在後端）
-  if(!confirm('確定刪除這筆寄倉紀錄？（只有登記錯誤才建議刪除，刪除會留在異動日誌）')) return;
+  if(!confirm('把這筆寄倉紀錄作廢？\n\n紀錄不會消失，會留著並標示成「已作廢」（記錄是誰在什麼時候作廢的），只是不再計入庫存。\n要更正數量的話：先作廢這筆，再登記一筆正確的。')) return;
+  const why=prompt('作廢原因（可留空）','登記錯誤');
+  if(why===null) return;
   _stDeleting=true;
   try{
-    const r=await apiCall({action:'deleteStorageMove', token:AUTH_TOKEN, move_id:moveId});
-    if(!r.ok) throw new Error(r.error||'刪除失敗');
-    toast('已刪除','ok');
+    const r=await apiCall({action:'deleteStorageMove', token:AUTH_TOKEN, move_id:moveId, note:String(why||'').trim()});
+    if(!r.ok) throw new Error(r.error||'作廢失敗');
+    toast('已作廢（紀錄留著）','ok');
     await loadStorage(true);
-  }catch(e){ toast(e.message||'刪除失敗','err'); }
+  }catch(e){ toast(e.message||'作廢失敗','err'); }
   finally{ _stDeleting=false; }
 }
 
@@ -201,9 +219,11 @@ async function stRemoveMovesBySrc(no, srcTag){
   const prefix='VF:'+no+':'+srcTag+':';
   const d=await readCall({action:'getStorageData', token:AUTH_TOKEN}, true);
   const list=(d&&d.ok&&Array.isArray(d.moves))?d.moves:[];
-  const hit=list.filter(m=>String(m.src||'').indexOf(prefix)===0);
+  /* 2026-09-02：後端的 deleteStorageMove 已改成「作廢」（不刪列），所以重印時舊紀錄會留著
+     並標示「驗收單重印，已重新登記」，而不是無聲消失。已經作廢過的就別再打一次。 */
+  const hit=list.filter(m=>String(m.src||'').indexOf(prefix)===0 && String(m.void_at||'')==='');
   for(const m of hit){
-    try{ await apiCall({action:'deleteStorageMove', token:AUTH_TOKEN, move_id:m.move_id}); }catch(e){}
+    try{ await apiCall({action:'deleteStorageMove', token:AUTH_TOKEN, move_id:m.move_id, note:'驗收單重印，已重新登記'}); }catch(e){}
   }
   if(hit.length) ST_MOVES=null;
   return hit.length;
@@ -217,6 +237,7 @@ function stBalanceForRows(cus, rows){
 function stCustomerTotal(cus){
   let bal=0;
   (ST_MOVES||[]).forEach(m=>{
+    if(stVoided(m)) return;
     if(String(m.customer)!==String(cus)) return;
     bal += (String(m.direction)==='out' ? -1 : 1) * (parseFloat(m.qty)||0);
   });
