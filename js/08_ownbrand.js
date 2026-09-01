@@ -212,7 +212,7 @@ function onSelectConsignCustomer(){
   const eb=document.getElementById('cs-editbtn');
   const info=document.getElementById('cs-cusinfo');
   if(!CS_CUR){ box.style.display='none'; eb.style.display='none'; if(info) info.innerHTML=''; return; }
-  eb.style.display='';
+  eb.style.display=(typeof isOwner==='function'&&!isOwner())?'none':'';   // 2026-09-01：一般使用者不該重新看到「客戶設定」
   const c=curConsignCustomer();
   if(info&&c){
     const disc=(parseFloat(c.default_discount)||0);

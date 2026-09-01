@@ -265,7 +265,7 @@ function openCalEdit(id){
   const it=CAL_ITEMS.find(x=>String(x.item_id)===String(id)); if(!it) return;
   CAL_EDIT_ID=id;
   document.getElementById('ce-title-h').textContent='編輯事項';
-  document.getElementById('ce-del').style.display='inline-block';
+  document.getElementById('ce-del').style.display=(typeof isOwner==='function'&&!isOwner())?'none':'inline-block';   // 2026-09-01：一般使用者不該重新看到刪除鈕
   document.getElementById('ce-kind').value=it.kind;
   document.getElementById('ce-date').value=it.date||fmtD(new Date());
   document.getElementById('ce-title').value=it.title||'';
@@ -410,6 +410,7 @@ async function saveCalItem(){
 }
 async function deleteCalItem(){
   if(!CAL_EDIT_ID) return;
+  if(typeof needOwner==='function' && !needOwner('刪除行事曆事項')) return;   // 2026-09-01：第二道防線
   if(!confirm('確定刪除這個事項？')) return;
   const delId=CAL_EDIT_ID, snap=CAL_ITEMS, osnap=ORDERS_CACHE;   // apiCall（寫入類）會把 CAL_ITEMS/ORDERS_CACHE 清空，先各留一份
   btnBusy('ce-del',true,'刪除中…');

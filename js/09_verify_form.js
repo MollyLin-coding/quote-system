@@ -21,11 +21,17 @@ let VF_KEYS={};
 async function vfKeyFor(no){
   const key=String(no||''); if(!key) return '';
   if(VF_KEYS[key]!=null) return VF_KEYS[key];
+  /* 2026-09-01 複檢：原本失敗也會把 '' 記進 VF_KEYS，而上面是用 `!=null` 判斷有沒有抓過，
+     於是「抓失敗一次」＝這個單號整場都不再重抓 → 之後不管按幾次「產生」都被 vfKeyReady 擋掉，
+     而且留底、寄倉同步、PDF 三件事全都不會發生（她只會覺得是網路慢一直按）。
+     改成：失敗不留紀錄，下一次呼叫會重新去要。 */
   try{
     const d=await apiCall({action:'getVerifyKey', token:AUTH_TOKEN, no:key});
-    VF_KEYS[key]=(d&&d.ok&&d.k)?d.k:'';
-  }catch(e){ VF_KEYS[key]=''; }
-  return VF_KEYS[key];
+    const k=(d&&d.ok&&d.k)?d.k:'';
+    if(k){ VF_KEYS[key]=k; return k; }
+    delete VF_KEYS[key];
+    return '';
+  }catch(e){ delete VF_KEYS[key]; return ''; }
 }
 /* 產生驗收單前的檢查：驗證碼還沒拿到就先講清楚，不要印出一張客戶掃不進去的 QR。
    （驗證碼在「開啟驗收單」時就會先抓好，正常情況下這裡不會擋。） */
@@ -36,7 +42,7 @@ function vfKeyReady(no){
   const m=key.match(/20\d{6}/g);
   const ymd=(m&&m.length)?m[m.length-1]:'';
   if(!ymd || ymd<'20260813') return true;   // 舊單號後端不驗，沒有驗證碼也沒關係
-  toast('QR 的驗證碼還沒取到，這樣印出去客戶會掃不進去。請等兩秒再按一次「產生」','err');
+  toast('QR 的驗證碼還沒取到（可能是網路慢）。已重新去要，請等兩秒再按一次「產生」','err');
   return false;
 }
 function verifyQrUrl(no,lot){
@@ -193,10 +199,13 @@ function buildVerifyModal(hdrLot){
 function vfStorageBlockHtml(d){
   if(!d||!d.storage) return '';
   /* 聰明預設：這個客戶寄倉還有庫存 → 這次多半是「客戶來提貨」；沒有庫存 → 多半是「做好先入倉」 */
+  /* 2026-09-01 複檢：原本看的是「這位客戶所有酒款的總餘額」，所以只要客戶那邊還剩別支酒 3 瓶，
+     這次新做好的 600 瓶就會被預設成「提領」，沒注意直接按下去，寄倉帳就差了 1200 瓶。
+     改成只看「這張驗收單上的這幾款酒」目前在我方倉庫的餘額。 */
   let bal=0;
-  try{ bal=(typeof stCustomerTotal==='function')?stCustomerTotal(d.client):0; }catch(_){}
+  try{ bal=(typeof stBalanceForRows==='function')?stBalanceForRows(d.client, d.rows):0; }catch(_){}
   const defOut = bal>0;
-  const balNote = bal>0 ? `（目前這位客戶寄倉還有 <strong>${bal}</strong> 瓶）` : '（目前這位客戶寄倉沒有庫存）';
+  const balNote = bal>0 ? `（這幾款酒目前在我方倉庫還有 <strong>${bal}</strong> 瓶）` : '（這幾款酒目前沒有寄倉庫存）';
   return `<div id="vf-storage-box" style="margin-top:14px;padding:11px 13px;border:1px solid var(--bd);border-radius:8px">
     <label style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer">
       <input type="checkbox" id="vf-st-on" checked style="width:15px;height:15px"> 同步更新「客戶寄倉」庫存
@@ -259,7 +268,11 @@ function generateVerifyPdf(mode){
     if(d.storage && _stOn && _stOn.checked && typeof stSyncFromVerify==='function'){
       const _dirEl=document.querySelector('input[name="vf-st-dir"]:checked');
       const _dir=(_dirEl&&_dirEl.value==='out')?'out':'in';
-      stSyncFromVerify(d, _dir, d.shipSeq).catch(e=>toast(e.message||'寄倉登記失敗，請到「客戶寄倉」手動登記','err'));
+      /* 2026-09-01 複檢 #8：這是「編輯／重印」既有留底（VF_EDIT_ID 有值）→ 數量可能改過了，
+         要先把上一次寫進寄倉的同一批紀錄刪掉再重寫，否則後端看到相同的 src 會直接跳過，
+         寄倉數字永遠停在第一次的舊值。 */
+      stSyncFromVerify(Object.assign({}, d, {__stReplace:!!VF_EDIT_ID}), _dir, d.shipSeq)
+        .catch(e=>toast(e.message||'寄倉登記失敗，請到「客戶寄倉」手動登記','err'));
     }
   }catch(_){}
   const seqEl=document.getElementById('vf-shipseq'); if(seqEl) seqEl.value=d.shipSeq+1; // 方便下一次接著填
@@ -589,6 +602,11 @@ function csVfSyncFromInputs(){
     if(CONSIGN_VF_DATA.rows[i]) CONSIGN_VF_DATA.rows[i][k]=el.value;
   });
 }
+/* 2026-09-01 複檢：原本 csVfCollect() 會「就地」把空白列從 CONSIGN_VF_DATA.rows 濾掉，
+   但畫面上的輸入框沒有重畫、data-i 還是舊的位置編號 → 只要按過一次「預覽」再回頭補填，
+   後面輸入的內容就會寫到錯的那一列，把前面一款酒整個覆蓋掉（驗收單與留底都少一款，
+   但寄售帳在按「登記」時已經記進去了，兩邊對不起來）。
+   改法：收資料時回傳「複製品」，永遠不動 CONSIGN_VF_DATA.rows 的長度與順序。 */
 function csVfAddRow(){
   csVfSyncFromInputs();
   CONSIGN_VF_DATA.rows.push({name:'', vol:'', qty:''});
@@ -604,12 +622,14 @@ function csVfCollect(){
   csVfSyncFromInputs();
   const d=CONSIGN_VF_DATA;
   const gvl=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
+  // 表頭欄位寫回本體沒問題（不影響列的位置）；⚠ 但「列」一律只給複製品，不要動 d.rows 本身
   d.client=gvl('cs-vf-client')||d.client;
   d.shipDate=gvl('cs-vf-date');
   d.handler=gvl('cs-vf-handler');
   d.note=gvl('cs-vf-note');
-  d.rows=(d.rows||[]).filter(r=>String(r.name||'').trim()!==''&&(parseFloat(r.qty)||0)>0);
-  return d;
+  const rows=(d.rows||[]).filter(r=>String(r.name||'').trim()!==''&&(parseFloat(r.qty)||0)>0)
+                         .map(r=>Object.assign({}, r));
+  return Object.assign({}, d, {rows});
 }
 function buildConsignVerifyDocHtml(d, opts){
   const isPreview=!!(opts&&opts.preview);

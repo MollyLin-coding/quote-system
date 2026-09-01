@@ -197,7 +197,7 @@ function onSelectCompany(quiet){
       // 後端若已回傳 recipe_sheet_id：只有設定酒譜表的公司顯示同步鈕；欄位尚未回傳(undefined)時一律顯示，由後端回覆是否有酒譜
       const rid=c.recipe_sheet_id;
       const show=(rid===undefined)?true:!!(String(rid||'').trim());
-      sb.style.display=show?'':'none';
+      sb.style.display=(show && !(typeof isOwner==='function' && !isOwner()))?'':'none';   // 2026-09-01：一般使用者不該重新看到「同步最新酒譜」
     }
     const nb=document.getElementById('qf-syncnote'); if(nb) nb.innerHTML='';
   }

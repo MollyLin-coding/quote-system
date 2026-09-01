@@ -27,13 +27,23 @@ function stCustomers(){
   return [...s].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
 }
 /* 彙總：客戶＋酒款（sku_id 優先，自行輸入款用 名稱|容量 當 key）→ {in,out} */
-function stKey(m){ return String(m.customer)+'␟'+(m.sku_id?('S:'+m.sku_id):('F:'+(m.name||'')+'|'+(m.volume||''))); }
+/* 2026-09-01 複檢：同一支酒，手動登記（有選公版酒＝有 sku_id）與驗收單自動登記（沒有 sku_id）
+   原本會被算成兩本帳 → 彙總表出現兩列，而且她要登記客戶真的來提貨時會被「提領超過剩餘量」擋死。
+   改成：**兩邊都有 sku_id 才比 sku_id，否則一律比「酒款名＋容量」**（後端 v71 的判斷同步改成一樣）。 */
+function stNm(v){ return String(v==null?'':v).trim().toLowerCase().replace(/\s+/g,''); }
+function stVol(v){ return stNm(v).replace(/ml$/,''); }
+function stKey(m){ return String(m.customer)+'␟'+stNm(m.name)+'|'+stVol(m.volume); }
+function stSameItem(m, skuId, name, vol){
+  return (skuId && m.sku_id) ? (String(m.sku_id)===String(skuId))
+                             : (stNm(m.name)===stNm(name) && stVol(m.volume)===stVol(vol));
+}
 function stSummary(filterCus){
   const map={};
   (ST_MOVES||[]).forEach(m=>{
     if(filterCus && String(m.customer)!==filterCus) return;
     const k=stKey(m);
     if(!map[k]) map[k]={customer:m.customer, name:m.name||m.sku_id||'—', volume:m.volume||'', in:0, out:0};
+    if(m.sku_id && m.name) map[k].name=m.name;   // 同一支酒併成一列時，用有酒款編號那筆的名稱
     const q=parseFloat(m.qty)||0;
     if(String(m.direction)==='out') map[k].out+=q; else map[k].in+=q;
   });
@@ -44,9 +54,7 @@ function stBalanceFor(cus, skuId, name, vol){
   let bal=0;
   (ST_MOVES||[]).forEach(m=>{
     if(String(m.customer)!==String(cus)) return;
-    const same = skuId ? (String(m.sku_id)===String(skuId))
-                       : (!m.sku_id && String(m.name||'')===String(name||'') && String(m.volume||'')===String(vol||''));
-    if(!same) return;
+    if(!stSameItem(m, skuId, name, vol)) return;
     const q=parseFloat(m.qty)||0;
     bal += (String(m.direction)==='out') ? -q : q;
   });
@@ -157,6 +165,7 @@ async function stSaveMove(){
 let _stDeleting=false;
 async function stDeleteMove(moveId){
   if(!moveId||_stDeleting) return;
+  if(typeof needOwner==='function' && !needOwner('刪除寄倉紀錄')) return;   // 2026-09-01：第二道防線（真正把關在後端）
   if(!confirm('確定刪除這筆寄倉紀錄？（只有登記錯誤才建議刪除，刪除會留在異動日誌）')) return;
   _stDeleting=true;
   try{
@@ -175,6 +184,25 @@ async function stDeleteMove(moveId){
    ・冪等：每筆帶 src='VF:<單號>:<第幾次出貨>'，後端同 src 會跳過，重印驗收單不會重複計
    ============================================================ */
 /* 某客戶在寄倉的總剩餘（不分酒款）——判斷聰明預設用 */
+/* 把某張驗收單某一次出貨產生的寄倉紀錄全部刪掉（重印／改數量前用）。
+   只刪 src 前綴完全吻合的，其他紀錄不會被碰到。 */
+async function stRemoveMovesBySrc(no, srcTag){
+  const prefix='VF:'+no+':'+srcTag+':';
+  const d=await readCall({action:'getStorageData', token:AUTH_TOKEN}, true);
+  const list=(d&&d.ok&&Array.isArray(d.moves))?d.moves:[];
+  const hit=list.filter(m=>String(m.src||'').indexOf(prefix)===0);
+  for(const m of hit){
+    try{ await apiCall({action:'deleteStorageMove', token:AUTH_TOKEN, move_id:m.move_id}); }catch(e){}
+  }
+  if(hit.length) ST_MOVES=null;
+  return hit.length;
+}
+/* 這張驗收單上這些酒款，客戶目前在我方倉庫還有多少（用來決定「入倉／提領」的預設） */
+function stBalanceForRows(cus, rows){
+  let bal=0;
+  (rows||[]).forEach(r=>{ bal += stBalanceFor(cus, '', r.name, r.vol); });
+  return bal;
+}
 function stCustomerTotal(cus){
   let bal=0;
   (ST_MOVES||[]).forEach(m=>{
@@ -186,6 +214,9 @@ function stCustomerTotal(cus){
 /* 驗收單存檔後呼叫：把這批「本次出貨」寫進寄倉帳
    d：驗收單資料（client/no/shipDate/rows），dir：'in'｜'out'，srcTag：第幾次出貨 */
 async function stSyncFromVerify(d, dir, srcTag){
+  /* 2026-09-01：重印／編輯後重新產生時，先把「同一張單同一次出貨」的舊紀錄刪掉再重寫，
+     否則後端會因為 src 相同直接跳過，寄倉數字永遠停在第一次的舊值（複檢 #8）。 */
+  if(d && d.__stReplace){ try{ await stRemoveMovesBySrc(d.no, srcTag); }catch(e){} }
   const moves=(d.rows||[])
     .map(r=>({ qty:parseFloat(r.thisShip)||0, name:r.name, vol:r.vol }))
     .filter(r=>r.qty>0)

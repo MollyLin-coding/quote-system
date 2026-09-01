@@ -395,6 +395,7 @@ function fillHalf(){
 function closeOrdEdit(){ document.getElementById('oe-overlay').style.display='none'; ORD_EDITING=null; }
 async function saveOrdEdit(){
   if(!ORD_EDITING) return;
+  if(typeof needOwner==='function' && !needOwner('修改訂單進度')) return;   // 2026-09-01：第二道防線
   if(_busy.ordEdit) return; _busy.ordEdit=true;
   const fields={ status:document.getElementById('oe-status').value };
   ['cust_lot','grand_total','deposit_amt','deposit_date','ship_date_est','ship_date_actual','invoice_no','invoice_date',

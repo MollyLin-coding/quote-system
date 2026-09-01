@@ -401,7 +401,7 @@ function openCusEdit(key){
   set('ship_address',  c?c.shipAddress:'');  set('pay_habit',  c?c.payHabit:'');
   set('tags',   c?c.tags:'');          set('note',        c?c.note:'');
   set('active', (m && String(m.active).toUpperCase()==='N') ? 'N' : 'Y');
-  g('cus-f-del').style.display = m ? 'inline-block' : 'none';
+  g('cus-f-del').style.display = (m && !(typeof isOwner==='function' && !isOwner())) ? 'inline-block' : 'none';   // 2026-09-01：一般使用者不該重新看到刪除鈕
   g('cus-edit-overlay').style.display='flex';
   setTimeout(()=>{ const e=g('cus-f-name'); if(e) e.focus(); }, 50);
 }

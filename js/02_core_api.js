@@ -41,6 +41,11 @@ const OWNER_ONLY_FNS = [
   'openCalAdd','openCalEdit','saveCalItem','deleteCalItem','syncGCal','toggleTodoDone',
   // 今日待辦上的入口（點下去會開 owner-only 的編輯彈窗，儲存鈕被藏＝填半天存不進去）
   'tdOpenOrder','tdOpenCal',
+  // 客戶寄倉（2026-09-01 複檢補：原本整頁對員工全開，連刪除鈕都在）
+  //   ⚠ 只擋「刪除」，登記入倉／提領仍開放給員工（倉庫現場要用）。要一起鎖起來就把 stSaveMove 也加進來。
+  'stDeleteMove',
+  // 今日焦點的打勾（等同於改訂單追蹤的實際出貨日／完成狀態，訂單對員工是唯讀）
+  'calFocusShip','calFocusDone',
   // 刪除類
   'deleteRecord','vmDelForm','vmDelReport'
 ];
@@ -62,7 +67,11 @@ function roleSweep(){
     /* 複檢 2026-08-13：表格的資料列（tr/td）也帶 onclick（點列＝開編輯進度），原本整列被藏掉，
        造成月報表「明細一列都沒有、合計卻還顯示金額」，看起來像資料掉了。
        資料列本身只是唯讀內容，改成只拿掉點擊行為、不隱藏內容。 */
-    if(el.tagName==='TR'||el.tagName==='TD'){
+    /* 2026-09-01 複檢追加：今日待辦的三張卡片（🚚 出貨／💰 尾款／🧾 未開發票）每一列是
+       <button class="td-row">，點下去會開 owner-only 的「編輯進度」。原本整列被藏起來 →
+       員工看到的是「標題寫 3 件、底下一片空白」，會以為系統壞了或資料掉了。
+       跟資料列同樣處理：內容留著、只拿掉點擊。 */
+    if(el.tagName==='TR'||el.tagName==='TD'||el.classList.contains('td-row')){
       el.dataset.roleHidden='1'; el.removeAttribute('onclick'); el.style.cursor='default'; return;
     }
     el.dataset.roleHidden='1'; el.style.display='none';
@@ -854,6 +863,7 @@ async function previewRecordQuote(quoteNo){
 
 /* ---- 刪除報價單 ---- */
 async function deleteRecord(quoteNo, cliName){
+  if(typeof needOwner==='function' && !needOwner('刪除報價單')) return;   // 2026-09-01：第二道防線（真正把關在後端 OWNER_ONLY_ACTIONS_）
   if(!confirm(`確定刪除報價單 ${quoteNo}（${cliName}）？\n此動作會將其標記為已刪除。`)) return;
   try {
     const data=await apiCall({ action:'deleteQuote', token:AUTH_TOKEN, quoteNo });

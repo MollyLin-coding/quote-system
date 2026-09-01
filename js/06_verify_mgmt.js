@@ -260,25 +260,29 @@ function vmRenderTaster(){
 }
 /* ---- 刪除（後端 v32：deleteVerification／deleteVerifyForm／deleteShipment，皆 {id}→整列刪除、不可復原）---- */
 async function vmDelReport(id, no){
+  if(typeof needOwner==='function' && !needOwner('刪除回報紀錄')) return;   // 2026-09-01：第二道防線
   if(!id){ toast('這筆沒有編號，無法刪除','err'); return; }
   if(!confirm(`確定刪除這筆回報紀錄${no?`（單號 ${no}）`:''}？\n刪除後無法復原。`)) return;
   if(_busy.vmDel) return; _busy.vmDel=true;
+  const snap=VM_DATA;   // apiCall（寫入類）會把 VM_DATA 清空，失敗時要放回去，否則整頁卡在空狀態
   try{
     const d=await apiCall({ action:'deleteVerification', token:AUTH_TOKEN, id });
-    if(!d.ok){ toast(d.error||'刪除失敗','err'); return; }
+    if(!d.ok){ if(!VM_DATA) VM_DATA=snap; toast(d.error||'刪除失敗','err'); vmBuild&&loadVerifyMgmt(); return; }
     toast('已刪除這筆回報','ok'); await loadVerifyMgmt(true);
-  }catch(e){ toast(e.message||'刪除失敗','err'); }
+  }catch(e){ if(!VM_DATA) VM_DATA=snap; toast(e.message||'刪除失敗','err'); }
   finally{ _busy.vmDel=false; }
 }
 async function vmDelForm(id, no){
+  if(typeof needOwner==='function' && !needOwner('刪除驗收單留底')) return;   // 2026-09-01：第二道防線
   if(!id){ toast('這筆沒有編號，無法刪除','err'); return; }
   if(!confirm(`確定刪除這筆驗收單留底${no?`（單號 ${no}）`:''}？\n只會刪掉這筆產生紀錄，已印出的驗收單 PDF 不受影響。刪除後無法復原。`)) return;
   if(_busy.vmDelForm) return; _busy.vmDelForm=true;
+  const snap=VM_DATA;
   try{
     const d=await apiCall({ action:'deleteVerifyForm', token:AUTH_TOKEN, id });
-    if(!d.ok){ toast(d.error||'刪除失敗','err'); return; }
+    if(!d.ok){ if(!VM_DATA) VM_DATA=snap; toast(d.error||'刪除失敗','err'); return; }
     toast('已刪除這筆驗收單留底','ok'); await loadVerifyMgmt(true);
-  }catch(e){ toast(e.message||'刪除失敗','err'); }
+  }catch(e){ if(!VM_DATA) VM_DATA=snap; toast(e.message||'刪除失敗','err'); }
   finally{ _busy.vmDelForm=false; }
 }
 /* 編輯／重印驗收單留底：把那筆紀錄帶回「產生驗收單」視窗（buildVerifyModal 在 09_verify_form.js）。
@@ -302,7 +306,16 @@ function vmEditForm(id){
   }
   // 「第幾次出貨」推估＝同單號、比這筆更早的留底數＋1（欄位仍可手改）
   const earlier=((VM_DATA&&VM_DATA.forms)||[]).filter(x=>String(x.no||'').trim()===noStr && String(x.created_at||'')<String(f.created_at||'')).length;
-  VERIFY_DATA={ no:noStr, client:vmClientOf(noStr)||'', priorCount:earlier,
+  /* 2026-09-01 複檢 #8：原本重建時漏了 storage 旗標 → 重印／改數量時整個寄倉區塊不會出現，
+     寄倉庫存永遠停在第一次的數字。改成從那張報價單的 docopts 重新判斷一次。 */
+  let _stOn=false;
+  try{
+    const _q=(ORDERS_CACHE||[]).find(x=>String(x.no)===noStr);
+    const _items=(_q&&_q.items)||[];
+    const _do=_items.find(it=>it&&it.itemType==='docopts');
+    if(_do&&_do.flavorList){ const _o=JSON.parse(_do.flavorList); _stOn=!!(_o.storage&&_o.storage!=='0'&&_o.storage!=='N'); }
+  }catch(_){}
+  VERIFY_DATA={ no:noStr, client:vmClientOf(noStr)||'', priorCount:earlier, storage:_stOn,
     rows:items.map(it=>({ name:it.name||'', lot:it.lot||'', vol:it.vol||'',
       mfg:vmLocalYmd(it.mfg)||'', ordered:parseFloat(it.ordered)||0,
       thisShip:(it.thisShip!=null&&it.thisShip!=='')?it.thisShip:0,
@@ -334,7 +347,10 @@ function vmClipFallback(text){
 }
 /* 處理狀態 */
 function openVmProc(id){
-  const r=(VM_DATA.reports||[]).find(x=>String(x.id)===String(id)); if(!r){ toast('查無此回報','err'); return; }
+  /* 2026-09-01 複檢：VM_DATA 會被任何一次寫入（rcClear）清成 null，這裡原本沒防護 →
+     直接 TypeError，按「處理」完全沒反應而且畫面上沒有任何訊息。 */
+  const r=((VM_DATA&&VM_DATA.reports)||[]).find(x=>String(x.id)===String(id));
+  if(!r){ toast(VM_DATA?'查無此回報':'資料剛被更新，正在重新載入…請再按一次','err'); if(!VM_DATA) loadVerifyMgmt(true); return; }
   VM_PROC_ID=id;
   document.getElementById('vmp-info').innerHTML=`<b>${escHtml(r.no||'')}</b>　${escHtml(r.client||vmClientOf(r.no)||'')}${r.item?('<br>'+escHtml(r.item)):''}${r.desc?('<br>'+escHtml(r.desc)):''}`;
   document.getElementById('vmp-status').value=vmStatusNorm(r.status);
@@ -350,11 +366,12 @@ async function saveVmProc(){
   const fields={ status:document.getElementById('vmp-status').value, handle_note:document.getElementById('vmp-handle_note').value,
     amount:document.getElementById('vmp-amount').value, closed_date:document.getElementById('vmp-closed_date').value };
   if(fields.status==='結案'&&!fields.closed_date) fields.closed_date=vmToday();
+  const snap=VM_DATA;
   try{
     const d=await apiCall({action:'updateVerificationStatus', token:AUTH_TOKEN, id:VM_PROC_ID, fields});
-    if(!d.ok){ toast(d.error||'儲存失敗','err'); return; }
+    if(!d.ok){ if(!VM_DATA) VM_DATA=snap; toast(d.error||'儲存失敗','err'); return; }
     toast('已更新處理狀態','ok'); closeVmProc(); await loadVerifyMgmt(true);
-  }catch(e){ toast(e.message||'儲存失敗','err'); }
+  }catch(e){ if(!VM_DATA) VM_DATA=snap; toast(e.message||'儲存失敗','err'); }
   finally{ _busy.vmProc=false; btnBusy('vmp-save',false); }
 }
 /* 手動登記客訴 */
