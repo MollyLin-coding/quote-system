@@ -88,10 +88,24 @@ const DIGEST = {
   });
   await p4.waitForTimeout(400);
   check('勾了記住我 → localStorage 有存通行證', await p4.evaluate(() => !!localStorage.getItem('qs_session_v1')));
-  check('存的內容有 8 小時效期', await p4.evaluate(() => {
+  check('存的內容有 90 天效期（2026-08-31 起：除非登出否則不再打 PIN）', await p4.evaluate(() => {
     const c = JSON.parse(localStorage.getItem('qs_session_v1'));
-    const h = (c.exp - Date.now()) / 3600000;
-    return c.t === 'tok-123' && h > 7.9 && h <= 8.01;
+    const days = (c.exp - Date.now()) / 86400000;
+    return c.t === 'tok-123' && days > 89.9 && days <= 90.01;
+  }));
+
+  /* ---------- 4b. 2026-08-31：持續在用 → 到期時間會被 rememberTouch 一直往後推（滑動視窗） ---------- */
+  await p4.evaluate(() => {
+    const c = JSON.parse(localStorage.getItem('qs_session_v1'));
+    c.exp = Date.now() + 1000;                          // 模擬只剩 1 秒就過期
+    localStorage.setItem('qs_session_v1', JSON.stringify(c));
+  });
+  await p4.evaluate(async () => { try{ await apiCall({action:'getQuotes', token:AUTH_TOKEN}); }catch(e){} });
+  await p4.waitForTimeout(200);
+  check('4b. 快過期時只要正常用（apiCall 成功）→ 到期時間被推回 90 天，不會突然要求重打 PIN', await p4.evaluate(() => {
+    const c = JSON.parse(localStorage.getItem('qs_session_v1'));
+    const days = (c.exp - Date.now()) / 86400000;
+    return days > 89 && days <= 90.01;
   }));
   reset();
   await p4.reload();                                   // 模擬關掉分頁再回來
