@@ -65,6 +65,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
 .cb{padding:20px}
 .fg{display:grid;gap:14px}
 .fg2{grid-template-columns:1fr 1fr}
+/* 彈窗內的兩欄排版（2026-09-01：原本寫成 inline style，手機上蓋不掉，日期欄被擠到看不完） */
+.fgm2{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+@media (max-width:860px){ .fgm2{grid-template-columns:1fr} }
 .fg3{grid-template-columns:1fr 1fr 1fr}
 .fg4{grid-template-columns:1fr 1fr 1fr 1fr}
 .fg1{grid-template-columns:1fr}
@@ -441,6 +444,10 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
   .crow-top{min-width:520px}
   .c-hdr-row{min-width:520px}
   #ith-bot{min-width:480px}
+  /* 2026-09-01 複檢：原本只有表頭撐到 480px，下面的資料列會被壓縮成畫面寬 →
+     標題寫「單價」的位置，底下那格其實是別的欄位，在手機上很容易把金額打錯欄。 */
+  #itbody-bot .itr{min-width:480px}
+  #banquet-addon-card .itr{min-width:420px}
   #banquet-addon-card .ith{min-width:420px}
   .v2box{max-width:calc(100vw - 20px)!important;width:calc(100vw - 20px);padding:16px 18px}
   .v2ov{padding:14px 10px}
