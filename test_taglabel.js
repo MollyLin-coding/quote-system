@@ -13,6 +13,17 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
   page.on('console', m => { if (m.type() === 'error' && !isNoise(m.text())) errors.push('CONSOLE: ' + m.text()); });
 
   await page.goto('http://localhost:8899/index.html');
+  /* 開場的 loadLoginUsers()（99_boot.js）離線一定失敗，失敗路徑會呼叫 rcClear()（RC_GEN++）
+     把 RC_STORE／各模組衍生資料整包洗掉。若在這一發之前就塞資料／stub apiCall，
+     資料會被洗掉或 stub 被繞過。這裡等 RC_GEN 連續 800ms 不再變動才視為開場結束（不用固定秒數）。 */
+  await page.waitForLoadState('networkidle').catch(() => {});
+  await page.waitForFunction(() => {
+    if (typeof RC_GEN === 'undefined') return false;
+    const now = Date.now();
+    if (window.__genSeen !== RC_GEN) { window.__genSeen = RC_GEN; window.__genAt = now; return false; }
+    return (now - (window.__genAt || now)) > 800;
+  }, null, { timeout: 30000 });
+
   const results = [];
   const check = (name, cond) => results.push([cond ? 'PASS' : 'FAIL', name]);
 
@@ -110,21 +121,32 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
     setType('banquet');
     document.getElementById('f-cli').value = '宴會客戶';
     document.getElementById('f-tag-lot').value = '2026/08/08';
-    document.getElementById('ban-g1-price').value = '150';
-    document.getElementById('ban-g1-qty').value = '100';
+    /* 2026-08-31 起兩組客製化調酒改成「每一款酒各自一列」（addBanGroupRow / banG1Items），
+       不再是整組共用的 ban-g1-price / ban-g1-qty 兩個輸入框（那兩個 id 已不存在）。 */
+    addBanGroupRow('g1', { name: '甘蔗檸檬Mojito', qty: 100, price: 150 });
     calcBan();
     return collectQuote();
   });
   check('宴會單也會存 taglabel 列', (q7.items || []).some(it => it.itemType === 'taglabel'));
+  check('宴會單：調酒款列照常存成 banquet_group', (() => {
+    const bg = (q7.items || []).filter(it => it.itemType === 'banquet_group');
+    return bg.length === 1 && bg[0].name === '甘蔗檸檬Mojito' && +bg[0].subtotal === 15000;
+  })());
   const rt7 = JSON.parse(JSON.stringify(q7)); delete rt7.tagLot; delete rt7.tagCli; rt7.quoteNo = '20260731-79';
   const r7 = await page.evaluate((q) => { resetAll(true); loadQuoteIntoForm(q);
     return { lot: document.getElementById('f-tag-lot').value,
-             free: banFreeItems.length, addon: banAddonItems.length }; }, rt7);
-  check('宴會單重開：標籤還原', r7.lot === '2026/08/08');
+             cli: document.getElementById('f-tag-cli').value,
+             free: banFreeItems.length, addon: banAddonItems.length,
+             g1: banG1Items.length, g2: banG2Items.length,
+             g1names: banG1Items.map(id => document.getElementById('bg-g1-' + id).querySelector('[data-f="name"]').value) }; }, rt7);
+  check('宴會單重開：標籤還原', r7.lot === '2026/08/08' && r7.cli === '');
   check('宴會單重開：taglabel 不混進宴會品項列', r7.free === 1 && r7.addon === 1); // 各只有預設空列
+  check('宴會單重開：taglabel 不混進調酒組列', r7.g1 === 1 && r7.g2 === 0 && r7.g1names.join() === '甘蔗檸檬Mojito');
 
   /* ---------- 7) 預覽頁首會顯示標籤 ---------- */
   const pv = await page.evaluate(() => {
+    /* resetAll() 不會改單型，上一段把畫面切成宴會單了；這裡要驗的是瓶裝單頁首，先切回來。 */
+    setType('bottle');
     resetAll(true);
     document.getElementById('f-cli').value = '預覽客戶';
     document.getElementById('f-tag-lot').value = 'Lot 31';

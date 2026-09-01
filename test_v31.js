@@ -1,14 +1,35 @@
 /* v31 三功能離線測試：PDF 留舊版＋歷史版本／發票照片上傳／分批出貨 */
 const { chromium } = require('/opt/node-tools/node_modules/playwright');
 
+/* 開機競態：99_boot.js 開場會呼叫 loadLoginUsers() 打真的 getLoginUsers。
+   離線時這一發必失敗，而 getLoginUsers 不在 RC_READ_ACTIONS 白名單裡，
+   apiCall 的 catch 會執行 rcClear() → 觸發 onCacheClear 把 ORDERS_CACHE／
+   SHP_SUM／CAL_ITEMS 等全部歸零（實測開頁後約 0.5 秒）。
+   測試若在那之前塞資料就會被洗掉，所以每次 goto 後都先等這一發結束再動手。
+   判斷依據：loadLoginUsers 一開始把登入下拉寫成「載入中…」，
+   不管成功或失敗都會在 rcClear() 之後才改掉那段文字。 */
+async function settleBoot(p) {
+  await p.waitForFunction(() => {
+    const s = document.getElementById('login-user');
+    return !s || !/載入中/.test(s.textContent || '');
+  }, { timeout: 60000 });
+  // 再確認 RC_GEN 不再變動（不會有第二發把資料洗掉）
+  const g1 = await p.evaluate(() => RC_GEN);
+  await p.waitForTimeout(250);
+  const g2 = await p.evaluate(() => RC_GEN);
+  if (g1 !== g2) throw new Error('RC_GEN 仍在變動，開機請求尚未結束');
+}
+
 (async () => {
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
   const page = await browser.newPage();
   const errors = [];
+  const IGNORE_BOOT_NET = /script\.google\.com|Failed to load resource|net::ERR_/;   // 開機那一發真的後端請求離線必失敗，不算產品錯誤
   page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
-  page.on('console', m => { if (m.type() === 'error') errors.push('CONSOLE: ' + m.text()); });
+  page.on('console', m => { if (m.type() === 'error' && !IGNORE_BOOT_NET.test(m.text())) errors.push('CONSOLE: ' + m.text()); });
 
   await page.goto('http://localhost:8899/index.html');
+  await settleBoot(page);
   await page.evaluate(() => {
     document.getElementById('login-overlay').style.display = 'none';
     AUTH_TOKEN = 'test-token';
@@ -42,6 +63,14 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
 
   const results = [];
   const check = (name, cond) => results.push([cond ? 'PASS' : 'FAIL', name]);
+
+  /* 迴歸哨兵：確認 settleBoot 真的把開機那一發等完了。
+     若沒等（或等法失效），這裡塞進去的資料會在 rcClear() 觸發 onCacheClear 時被清成 null。 */
+  await page.evaluate(() => { ORDERS_CACHE = [{ no: '__canary__' }]; SHP_SUM = { __canary__: 1 }; });
+  await page.waitForTimeout(1200);
+  check('開機 rcClear 競態已結束（快取不會被洗掉）', await page.evaluate(() =>
+    ORDERS_CACHE !== null && Array.isArray(ORDERS_CACHE) && ORDERS_CACHE[0] && ORDERS_CACHE[0].no === '__canary__' && !!SHP_SUM));
+  await page.evaluate(() => { ORDERS_CACHE = null; SHP_SUM = null; });
 
   /* ---------- 功能一：產文件視窗 ---------- */
   await page.evaluate(() => { editingQuoteNo = 'T1'; generateOfficialDocument(); });
@@ -152,6 +181,11 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
   }));
 
   // 徽章
+  // shpSaveRow 成功後會背景呼叫 loadOrders()，stub 的 getQuotes 回空陣列 → ORDERS_CACHE 被重建成 []，
+  // 所以這裡跟前面幾段一樣先把要檢查的那張單塞回去（原本沒補這一段就是 ORDERS_CACHE[0] undefined 的 crash 來源）。
+  await page.evaluate(() => {
+    ORDERS_CACHE = [{ no: 'T1', client: '測試客戶', type: '瓶裝', typeKey: 'bottle', total: 10000, quoteDate: '2026-07-01', expiry: '', st: { status: 'shipped', invoice_photos: 'https://drive.google.com/folder/inv_T1' }, src: 'std' }];
+  });
   await page.evaluate(async () => { await loadShipmentBadges(); });
   check('訂單列徽章 分批×2', await page.evaluate(() => {
     return orderBadges(ORDERS_CACHE[0]).includes('分批×2');
@@ -160,6 +194,7 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
   /* ---------- 手機版不溢出 ---------- */
   const mob = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await mob.goto('http://localhost:8899/index.html');
+  await settleBoot(mob);
   await mob.evaluate(() => {
     document.getElementById('login-overlay').style.display = 'none';
     AUTH_TOKEN = 't'; window.apiCall = async () => ({ ok: true, versions: [], orders: [], shipments: [] });

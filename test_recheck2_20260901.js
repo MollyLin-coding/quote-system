@@ -75,7 +75,11 @@ const results=[]; const check=(n,c,x)=>results.push([c?'PASS':'FAIL',n,x||'']);
     const guarded = (typeof needOwner==='function') && (needOwner('測試')===false);
     return { stDel:inList('stDeleteMove'), calShip:inList('calFocusShip'), calDone:inList('calFocusDone'), guarded };
   });
-  check('#13 stDeleteMove／calFocusShip／calFocusDone 都已列入老闆專用', r13.stDel&&r13.calShip&&r13.calDone, JSON.stringify(r13));
+  /* 2026-09-02 Molly 定案「其他使用者可登記可編輯，但都須留底」→ 寄倉的刪除已改成「作廢」
+     （紀錄留著、記誰在什麼時候作廢的），所以 stDeleteMove 刻意從老闆專用名單移除。
+     calFocusShip／calFocusDone 是改訂單追蹤的實際出貨日，仍然只有老闆能按。 */
+  check('#13 calFocusShip／calFocusDone 仍是老闆專用', r13.calShip&&r13.calDone, JSON.stringify(r13));
+  check('#13 寄倉作廢（stDeleteMove）2026-09-02 起開放給員工', r13.stDel===false, JSON.stringify(r13));
   check('#13 needOwner() 對一般使用者會回 false（第二道防線已可用）', r13.guarded===true);
 
   const r13b=await p3.evaluate(async()=>{

@@ -30,6 +30,15 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
   const results = [];
   const check = (name, cond) => results.push([cond ? 'PASS' : 'FAIL', name]);
 
+  /* 99_boot.js 開場會打一發真的 getLoginUsers（離線必失敗），apiCall 的 catch 會執行 rcClear()
+     （getLoginUsers 不在 RC_READ_ACTIONS 白名單）→ 把 ORDERS_CACHE／CAL_ITEMS 等清空。
+     實測本機離線是開頁後幾十 ms～數百 ms（視網路逾時而定，慢的環境會晚到落在後面的測試段裡）。
+     先等那一發結束（登入下拉不再是「載入中」）再開始塞資料，測試就不會偶發被清空。 */
+  await page.waitForFunction(() => {
+    const sel = document.getElementById('login-user');
+    return sel && sel.options.length > 0 && !/載入中/.test(sel.options[0].textContent);
+  }, null, { timeout: 30000 });
+
   await page.evaluate(() => {
     document.getElementById('login-overlay').style.display = 'none';
     AUTH_TOKEN = 'test-token';
@@ -70,8 +79,8 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
     document.getElementById('svc-amt1').value = '3000';
     document.getElementById('svc-amt2').value = '800';
     document.getElementById('svc-qty').value = '2';
-    document.getElementById('ban-g1-price').value = '100';
-    document.getElementById('ban-g1-qty').value = '10';
+    // 2026-08-31 起客製化調酒改成每一款各自一列（ban-g1-price／ban-g1-qty 已不存在）
+    addBanGroupRow('g1', { name: '客製化調酒', price: 100, qty: 10 });
     calcBan();
     return collectQuote();
   });
@@ -202,18 +211,40 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
   check('calSnap5(14:03) → 14:05', r12[1] === '14:05');
   check('calSnap5(09:59) → 10:00', r12[2] === '10:00');
 
-  /* ---------- 11) eventsOn 用有效狀態判斷報價到期 ---------- */
+  /* ---------- 11) eventsOn 用有效狀態（effOrdStatus）判斷該不該產生訂單事件 ----------
+     ⚠ 2026-08-08 Molly：「報價到期」提醒整個拿掉了（js/07_calendar.js:42、:161、js/05_orders.js:140），
+     eventsOn 不再產生 ⏰ exp 事件。原本「沒進度的單照常顯示報價到期」是 8/03 當時的行為，
+     已被後來的產品決策取代 → 這裡改成鎖住「到期日一律不冒 ⏰」，
+     另外補上 effOrdStatus 真正還在生效的分支（已取消的單不產生出貨事件）。 */
   const r13 = await page.evaluate(() => {
+    CAL_KINDS.order = true;
     ORDERS_CACHE = [
       { no: '20260720-01', client: '已收訂客戶', type: '瓶裝', typeKey: 'bottle', total: 100, quoteDate: '2026-07-20', expiry: '2026-08-20',
         st: { quote_no: '20260720-01', status: 'quoted', deposit_date: '2026-07-25' }, src: 'std' },
       { no: '20260720-02', client: '純報價客戶', type: '瓶裝', typeKey: 'bottle', total: 100, quoteDate: '2026-07-20', expiry: '2026-08-20', st: null, src: 'std' }
     ];
     CAL_ITEMS = [];
-    return eventsOn('2026-08-20').map(e => e.txt);
+    const evs = eventsOn('2026-08-20');
+    return { txt: evs.map(e => e.txt), kinds: evs.map(e => e.t) };
   });
-  check('已收訂金的單不再顯示「報價到期」', !r13.some(t => t.includes('已收訂客戶') && t.includes('報價到期')));
-  check('沒進度的單照常顯示「報價到期」', r13.some(t => t.includes('純報價客戶') && t.includes('報價到期')));
+  check('已收訂金的單不再顯示「報價到期」', !r13.txt.some(t => t.includes('已收訂客戶') && t.includes('報價到期')));
+  check('2026-08-08 起：到期日一律不再產生 ⏰ 報價到期事件',
+    !r13.txt.some(t => t.includes('報價到期')) && !r13.kinds.includes('exp'));
+
+  // effOrdStatus 仍在生效的分支：已取消的單不產生任何訂單事件（出貨提醒也不該冒出來）
+  const r13b = await page.evaluate(() => {
+    CAL_KINDS.order = true;
+    CAL_ITEMS = [];
+    ORDERS_CACHE = [
+      { no: '20260810-01', client: '已取消客戶', type: '瓶裝', typeKey: 'bottle', total: 100, quoteDate: '2026-08-01', expiry: '',
+        st: { quote_no: '20260810-01', status: 'cancelled', ship_date_est: '2026-08-25' }, src: 'std' },
+      { no: '20260810-02', client: '進行中客戶', type: '瓶裝', typeKey: 'bottle', total: 100, quoteDate: '2026-08-01', expiry: '',
+        st: { quote_no: '20260810-02', status: 'quoted', deposit_date: '2026-08-05', ship_date_est: '2026-08-25' }, src: 'std' }
+    ];
+    return eventsOn('2026-08-25').map(e => e.txt);
+  });
+  check('已取消的單不產生出貨事件', !r13b.some(t => t.includes('已取消客戶')));
+  check('未取消的單：預計出貨日照常產生 🚚 事件', r13b.some(t => t.includes('進行中客戶') && t.includes('出貨')));
 
   /* ---------- 12) rcClear 連 RC_INFLIGHT 一起清 ---------- */
   const r14 = await page.evaluate(async () => {
@@ -224,7 +255,12 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
     rcClear();                                  // 模擬寫入清快取
     let gotNew = false;
     window.apiCall = async (p) => { gotNew = true; return { ok: true, quotes: ['新資料'] }; };
-    const d2 = await readCall(P);               // 清除後的新讀取：不該搭到舊班車
+    // 清除後的新讀取：不該搭到舊班車。萬一真的搭到了（RC_INFLIGHT 沒被清），
+    // 舊那班永遠不會回 → 這裡加 2 秒保險，讓測項乾淨地 FAIL 而不是整支測試卡死。
+    const d2 = await Promise.race([
+      readCall(P),
+      new Promise(res => setTimeout(() => res({ quotes: ['卡在舊班車'] }), 2000))
+    ]);
     resolveOld();
     window.apiCall = async (p) => ({ ok: true });
     return { gotNew, fresh: d2.quotes && d2.quotes[0] === '新資料' };
