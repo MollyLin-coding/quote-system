@@ -62,7 +62,9 @@ function respond(action, body){
     note: document.getElementById('vf-st-opts').innerText
   }));
   check('勾寄倉的單：驗收單出現寄倉區塊、預設打勾', r.box===true && r.on===true);
-  check('客戶寄倉沒庫存 → 聰明預設「入倉」', r.dir==='in' && /沒有庫存/.test(r.note));
+  /* 2026-09-01 複檢 #7：預設方向改成看「這張驗收單上的酒款」而不是客戶所有酒款的總餘額，
+     提示文字也一起改成「這幾款酒目前沒有寄倉庫存」。方向的斷言不變，只放寬文字比對。 */
+  check('客戶寄倉沒庫存 → 聰明預設「入倉」', r.dir==='in' && /沒有(寄倉)?庫存/.test(r.note));
 
   /* ---- 2. 產生驗收單 → 自動帶入全部欄位（不用重打） ---- */
   await page.evaluate(()=>{
