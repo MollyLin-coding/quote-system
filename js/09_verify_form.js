@@ -531,8 +531,16 @@ function buildVerifyDocHtml(d,opts){
   /* 2026-08-31 Molly：另存 PDF 的預設檔名（title 標籤＝瀏覽器「列印/另存為 PDF」的建議檔名）
      要加客戶批號（LOT，vf-lot 欄）＋第幾次出貨，方便同一張單多次出貨時分辨檔案。
      客戶批號選填、常是空的，空的就不印那一段。 */
-  const fnLot=(d.lot&&String(d.lot).trim())?('_'+escHtml(String(d.lot).trim())):'';
-  const docTitle=`驗收單_${escHtml(d.no)}${fnLot}_第${shipSeq}次出貨`;
+  /* 2026-09-02 Molly 追加：檔名再加上客戶名稱（放在單號後面），一眼就看得出是誰的。
+     客戶名稱可能含 / \ : * ? " < > | 這些檔名不能用的字，先換成全形或拿掉，
+     免得瀏覽器另存時把檔名截斷或整個換成預設值。 */
+  const fnSafe=v=>String(v==null?'':v).trim()
+    .replace(/[\\/:*?"<>|]/g,'-')
+    .replace(/\s+/g,'')
+    .slice(0,30);
+  const fnCli=fnSafe(d.client)?('_'+escHtml(fnSafe(d.client))):'';
+  const fnLot=(d.lot&&String(d.lot).trim())?('_'+escHtml(fnSafe(d.lot))):'';
+  const docTitle=`驗收單_${escHtml(d.no)}${fnCli}${fnLot}_第${shipSeq}次出貨`;
 
   return `<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8"><title>${docTitle}</title>
 <style>${verifyDocStyleBlock()}</style></head><body>
@@ -682,7 +690,9 @@ function buildConsignVerifyDocHtml(d, opts){
     <div class="qr">${qrSvg||''}<div class="cap">線上驗收回報</div><div class="cap2">收貨後 7 日內</div></div>
   </div>`;
   const pages=buildVerifyPages({headerBlockHtml, theadCols, rowsHtml, footBlockHtml});
-  return `<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8"><title>寄售鋪貨驗收單_${escHtml(d.client||'')}_${escHtml(d.shipDate||'')}</title>
+  /* 檔名安全字元處理同上（2026-09-02） */
+  const csSafe=v=>String(v==null?'':v).trim().replace(/[\\/:*?"<>|]/g,'-').replace(/\s+/g,'').slice(0,30);
+  return `<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8"><title>寄售鋪貨驗收單_${escHtml(csSafe(d.client))}_${escHtml(d.shipDate||'')}</title>
 <style>${verifyDocStyleBlock()}</style></head><body>
 <div class="noprint">${isPreview?'<span class="pvtag">預覽・尚未留底</span>':''}<button onclick="window.print()">列印 / 另存 PDF</button></div>
 ${pages}
