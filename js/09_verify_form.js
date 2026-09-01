@@ -60,7 +60,7 @@ function ensureVerifyOverlay(){
   ov.innerHTML=`<div class="v2box" style="max-width:940px">
     <div class="v2h"><span>產生 Lot 驗收單</span><button class="v2x" onclick="closeVerifyForm()">✕</button></div>
     <div id="vf-body"></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:16px">
       <button class="btn btn-g" onclick="closeVerifyForm()">取消</button>
       <button class="btn btn-g" onclick="previewVerifyPdf('partial')"><i class="ti ti-eye"></i>預覽分批</button>
       <button class="btn btn-g" onclick="previewVerifyPdf('full')"><i class="ti ti-eye"></i>預覽整批</button>
@@ -532,7 +532,7 @@ function ensureConsignVerifyOverlay(){
   ov.innerHTML=`<div class="v2box" style="max-width:640px">
     <div class="v2h"><span>寄售鋪貨・出貨驗收單</span><button class="v2x" onclick="closeConsignVerifyForm()">✕</button></div>
     <div id="cs-vf-body"></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:16px">
       <button class="btn btn-g" onclick="closeConsignVerifyForm()">跳過，不產生</button>
       <button class="btn btn-g" onclick="previewConsignVerifyPdf()"><i class="ti ti-eye"></i>預覽</button>
       <button class="btn btn-gold" onclick="generateConsignVerifyPdf()"><i class="ti ti-file-download"></i>產生驗收單</button>

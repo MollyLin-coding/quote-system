@@ -41,7 +41,11 @@ const RC_READ_ACTIONS = ['getQuotes','getQuoteById','getCompanyData','getOrderSt
   /* 2026-08-24：syncCalendarNow 只讀 order_status／calendar_items 兩張表、寫的是「外部」Google
      日曆，不改這兩張表本身，所以不用當成「寫入」清掉 ORDERS_CACHE/CAL_ITEMS——放進白名單，
      這樣改完出貨日期後背景補打一次才不會平白把畫面快取洗空。 */
-  'syncCalendarNow'];
+  'syncCalendarNow',
+  /* 2026-09-01 複檢：這兩支也是純讀取，原本漏列 → 開一次驗收單（要拿 QR 驗證碼）或按一次
+     行事曆的「自我檢查」，就會被當成寫入把整站快取清光：公司報價檔跟著失效（級距價/MOQ 全停）、
+     驗收管理的資料被清成空的但畫面不重畫（按鈕按了沒反應）。兩支都只讀不寫，放進白名單。 */
+  'getVerifyKey','calendarSelfCheck'];
 const RC_STORE = {};      // key -> {at, data}
 const RC_INFLIGHT = {};   // key -> Promise（同一份資料同時被要時共用）
 const RC_RESETS = [];     // 各模組登記「快取被清掉時，我的衍生資料也要歸零」
@@ -222,3 +226,26 @@ function vmLocalYmd(s){
 }
 function vmDaysSince(dstr){ const d=daysBetween(vmLocalYmd(dstr)); return d==null?null:-d; }
 function vmArr(v){ if(v==null||v==='') return []; if(Array.isArray(v)) return v; return String(v).split(/[\n,｜|]+/).map(s=>s.trim()).filter(Boolean); }
+
+/* ---- 按鈕忙碌狀態（2026-09-01 複檢）------------------------------
+   後端每趟固定 2.5 秒起跳，按下去畫面完全沒動靜，使用者會以為沒存到而重按或重填。
+   報價單／訂單追蹤本來就有做，這支是給其餘那幾顆共用的：
+     btnBusy('st-f-save', true)            → 變灰＋「儲存中…」
+     btnBusy('st-f-save', false)           → 還原原本的文字（含裡面的 icon）
+   找不到按鈕就安靜跳過，絕不能因為回饋失敗擋掉真正的儲存。
+   ------------------------------------------------------------------ */
+const BTN_BUSY_HTML = {};
+function btnBusy(id, on, busyText){
+  try{
+    const el=(typeof id==='string')?document.getElementById(id):id;
+    if(!el) return;
+    const key=el.id||String(id);
+    if(on){
+      if(BTN_BUSY_HTML[key]==null) BTN_BUSY_HTML[key]=el.innerHTML;
+      el.disabled=true; el.innerHTML=busyText||'儲存中…';
+    } else {
+      el.disabled=false;
+      if(BTN_BUSY_HTML[key]!=null){ el.innerHTML=BTN_BUSY_HTML[key]; delete BTN_BUSY_HTML[key]; }
+    }
+  }catch(e){}
+}

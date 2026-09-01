@@ -76,6 +76,8 @@ function populateCompanySelects(){
   const s2=document.getElementById('qfc-company'); if(s2){ const v=s2.value; s2.innerHTML=opts; s2.value=v; }
 }
 function companyById(id){ return (COMPANY_DATA?.companies||[]).find(c=>String(c.company_id)===String(id))||null; }
+/* 上一次「由公司報價檔自動帶入」的付款條款原文；用來判斷畫面上那段字是系統填的還是使用者自己打的 */
+let PAY_TXT_AUTOFILL = '';
 function productsOf(cid){ return (COMPANY_DATA?.products||[]).filter(p=>String(p.company_id)===String(cid)); }
 function rulesOf(cid){ return (COMPANY_DATA?.rules||[]).filter(r=>String(r.company_id)===String(cid)); }
 function productLabel(p){
@@ -130,6 +132,14 @@ function fillProductSelect(selId, cid){
    quiet=true 時不跳「已帶入…」提示（給「選既有客戶」自動連動用，避免連跳兩個提示） */
 function onSelectCompany(quiet){
   const cid=document.getElementById('qf-company').value;
+  /* 2026-09-01 複檢：存過任何一張單之後（任何寫入都會 rcClear）COMPANY_DATA 會被清成 null，
+     而全站只有「登入當下」與「同步最新酒譜」鈕會重新載入 → 之後選公司完全沒反應、酒款帶不出來、
+     級距價不再隨瓶數換、MOQ 提醒消失，再選一次還會把自動帶入的運費列清掉。
+     這裡補上：資料不在就先抓回來，再把這次的選擇重跑一遍。 */
+  if(cid && !COMPANY_DATA && typeof AUTH_TOKEN!=='undefined' && AUTH_TOKEN){
+    loadCompanyData().then(()=>onSelectCompany(quiet)).catch(()=>{});
+    return;
+  }
   SELECTED_COMPANY = cid ? companyById(cid) : null;
   RULE_SUPPRESS = {};
   const box=document.getElementById('qf-detail');
@@ -159,7 +169,22 @@ function onSelectCompany(quiet){
     toggleShipSame('f');
   }
   if(c.default_tax_mode==='inc'||c.default_tax_mode==='exc') setTaxMode(c.default_tax_mode);
-  if((c.default_pay_terms||'').trim()){ setPay(3); const t=document.getElementById('p3-txt'); if(t && !t.value.trim()) t.value=c.default_pay_terms; }
+  /* 付款條款（2026-09-01 複檢修正）：原本只在「欄位是空的」時才填，所以從 A 公司換到 B 公司時
+     畫面上留的還是 A 的條款，會把甲客戶談好的付款條件印在乙客戶的報價單上。
+     現在：空白或「上一家自動帶入的原文」都換掉；你自己打過的字仍然不覆蓋。
+     換到沒有預設條款的公司時，把上一家帶進來的字清掉並回到 Tab0，不留殘影。 */
+  {
+    const t=document.getElementById('p3-txt');
+    const dpt=(c.default_pay_terms||'').trim();
+    const cur=t?t.value.trim():'';
+    if(dpt){
+      if(t && (!cur || cur===PAY_TXT_AUTOFILL)){ t.value=dpt; PAY_TXT_AUTOFILL=dpt; }
+      setPay(3);
+    } else if(t && PAY_TXT_AUTOFILL && cur===PAY_TXT_AUTOFILL){
+      t.value=''; PAY_TXT_AUTOFILL='';
+      setPay(0);
+    }
+  }
   // preset_note
   rulesOf(c.company_id).filter(r=>r.rule_type==='preset_note').forEach(r=>{
     const note=parseJsonSafe(r.params_json,{}).note||'';
@@ -408,3 +433,12 @@ function quickAddProductCustom(){
 
 /* 寫入類動作清掉讀取快取時，公司報價檔也一併歸零（下次要用會自己重抓） */
 onCacheClear(function(){ COMPANY_DATA=null; });
+/* 2026-09-01 複檢：上面清掉之後要有人負責補回來，否則整場都是空的（見 onSelectCompany 的說明）。
+   進報價單／自訂報價單頁時確保載好——readCall 有 90 秒快取，多半不會真的多打一趟後端。 */
+onHook('afterGotoPage', function(p){
+  if((p==='new'||p==='custom') && !COMPANY_DATA && typeof AUTH_TOKEN!=='undefined' && AUTH_TOKEN){
+    loadCompanyData().catch(()=>{});
+  }
+});
+/* 清除表單時，把「這段付款條款是系統自動帶的」這個記號一起歸零 */
+onHook('afterReset', function(){ PAY_TXT_AUTOFILL=''; });

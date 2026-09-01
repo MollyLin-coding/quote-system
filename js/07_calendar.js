@@ -412,6 +412,7 @@ async function deleteCalItem(){
   if(!CAL_EDIT_ID) return;
   if(!confirm('確定刪除這個事項？')) return;
   const delId=CAL_EDIT_ID, snap=CAL_ITEMS, osnap=ORDERS_CACHE;   // apiCall（寫入類）會把 CAL_ITEMS/ORDERS_CACHE 清空，先各留一份
+  btnBusy('ce-del',true,'刪除中…');
   try{
     const d=await apiCall({ action:'deleteCalendarItem', token:AUTH_TOKEN, item_id:delId });
     if(osnap&&!ORDERS_CACHE) ORDERS_CACHE=osnap;
@@ -421,6 +422,7 @@ async function deleteCalItem(){
     renderCalendar();
     loadCalendar().catch(()=>{});
   }catch(e){ CAL_ITEMS=snap; if(osnap&&!ORDERS_CACHE) ORDERS_CACHE=osnap; toast(e.message||'刪除失敗','err'); }
+  finally{ btnBusy('ce-del',false); }
 }
 /* 2026-08-13 複檢建議 #1：自我檢查。
    這套系統最常出問題的地方是「同一條規則被抄在好幾個地方」（系統月曆／今日待辦／

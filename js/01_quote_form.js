@@ -135,7 +135,7 @@ function setType(t){
 function goConsign(){ gotoPage('consign'); }
 
 // ── COLUMN TOGGLES (bottle) ──
-let botDedCache={}, botLogoCache={}, botLotCache={};
+let botDedCache={}, botLogoCache={}, botLotCache={}, botGiftCache={};
 function toggleCol(which){
   if(which==='ded') colDed=!colDed;
   if(which==='logo') colLogo=!colLogo;
@@ -158,10 +158,11 @@ function toggleCol(which){
     if(dedEl) botDedCache[id]=dedEl.value;
     if(logoEl) botLogoCache[id]=logoEl.value;
     if(lotEl) botLotCache[id]=lotEl.value;
+    if(giftEl) botGiftCache[id]=giftEl.checked?1:0;   // 2026-09-01：欄位收起來時勾選狀態只剩快取，見下方 calc()
     /* 複檢 2026-08-06 #6：pid / 價格的 src 與手改旗標一定要一起帶走。
        少了 pid，重建後的列就跟公司報價檔脫鉤——級距價不再隨瓶數換、MOQ 提醒也消失。 */
     const priceEl=row.querySelector('[data-f="price"]');
-    return {id,name:gs(row,'name'),lot:lotEl?lotEl.value:(botLotCache[id]||''),vol:gs(row,'vol'),price:gs(row,'price'),ded:botDedCache[id]||'',logo:botLogoCache[id]||'',qty:gs(row,'qty'),lp:lpEl?lpEl.value:'',disc:diEl?diEl.value:'',discManual:(diEl&&diEl.dataset.manual==='1')?1:0,gift:(giftEl&&giftEl.checked)?1:0,mark:(markEl&&markEl.checked)?1:0,
+    return {id,name:gs(row,'name'),lot:lotEl?lotEl.value:(botLotCache[id]||''),vol:gs(row,'vol'),price:gs(row,'price'),ded:botDedCache[id]||'',logo:botLogoCache[id]||'',qty:gs(row,'qty'),lp:lpEl?lpEl.value:'',disc:diEl?diEl.value:'',discManual:(diEl&&diEl.dataset.manual==='1')?1:0,gift:(giftEl?(giftEl.checked?1:0):(botGiftCache[id]||0)),mark:(markEl&&markEl.checked)?1:0,
       pid:row.dataset.pid||'', sku:row.dataset.sku||'', listprice:row.dataset.listprice||'',
       tierBaseQty:(row.dataset.tierBaseQty!=null?row.dataset.tierBaseQty:''),   // 複檢 2026-08-11 #2：切換欄位重建列時別把「還沒動過瓶數」的狀態弄丟
       priceSrc:(priceEl&&priceEl.dataset.src!=null)?priceEl.dataset.src:'', manual:(priceEl&&priceEl.dataset.manual==='1')?1:0};
@@ -210,10 +211,16 @@ function snapshotBotRows(){
       logo:(q('logo')?q('logo').value:(botLogoCache[id]||''))||'',
       qty:gs(row,'qty'),
       mark:(q('mark')&&q('mark').checked)?1:0,
-      gift:(q('gift')&&q('gift').checked)?1:0,
+      gift:(q('gift')?(q('gift').checked?1:0):(botGiftCache[id]||0)),
       lp:(q('lp')?q('lp').value:'')||'', disc:(q('disc')?q('disc').value:'')||'',
       discManual:(q('disc')&&q('disc').dataset.manual==='1')?1:0,
       sku:row.dataset.sku||'', listprice:row.dataset.listprice||'',
+      /* 2026-09-01 複檢：原本少了 pid／tierBaseQty／priceSrc，切換單別重建品項表之後
+         這幾列就跟公司報價檔脫鉤——改瓶數不再換級距價、MOQ 提醒也不再出現，而且畫面完全看不出來。
+         （同檔 toggleCol() 的內嵌快照 2026-08-06 已修，這支姊妹函式當時漏改。） */
+      pid:row.dataset.pid||'',
+      tierBaseQty:(row.dataset.tierBaseQty!=null?row.dataset.tierBaseQty:''),
+      priceSrc:(q('price')&&q('price').dataset.src!=null)?q('price').dataset.src:'',
       manual:(q('price')&&q('price').dataset.manual==='1')?1:0 };
   }).filter(Boolean);
 }
@@ -317,7 +324,7 @@ function onMarkChange(id){
 /* 贈品／不計價 勾選變動：切換該列底色並重算總額（不計價列排除於總計） */
 function onGiftChange(id){
   const row=document.getElementById(`r-${id}`);
-  if(row){ const g=row.querySelector('[data-f="gift"]'); row.classList.toggle('gift', !!(g&&g.checked)); }
+  if(row){ const g=row.querySelector('[data-f="gift"]'); botGiftCache[id]=(g&&g.checked)?1:0; row.classList.toggle('gift', !!(g&&g.checked)); }
   calc();
 }
 /* 貼牌 MOQ 300／款 未達提醒（僅提示、不擋單）——公版買斷模式、已勾貼牌的列 */
@@ -384,7 +391,7 @@ function handleNamePaste(ev,id){
 }
 function delBotRow(id){
   const el=document.getElementById(`r-${id}`); if(el) el.remove();
-  delete botDedCache[id]; delete botLogoCache[id]; delete botLotCache[id];
+  delete botDedCache[id]; delete botLogoCache[id]; delete botLotCache[id]; delete botGiftCache[id];
   botItems=botItems.filter(i=>i!==id); calc();
 }
 /* ---- 品項明細調整順序（botItems 陣列是各處的資料順序來源，重排陣列＋DOM 即可）---- */
@@ -634,7 +641,10 @@ function calc(){
       }
       const p=gv(row,'price'),d=colDed?gv(row,'ded'):0,l=colLogo?gv(row,'logo'):0,q=gv(row,'qty');
       const lineRaw=(p+d+l)*q;
-      const giftEl=row.querySelector('[data-f="gift"]'); const isGift=!!(giftEl&&giftEl.checked);
+      /* 2026-09-01 複檢：把「贈品／不計價」欄收起來時 checkbox 根本不存在，原本一律當成要收錢
+         → 總計無聲變大、灰底劃線也消失，畫面上完全看不出來。改成欄位不在時讀快取。 */
+      const giftEl=row.querySelector('[data-f="gift"]');
+      const isGift = giftEl ? giftEl.checked : !!botGiftCache[id];
       row.classList.toggle('gift', isGift);
       if(!isGift) rawSub+=lineRaw;   // 贈品／不計價：顯示金額但不計入總計
       const el=document.getElementById(`rs-${id}`);
@@ -1091,7 +1101,7 @@ function resetAll(skipConfirm){
   { const st=document.getElementById('ob-storage'); if(st) st.checked=false; const ta=document.getElementById('ob-storage-terms'); if(ta) ta.style.display='none'; }
   { const qo=document.getElementById('f-quoteonly'); if(qo) qo.checked=false; const h=document.getElementById('taxdisp-hint'); if(h) h.textContent=''; } // 純報價勾選回預設（稅金顯示 select 由上方通用迴圈清回''＝含稅）
   if(typeof obFillTiers==='function') obFillTiers(null,true);
-  botDedCache={}; botLogoCache={}; botLotCache={};
+  botDedCache={}; botLogoCache={}; botLotCache={}; botGiftCache={};
   colDed=false; colLogo=false; colLot=false; colGift=false;
   colMark=false;
   colOwn=(qType==='ownbrand'||qType==='ownlabel');

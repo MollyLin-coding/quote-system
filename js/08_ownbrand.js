@@ -349,17 +349,17 @@ async function delConsignException(sku){
     await loadConsignCustomers(true); renderConsignExceptions(id); toast('已移除例外','ok');
   }catch(e){ toast(e.message||'刪除失敗','err'); }
 }
-let _csSaving=false;
+let _csSaving=false; btnBusy('cs-cus-save',false);
 async function saveConsignCustomerForm(){
-  if(_csSaving) return; _csSaving=true;
+  if(_csSaving) return; _csSaving=true; btnBusy('cs-cus-save',true);
   const g=x=>document.getElementById(x).value.trim();
   const id=g('cs-f-id'), name=g('cs-f-name');
-  if(!id){ toast('請填客戶代碼','err'); _csSaving=false; return; }
-  if(!name){ toast('請填客戶名稱','err'); _csSaving=false; return; }
+  if(!id){ toast('請填客戶代碼','err'); _csSaving=false; btnBusy('cs-cus-save',false); return; }
+  if(!name){ toast('請填客戶名稱','err'); _csSaving=false; btnBusy('cs-cus-save',false); return; }
   // 新增模式：代碼撞到既有客戶會整筆覆蓋對方（後端是 upsert），這裡先擋下來
   const editing=document.getElementById('cs-f-id').readOnly;
   if(!editing && CS_CUSTOMERS.some(c=>String(c.customer_id)===String(id))){
-    toast('客戶代碼「'+id+'」已存在，換一個代碼；要改既有客戶請用「客戶設定」','err'); _csSaving=false; return;
+    toast('客戶代碼「'+id+'」已存在，換一個代碼；要改既有客戶請用「客戶設定」','err'); _csSaving=false; btnBusy('cs-cus-save',false); return;
   }
   /* 複檢 2026-08-13 #3-9：折數欄按習慣打「8」或「7.5」（想表達 8 折）會被靜默改成 0.75，
      之後每一筆銷售都用 0.75 自動鎖價，月結長期錯誤而且不可追溯。改成明確擋下來。 */
@@ -367,7 +367,7 @@ async function saveConsignCustomerForm(){
   const disc=parseFloat(discRaw);
   if(discRaw!=='' && !(disc>0 && disc<=1)){
     toast('預設折數要填 0～1 之間的小數（8 折請填 0.8、7.5 折請填 0.75），不是填 8 或 7.5','err');
-    _csSaving=false; return;
+    _csSaving=false; btnBusy('cs-cus-save',false); return;
   }
   const customer={ customer_id:id, name, default_discount:(disc>0&&disc<=1)?disc:0.75,
     billing_day:g('cs-f-bill'), contact:g('cs-f-contact'), phone:g('cs-f-phone'),
@@ -384,7 +384,7 @@ async function saveConsignCustomerForm(){
     document.getElementById('cs-customer').value=id; CS_CUR=id;
     closeConsignCustomerEdit(); onSelectConsignCustomer();
   }catch(e){ toast(e.message||'儲存失敗','err'); }
-  finally{ _csSaving=false; }
+  finally{ _csSaving=false; btnBusy('cs-cus-save',false); }
 }
 
 /* ---- 登記異動 ---- */
@@ -474,13 +474,13 @@ function csGenVerifyNo(customerId){
   const stamp=n.getFullYear()+p(n.getMonth()+1)+p(n.getDate())+p(n.getHours())+p(n.getMinutes())+p(n.getSeconds());
   return 'CS-'+String(customerId||'').replace(/[^A-Za-z0-9]/g,'')+'-'+stamp;
 }
-let _csMoveSaving=false;
+let _csMoveSaving=false; btnBusy('cs-mv-save',false);
 async function saveConsignMove(){
-  if(_csMoveSaving) return; _csMoveSaving=true;
+  if(_csMoveSaving) return; _csMoveSaving=true; btnBusy('cs-mv-save',true);
   const type=document.getElementById('cs-m-type').value;
   const date=document.getElementById('cs-m-date').value;
   const note=document.getElementById('cs-m-note').value.trim();
-  if(!date){ toast('請選日期','err'); _csMoveSaving=false; return; }
+  if(!date){ toast('請選日期','err'); _csMoveSaving=false; btnBusy('cs-mv-save',false); return; }
 
   if(type==='in'){
     // 鋪貨/補貨：一次登記多款（一次呼叫 addConsignMovements，backend 用鎖包住避免單號互撞）
@@ -498,8 +498,8 @@ async function saveConsignMove(){
       return true;                                          // 其餘＝填了一半
     });
     // 先看有沒有「填了一半」的列（比較具體、對使用者更有幫助）；全部列都完全空白才顯示泛用提示
-    if(partial.length){ toast('有列只填了一半（公版酒或數量缺一個），請補齊或用 ✕ 刪掉該列','err'); _csMoveSaving=false; return; }
-    if(!valid.length && !tasterOnly.length){ toast('請至少填一款酒的公版酒與數量，或勾選「附試飲瓶」單獨贈送','err'); _csMoveSaving=false; return; }
+    if(partial.length){ toast('有列只填了一半（公版酒或數量缺一個），請補齊或用 ✕ 刪掉該列','err'); _csMoveSaving=false; btnBusy('cs-mv-save',false); return; }
+    if(!valid.length && !tasterOnly.length){ toast('請至少填一款酒的公版酒與數量，或勾選「附試飲瓶」單獨贈送','err'); _csMoveSaving=false; btnBusy('cs-mv-save',false); return; }
     const movements=valid.map(r=>({ date, customer_id:CS_CUR, sku_id:r.sku, type:'in', qty:r.qty, note }));
     try{
       if(movements.length){
@@ -542,7 +542,7 @@ async function saveConsignMove(){
         });
       }
     }catch(e){ toast(e.message||'儲存失敗','err'); }
-    finally{ _csMoveSaving=false; }
+    finally{ _csMoveSaving=false; btnBusy('cs-mv-save',false); }
     return;
   }
 
@@ -550,15 +550,15 @@ async function saveConsignMove(){
   const sku=document.getElementById('cs-m-sku').value;
   const qty=parseFloat(document.getElementById('cs-m-qty').value);
   const priceRaw=document.getElementById('cs-m-price').value.trim();
-  if(!sku){ toast('請選公版酒','err'); _csMoveSaving=false; return; }
-  if(!(qty!==0 && !isNaN(qty))){ toast('請填數量','err'); _csMoveSaving=false; return; }
-  if(type!=='adjust' && qty<0){ toast('此類型數量需為正數','err'); _csMoveSaving=false; return; }
+  if(!sku){ toast('請選公版酒','err'); _csMoveSaving=false; btnBusy('cs-mv-save',false); return; }
+  if(!(qty!==0 && !isNaN(qty))){ toast('請填數量','err'); _csMoveSaving=false; btnBusy('cs-mv-save',false); return; }
+  if(type!=='adjust' && qty<0){ toast('此類型數量需為正數','err'); _csMoveSaving=false; btnBusy('cs-mv-save',false); return; }
   // 超賣/超退提醒（提醒不硬擋，按確定仍可登記，保留彈性）
   const invRow=(CS_INV||[]).find(r=>String(r.sku_id)===String(sku));
   const balNow=invRow?(parseFloat(invRow.balance)||0):0;
   let warn='';
   if((type==='out'||type==='return') && qty>balNow) warn='這支酒在客戶端的庫存只剩 '+balNow+' 瓶，確定要登記'+(type==='out'?'銷售':'退貨')+' '+qty+' 瓶嗎？（登記後庫存會變負數）';
-  if(warn && !confirm(warn)){ _csMoveSaving=false; return; }
+  if(warn && !confirm(warn)){ _csMoveSaving=false; btnBusy('cs-mv-save',false); return; }
   const movement={ date, customer_id:CS_CUR, sku_id:sku, type, qty, note };
   if(type==='out' && priceRaw!=='') movement.unit_price=parseFloat(priceRaw)||0;
   try{
@@ -570,7 +570,7 @@ async function saveConsignMove(){
     csClearMonthly();
     loadConsignInventory(); loadConsignLedger();
   }catch(e){ toast(e.message||'儲存失敗','err'); }
-  finally{ _csMoveSaving=false; }
+  finally{ _csMoveSaving=false; btnBusy('cs-mv-save',false); }
 }
 
 /* ---- 月結 ---- */

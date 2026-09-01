@@ -119,9 +119,9 @@ function stSkuChange(){
   const s=document.getElementById('st-f-sku'), w=document.getElementById('st-f-freewrap');
   if(w) w.style.display=(s&&s.value==='__free')?'block':'none';
 }
-let _stSaving=false;
+let _stSaving=false; btnBusy('st-f-save',false);
 async function stSaveMove(){
-  if(_stSaving) return; _stSaving=true;
+  if(_stSaving) return; _stSaving=true; btnBusy('st-f-save',true,'登記中…');
   try{
     const cus=(document.getElementById('st-f-cus').value||'').trim();
     const date=document.getElementById('st-f-date').value||todayStr();
@@ -152,7 +152,7 @@ async function stSaveMove(){
     stCloseForm();
     await loadStorage(true);
   }catch(e){ toast(e.message||'登記失敗','err'); }
-  finally{ _stSaving=false; }
+  finally{ _stSaving=false; btnBusy('st-f-save',false); }
 }
 let _stDeleting=false;
 async function stDeleteMove(moveId){

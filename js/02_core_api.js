@@ -372,7 +372,9 @@ function collectQuote(){
       const name=gs(row,'name'); const sub=(gv(row,'price')+(colDed?gv(row,'ded'):0)+(colLogo?gv(row,'logo'):0))*gv(row,'qty');
       if(!name && !sub) return;
       const _marked=(row.querySelector('[data-f="mark"]')&&row.querySelector('[data-f="mark"]').checked)?'Y':'N';
-      const _gift=(row.querySelector('[data-f="gift"]')&&row.querySelector('[data-f="gift"]').checked)?'Y':'N';
+      /* 2026-09-01 複檢：贈品欄收起來時 checkbox 不存在，原本會存成「要收錢」。改讀 calc() 同一份快取。 */
+      const _giftEl=row.querySelector('[data-f="gift"]');
+      const _gift=(_giftEl ? _giftEl.checked : !!(typeof botGiftCache!=='undefined' && botGiftCache[rid]))?'Y':'N';
       let _lot=gs(row,'lot'); if(_lot.replace(/\s/g,'').toLowerCase()==='lot') _lot='';   // 未填數字的預填「Lot 」不存
       const _lpEl=row.querySelector('[data-f="lp"]'),_diEl=row.querySelector('[data-f="disc"]');
       /* 複檢 2026-08-11 #2：把「這一列是公司報價檔的哪個產品」（product_id）一起存下來。
@@ -999,7 +1001,12 @@ function loadQuoteIntoForm(q){
         const free=String(it.noCharge||'').toUpperCase()==='Y';
         const disp=free?(parseFloat(it.deduction)||0):(parseFloat(it.subtotal)||0);
         const auto=Math.round((parseFloat(it.unitPrice)||0)*(parseFloat(it.qty)||0));
-        const manual=!!disp && Math.round(disp)!==auto;
+        /* 2026-09-01 複檢：原本是 `!!disp &&`，手動小計填 0（整包招待／併入其他費用不另計）
+           會因為 0 是 falsy 而沒被勾回，重開這張單就自己變回「單價×數量」，總計無聲變大。
+           跟 2026-08-13 #3-1 修過的 banquet_group 是同一種病，當時漏了這條分支。 */
+        const _hasVal = free ? (it.deduction!=null && String(it.deduction).trim()!=='')
+                             : (it.subtotal!=null && String(it.subtotal).trim()!=='');
+        const manual=_hasVal && Math.round(disp)!==auto;
         addBanFreeRow({name:it.name, qty:it.qty, unit:it.unit, price:it.unitPrice,
           note:it.flavorList||'', free, manual, subval:(manual?Math.round(disp):'')});
       } else if(it.itemType==='banquet_addon'){

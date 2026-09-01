@@ -822,7 +822,9 @@ function exportReport(){
   const csv=[head.join(',')].concat(rows.map(o=>{
     const s=o.st||{};
     const esc=v=>'"'+String(v==null?'':v).replace(/"/g,'""').replace(/\n/g,' ')+'"';
-    return [o.no,o.type,o.client,ordCustLot(o),o.quoteDate,rptDealDate(o),Math.round(o.total),stageLabel(effOrdStatus(s)),s.deposit_amt||'',s.deposit_date||'',s.ship_date_est||'',s.ship_date_actual||'',s.invoice_no||'',s.invoice_date||'',s.invoice_last5||'',s.final_amt||'',s.final_date_est||'',s.final_date||'',s.track_note||''].map(esc).join(',');
+    /* 2026-09-01 複檢：畫面用 ordGrandTotal（訂單追蹤可手改的成交金額），匯出卻用報價單原始金額，
+       客戶追加酒款後兩邊對不起來。改成跟畫面同一個來源。 */
+    return [o.no,o.type,o.client,ordCustLot(o),o.quoteDate,rptDealDate(o),Math.round(ordGrandTotal(o)),stageLabel(effOrdStatus(s)),s.deposit_amt||'',s.deposit_date||'',s.ship_date_est||'',s.ship_date_actual||'',s.invoice_no||'',s.invoice_date||'',s.invoice_last5||'',s.final_amt||'',s.final_date_est||'',s.final_date||'',s.track_note||''].map(esc).join(',');
   })).join('\r\n');
   const blob=new Blob(['﻿'+csv],{type:'text/csv'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);

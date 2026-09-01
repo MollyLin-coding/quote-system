@@ -346,7 +346,7 @@ function openVmProc(id){
 function closeVmProc(){ document.getElementById('vmp-overlay').style.display='none'; VM_PROC_ID=null; }
 async function saveVmProc(){
   if(!VM_PROC_ID) return;
-  if(_busy.vmProc) return; _busy.vmProc=true;
+  if(_busy.vmProc) return; _busy.vmProc=true; btnBusy('vmp-save',true);
   const fields={ status:document.getElementById('vmp-status').value, handle_note:document.getElementById('vmp-handle_note').value,
     amount:document.getElementById('vmp-amount').value, closed_date:document.getElementById('vmp-closed_date').value };
   if(fields.status==='結案'&&!fields.closed_date) fields.closed_date=vmToday();
@@ -355,7 +355,7 @@ async function saveVmProc(){
     if(!d.ok){ toast(d.error||'儲存失敗','err'); return; }
     toast('已更新處理狀態','ok'); closeVmProc(); await loadVerifyMgmt(true);
   }catch(e){ toast(e.message||'儲存失敗','err'); }
-  finally{ _busy.vmProc=false; }
+  finally{ _busy.vmProc=false; btnBusy('vmp-save',false); }
 }
 /* 手動登記客訴 */
 function fillVmNoList(){
@@ -374,7 +374,7 @@ async function saveVmManual(){
   const no=document.getElementById('vmm-no').value.trim();
   const desc=document.getElementById('vmm-desc').value.trim();
   if(!no&&!desc){ toast('請至少填單號或問題說明','err'); return; }
-  _busy.vmManual=true;
+  _busy.vmManual=true; btnBusy('vmm-save',true,'登記中…');
   // 後端 addVerification 吃「扁平頂層欄位」，不是包在 record:{...} 裡面（已實測對齊）
   const payload={ action:'addVerification', token:AUTH_TOKEN, no,
     client:document.getElementById('vmm-client').value.trim(), type:document.getElementById('vmm-type').value,
@@ -384,7 +384,7 @@ async function saveVmManual(){
     if(!d.ok){ toast(d.error||'登記失敗（後端可能尚未支援手動登記）','err'); return; }
     toast('已登記','ok'); closeVmManual(); await loadVerifyMgmt(true);
   }catch(e){ toast(e.message||'登記失敗','err'); }
-  finally{ _busy.vmManual=false; }
+  finally{ _busy.vmManual=false; btnBusy('vmm-save',false); }
 }
 
 /* ============================================================
@@ -416,10 +416,10 @@ function collectCustomQuote(){
   };
 }
 async function saveCustomToBackend(){
-  if(_busy.customSave) return; _busy.customSave=true;
+  if(_busy.customSave) return; _busy.customSave=true; btnBusy('c-save-backend',true);
   calcCustom();
   const q=collectCustomQuote();
-  if(!q.client && !(parseJsonSafe(q.items_json,[]).length)){ toast('請先填寫內容再儲存','err'); _busy.customSave=false; return; }
+  if(!q.client && !(parseJsonSafe(q.items_json,[]).length)){ toast('請先填寫內容再儲存','err'); _busy.customSave=false; btnBusy('c-save-backend',false); return; }
   try{
     const d=await apiCall({ action:'saveCustomQuote', token:AUTH_TOKEN, quote:q });
     if(!d.ok){ toast(d.error||'儲存失敗','err'); return; }
@@ -428,7 +428,7 @@ async function saveCustomToBackend(){
     toast('已儲存到後台：'+(saved.quote_no||''),'ok');
     loadMyCustomQuotes();
   }catch(e){ toast(e.message||'儲存失敗','err'); }
-  finally{ _busy.customSave=false; }
+  finally{ _busy.customSave=false; btnBusy('c-save-backend',false); }
 }
 async function loadMyCustomQuotes(){
   const box=document.getElementById('cq-list'); if(!box) return;
