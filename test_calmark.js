@@ -92,8 +92,17 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
     renderCalendar();
   });
   await page.waitForTimeout(100);
-  const shipClickOk = await page.evaluate(() => document.querySelector('.cev.ship') && document.querySelector('.cev.ship').getAttribute('onclick').includes("gotoPage('orders')"));
-  check('出貨事件標籤仍可點擊跳轉訂單頁（未被 stopPropagation 誤傷）', !!shipClickOk);
+  /* 2026-09-03 刻意變更：出貨事件原本點下去只是 gotoPage('orders')（跳到訂單追蹤清單首頁，那一筆不會打開），
+     Molly 反映「看得到單號卻打不開」，改成呼叫 tdOpenOrder(單號) 直接開那張單的編輯進度。
+     這裡改成鎖住新行為（不是放鬆斷言）：仍要有 stopPropagation、且要帶得到單號。 */
+  const shipClickOk = await page.evaluate(() => {
+    const el = document.querySelector('.cev.ship'); if(!el) return null;
+    const oc = el.getAttribute('onclick') || '';
+    return { stop: oc.includes('stopPropagation'), open: oc.includes('tdOpenOrder(this.dataset.no)'),
+             no: el.getAttribute('data-no'), old: oc.includes("gotoPage('orders')") };
+  });
+  check('出貨事件標籤點下去會開那張單（stopPropagation 仍在、單號帶得到）',
+    !!shipClickOk && shipClickOk.stop && shipClickOk.open && shipClickOk.no === 'O-9' && !shipClickOk.old);
 
   /* ---------- 列表檢視（週/30天）：本來就沒有冒泡問題，確認沒有被改壞 ---------- */
   await page.evaluate(() => {
