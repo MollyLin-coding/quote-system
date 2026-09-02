@@ -46,7 +46,9 @@ function vmClientOf(no){
   if(VM_DATA){ const r=(VM_DATA.reports||[]).find(x=>x.no===no&&x.client); if(r) return r.client; }
   // 寄售鋪貨產的驗收單（單號 CS- 開頭）沒有報價單可查，客戶名直接存在留底的 client 欄（8/3 加）
   if(VM_DATA){ const f=(VM_DATA.forms||[]).find(x=>String(x.no||'').trim()===String(no).trim()&&x.client); if(f) return f.client; }
-  if(ORDERS_CACHE){ const o=ORDERS_CACHE.find(x=>x.no===no); if(o) return (o.client||'').split('｜')[0]; }
+  /* 2026-09-03：buildOrders 對「沒填客戶的單」一律塞字面上的 '—'（顯示用佔位符）。
+     這裡若原樣回傳，手動登記客訴時會被自動帶進客戶欄再存進資料庫，資料庫就多出一個叫「—」的客戶。 */
+  if(ORDERS_CACHE){ const o=ORDERS_CACHE.find(x=>x.no===no); if(o){ const c=(o.client||'').split('｜')[0].trim(); if(c && c!=='—') return c; } }
   return '';
 }
 function vmToday(){ const t=new Date(),p=n=>String(n).padStart(2,'0'); return t.getFullYear()+'-'+p(t.getMonth()+1)+'-'+p(t.getDate()); }
@@ -153,6 +155,13 @@ function vmStatusPill(r){
   const s=vmStatusNorm(r.status), map={'待處理':'wait','退費':'refund','補發':'resend','結案':'done'};
   return `<span class="vpill ${map[s]||'wait'}">${escHtml(s)}</span>`;
 }
+/* 2026-09-03：客戶回報／催單清單上「看得到單號卻打不開那張驗收單」。這一顆共用。
+   ⚠ 寄售鋪貨產的 CS- 開頭單號沒有對應的報價單，openVerifyForm 會回「查無此單」，所以不給鈕。 */
+function vmViewBtn(no){
+  const n=String(no||'').trim();
+  if(!n || n.indexOf('CS-')===0) return '';
+  return `<button class="rec-act-btn" title="打開這張單的出貨驗收單" data-no="${escAttr(n)}" onclick="openVerifyForm(this.dataset.no)">驗收單</button>`;
+}
 function vmRenderReports(pendingOnly){
   let reps=(VM_DATA.reports||[]).slice();
   if(pendingOnly) reps=reps.filter(vmIsUnhandled);
@@ -174,7 +183,7 @@ function vmRenderReports(pendingOnly){
       <td class="mc-main"><b>${escHtml(r.no||'—')}</b><br><span style="color:#6B6B63;font-size:11.5px">${escHtml(r.client||vmClientOf(r.no)||'')}</span></td>
       <td data-l="內容"><span class="vtype ${catCls}">${catTxt}</span>${rawTxt}${r.item?`<br><span style="font-size:11.5px;color:#6B6B63">${escHtml(r.item)}</span>`:''}${r.desc?`<br><span style="font-size:12px">${escHtml(r.desc)}</span>`:''}${photos?`<br>${photos}`:''}</td>
       <td data-l="處理" style="text-align:center">${vmStatusPill(r)}${r.handle_note?`<br><span style="font-size:11px;color:#6B6B63">${escHtml(r.handle_note)}</span>`:''}${(r.amount!=null&&r.amount!=='')?`<br><span style="font-size:11px;color:var(--gold-deep)">${money(r.amount)}</span>`:''}</td>
-      <td class="rec-actions" data-l="操作">${issue?`<button class="rec-act-btn" onclick="openVmProc('${escAttr(r.id)}')">處理</button>`:''}<button class="rec-act-btn del" onclick="vmDelReport('${escAttr(r.id)}','${escAttr(r.no||'')}')">刪除</button></td>
+      <td class="rec-actions" data-l="操作">${issue?`<button class="rec-act-btn" onclick="openVmProc('${escAttr(r.id)}')">處理</button>`:''}${vmViewBtn(r.no)}<button class="rec-act-btn del" onclick="vmDelReport('${escAttr(r.id)}','${escAttr(r.no||'')}')">刪除</button></td>
     </tr>`;
   }).join('');
   return bar+`<div class="tbl-scroll"><table class="rec-table mcard">
@@ -190,7 +199,7 @@ function vmRenderNoReport(){
       <td class="mc-main"><b>${escHtml(o.no)}</b><br><span style="color:#6B6B63;font-size:11.5px">${escHtml(o.client||'')}</span></td>
       <td data-l="出貨日" style="text-align:center">${escHtml((o.shipDate||'').slice(0,10))||'—'}</td>
       <td data-l="狀態" style="text-align:center"><span class="ob ${(o.days!=null&&o.days>=VM_NOREPORT_DAYS)?'red':'warn'}">出貨 ${dtxt} 未回報</span></td>
-      <td class="rec-actions" data-l="操作"><button class="rec-act-btn" onclick="vmCopyReminder('${escAttr(o.no)}','${escAttr((o.shipDate||'').slice(0,10))}')">複製催單訊息</button></td>
+      <td class="rec-actions" data-l="操作"><button class="rec-act-btn" onclick="vmCopyReminder('${escAttr(o.no)}','${escAttr((o.shipDate||'').slice(0,10))}')">複製催單訊息</button>${vmViewBtn(o.no)}</td>
     </tr>`;
   }).join('');
   return `<div style="font-size:11.5px;color:#A8A69C;margin-bottom:8px">已出貨（有開驗收單）滿 ${VM_NOREPORT_DAYS} 天、客戶仍未掃碼回報的單。按「複製催單訊息」貼到 LINE 即可。</div>
@@ -400,7 +409,11 @@ async function saveVmManual(){
   if(_busy.vmManual) return;
   const no=document.getElementById('vmm-no').value.trim();
   const desc=document.getElementById('vmm-desc').value.trim();
-  if(!no&&!desc){ toast('請至少填單號或問題說明','err'); return; }
+  /* 2026-09-03：原本是「單號和問題說明都空才擋」，於是只打一行描述就能存出一筆沒單號、沒客戶的客訴，
+     之後歸不了戶、對不回是哪一張單。改成：問題說明一定要填，單號與客戶至少要有一個。 */
+  const _cli=(document.getElementById('vmm-client').value||'').trim();
+  if(!desc){ toast('請填問題說明','err'); try{ document.getElementById('vmm-desc').focus(); }catch(e){} return; }
+  if(!no && (!_cli || _cli==='—')){ toast('請填單號，或至少填客戶名稱（不然之後對不回是誰的單）','err'); try{ document.getElementById('vmm-no').focus(); }catch(e){} return; }
   _busy.vmManual=true; btnBusy('vmm-save',true,'登記中…');
   // 後端 addVerification 吃「扁平頂層欄位」，不是包在 record:{...} 裡面（已實測對齊）
   const payload={ action:'addVerification', token:AUTH_TOKEN, no,
@@ -478,7 +491,8 @@ async function loadMyCustomQuotes(){
         return `<tr><td><b>${escHtml(q.quote_no||'—')}</b><br><span style="color:#6B6B63;font-size:11.5px">${escHtml(q.tag||'')}</span></td>
         <td>${escHtml(q.client||'—')}</td><td style="text-align:right;font-weight:600">${money(tot)}</td>
         <td>${(q.updated_at||'').slice(0,10)}</td>
-        <td class="rec-actions"><button class="rec-act-btn" onclick="loadCustomQuoteByNo(decodeURIComponent('${encodeURIComponent(q.quote_no||'')}'),false)">載入編輯</button>
+        <td class="rec-actions"><button class="rec-act-btn" data-no="${escAttr(q.quote_no||'')}" onclick="recPreviewCustom(this.dataset.no,'custom')">預覽</button>
+        <button class="rec-act-btn" onclick="loadCustomQuoteByNo(decodeURIComponent('${encodeURIComponent(q.quote_no||'')}'),false)">載入編輯</button>
         <button class="rec-act-btn" onclick="loadCustomQuoteByNo(decodeURIComponent('${encodeURIComponent(q.quote_no||'')}'),true)">複製成新單</button></td></tr>`;
       }).join('')+'</tbody></table></div>';
   }catch(e){ box.innerHTML=`<div class="rec-empty">${e.message||'載入失敗'}</div>`; }

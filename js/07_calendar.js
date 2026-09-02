@@ -81,7 +81,9 @@ function calEvHtml(e){
   const cls={ship:'ship',exp:'exp',memo:'memo',recur:'recur'}[e.t];
   /* event.stopPropagation()：月曆檢視下事件標籤疊在「當日格子」上面，格子本身也有 onclick（新增事項），
      沒擋住冒泡的話點標籤會先開編輯視窗、又立刻被冒泡上去的「新增事項」蓋掉，變成永遠打不開編輯/刪除 */
-  const click=e.no?`onclick="event.stopPropagation();gotoPage('orders')"`:(e.item?`data-id="${escAttr(e.item.item_id)}" onclick="event.stopPropagation();openCalEdit(this.dataset.id)"`:'');
+  /* 2026-09-03：訂單事件（🚚 出貨）原本點下去只是 gotoPage('orders')，跳到清單首頁、那一筆不會打開。
+     改用今日待辦已經在用的 tdOpenOrder(no)：它會先確保 ORDERS_CACHE 有資料，再開那張單的「編輯進度」。 */
+  const click=e.no?`data-no="${escAttr(e.no)}" onclick="event.stopPropagation();tdOpenOrder(this.dataset.no)"`:(e.item?`data-id="${escAttr(e.item.item_id)}" onclick="event.stopPropagation();openCalEdit(this.dataset.id)"`:'');
   /* memo／recur 依「分類」上色；ship／exp（訂單自動事件）維持原本固定配色 */
   let style='';
   if((e.t==='memo'||e.t==='recur') && e.item){
@@ -154,7 +156,7 @@ function renderTodayFocus(){
     /* 2026-09-02：判斷要跟 effOrdStatus 一致——它是用 invoice_date || invoice_no 認定「已開發票」。
        原本只看 invoice_no，於是「發票開了、只是沒登號碼」的單會一直掛著清不掉的紅字提醒。 */
     if(s==='paid' && !(o.st&&(o.st.invoice_no||o.st.invoice_date)) && o.st&&o.st.ship_date_actual){
-      items.push({o:99,h:`<span class="ob red">待開發票</span> 🧾 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）尾款已收`,click:`gotoPage('orders')`});
+      items.push({o:99,h:`<span class="ob red">待開發票</span> 🧾 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）尾款已收`,click:`tdOpenOrder('${escAttr(o.no)}')`});
     }
     if(s==='cancelled'||s==='closed'||s==='paid') return;
     if(o.st?.ship_date_est&&!o.st?.ship_date_actual){
@@ -163,13 +165,13 @@ function renderTodayFocus(){
       // 沒空填就會一直卡成逾期。跟備忘同一顆圈圈勾法：打勾＝把實際出貨日記為今天（同一個欄位，
       // 跟去訂單追蹤「編輯進度」填的效果一樣）；填錯了照樣可以到訂單追蹤調整。
       const shipBox=`<span class="fdone" title="打勾＝標記今天已出貨（記為實際出貨日），不再顯示於焦點" onclick="event.stopPropagation();calFocusShip('${escAttr(o.no)}')"></span>`;
-      if(d!=null&&d<0) items.push({o:d,h:`${shipBox}<span class="ob red">出貨逾期 ${-d} 天</span> 🚚 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）`,click:`gotoPage('orders')`});
-      else if(d!=null&&d<=7) items.push({o:d,h:`${shipBox}<span class="ob warn">${d===0?'今天':d+' 天後'}</span> 🚚 ${escHtml(o.client.split('｜')[0])} 出貨（${escHtml(o.no)}）`,click:`gotoPage('orders')`});
+      if(d!=null&&d<0) items.push({o:d,h:`${shipBox}<span class="ob red">出貨逾期 ${-d} 天</span> 🚚 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）`,click:`tdOpenOrder('${escAttr(o.no)}')`});
+      else if(d!=null&&d<=7) items.push({o:d,h:`${shipBox}<span class="ob warn">${d===0?'今天':d+' 天後'}</span> 🚚 ${escHtml(o.client.split('｜')[0])} 出貨（${escHtml(o.no)}）`,click:`tdOpenOrder('${escAttr(o.no)}')`});
     }
     /* 2026-08-08 Molly：報價到期不需要提醒。月曆格、訂單提醒徽章、Google 日曆同步當時都拿掉了，
        只有「今日焦點」這塊漏掉（複檢 2026-08-13 找到），一併移除。 */
-    if(s==='shipped') items.push({o:99,h:`<span class="ob warn">待開發票</span> 💰 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）`,click:`gotoPage('orders')`});
-    if(s==='invoiced') items.push({o:99,h:`<span class="ob warn">待收尾款</span> 💰 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）${o.st?.final_amt?'尾款 '+money(o.st.final_amt):''}`,click:`gotoPage('orders')`});
+    if(s==='shipped') items.push({o:99,h:`<span class="ob warn">待開發票</span> 💰 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）`,click:`tdOpenOrder('${escAttr(o.no)}')`});
+    if(s==='invoiced') items.push({o:99,h:`<span class="ob warn">待收尾款</span> 💰 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）${o.st?.final_amt?'尾款 '+money(o.st.final_amt):''}`,click:`tdOpenOrder('${escAttr(o.no)}')`});
   });
   items.sort((a,b)=>a.o-b.o);
   el.innerHTML=`<div class="ph" style="font-weight:700;font-size:13px;margin-bottom:6px">今日焦點 — ${fmtD(new Date()).slice(5)}<span style="color:#A8A69C;font-weight:400;font-size:11px">　今天＋未來 7 天；逾期自動標紅；📌 備忘、🚚 出貨做完了就點左邊圈圈打勾</span></div>`+
@@ -344,6 +346,14 @@ async function saveCalItem(){
   const k=document.getElementById('ce-kind').value;
   const title=document.getElementById('ce-title').value.trim();
   if(!title){ toast('請輸入標題','err'); return; }
+  /* 2026-09-03：備忘的日期改成必填。日期空白的備忘存下去之後，月曆格（`it.date===dstr`）與
+     今日焦點（filter 有 `it.date`）都不會顯示它，而「待辦清單（不指定日期）」卡片在 9/2 已移除，
+     等於這筆資料再也打不開、也刪不掉。 */
+  if(k==='memo' && !document.getElementById('ce-date').value){
+    toast('請選日期（沒有日期的備忘之後在行事曆上會看不到）','err');
+    try{ document.getElementById('ce-date').focus(); }catch(e){}
+    return;
+  }
   _busy.calSave=true;
   let recur='';
   if(k==='recur'){

@@ -320,12 +320,18 @@ function renderToday(){
     </button>`);
 
   // 3. 掃碼未回報（每列保留既有的「複製催單訊息」）
-  const scanRows = tdRowsHtml(noScan, (o,dim)=>`<button type="button" class="td-row${dim?' dim':''}" onclick="tdOpenVerify()">
-      <div class="td-r1">${escHtml(o.client||o.quote_no||'—')}
-        <span class="td-tag warn">${o.days_since==null?'—':('出貨 '+o.days_since+' 天')}</span>
-        <span style="margin-left:auto"><span class="td-mini" onclick="tdCopyReminder(event,'${escAttr(o.quote_no)}','${escAttr(o.ship_date||'')}')">複製催單訊息</span></span></div>
-      <div class="td-r2">${escHtml(o.quote_no||'')}${o.lot?('　Lot '+escHtml(o.lot)):''}　出貨日 ${escHtml(o.ship_date||'—')}</div>
-    </button>`);
+  /* 2026-09-03：原本整列點下去是 tdOpenVerify()＝只跳到驗收管理首頁的「待處理」分頁，跟你點的那一筆無關。
+     照 🚚 出貨卡片同一個寫法：td-row 維持是 <button>（整列可點／手機全寬／roleSweep 都靠它），
+     驗收單鈕放在外層 flex 容器當「兄弟」，不要包進 td-row 裡面。 */
+  const scanRows = tdRowsHtml(noScan, (o,dim)=>`<div class="td-rowwrap" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-right:12px">
+      <button type="button" class="td-row${dim?' dim':''}" style="flex:1 1 280px;min-width:0;border-bottom:none" onclick="tdOpenVerifyForm('${escAttr(o.quote_no)}')">
+        <div class="td-r1">${escHtml(o.client||o.quote_no||'—')}
+          <span class="td-tag warn">${o.days_since==null?'—':('出貨 '+o.days_since+' 天')}</span>
+          <span style="margin-left:auto"><span class="td-mini" onclick="tdCopyReminder(event,'${escAttr(o.quote_no)}','${escAttr(o.ship_date||'')}')">複製催單訊息</span></span></div>
+        <div class="td-r2">${escHtml(o.quote_no||'')}${o.lot?('　Lot '+escHtml(o.lot)):''}　出貨日 ${escHtml(o.ship_date||'—')}</div>
+      </button>
+      <button type="button" class="rec-act-btn" style="flex:0 0 auto;white-space:nowrap" title="到驗收管理看全部未回報的單" onclick="event.stopPropagation();tdOpenVerify()">驗收管理</button>
+    </div>`);
 
   // 4. 已出貨未開發票
   const invRows = tdRowsHtml(noInvoice, (o,dim)=>`<button type="button" class="td-row${dim?' dim':''}" onclick="tdOpenOrder('${escAttr(o.quote_no)}')">

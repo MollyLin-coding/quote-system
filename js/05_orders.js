@@ -292,12 +292,14 @@ function ordClientHtml(o){
 /* ---- 2026-09-03：訂單追蹤直接預覽這張報價單 ----
    標準單走報價紀錄同一支 previewRecordQuote（會把單載進表單再開預覽），
    自訂單走 recPreviewCustom；兩邊都帶 backPage='orders'，關掉預覽自動回訂單追蹤。 */
-function ordPreviewQuote(no, src){
+function ordPreviewQuote(no, src, backPage){
+  // backPage＝關掉預覽要回哪一頁；不指定就回訂單追蹤（從月報表點進來時要傳 'report'）
+  const back=backPage||'orders';
   if(src==='custom'){
-    if(typeof recPreviewCustom==='function') recPreviewCustom(no,'orders');
+    if(typeof recPreviewCustom==='function') recPreviewCustom(no,back);
     else toast('找不到自訂報價單預覽','err');
   }else{
-    if(typeof previewRecordQuote==='function') previewRecordQuote(no,'orders');
+    if(typeof previewRecordQuote==='function') previewRecordQuote(no,back);
     else toast('找不到報價單預覽','err');
   }
 }
@@ -428,6 +430,16 @@ function closeOrdEdit(force){
     if(!confirm('這個視窗有改過但還沒儲存，關掉就會不見。\n\n按「確定」＝不儲存，直接關閉\n按「取消」＝回去繼續編輯')) return;
   }
   document.getElementById('oe-overlay').style.display='none'; ORD_EDITING=null; ORD_EDIT_SNAP='';
+}
+/* 2026-09-03：從「編輯進度」視窗直接預覽這張報價單。
+   月報表、今日待辦、客戶管理、行事曆都是走 openOrdEdit 進來的，補這一顆等於一次補完所有下游入口。
+   關掉預覽會回到「打開這個視窗時所在的那一頁」，不會固定被丟到訂單追蹤。 */
+function ordPreviewFromEdit(){
+  const no=ORD_EDITING; if(!no) return;
+  const o=(ORDERS_CACHE||[]).find(x=>x.no===no);
+  const back=(typeof currentPage!=='undefined' && currentPage) ? currentPage : 'orders';
+  closeOrdEdit(true);
+  ordPreviewQuote(no, (o&&o.src)||'std', back);
 }
 /* 2026-09-01 複檢 #20：從「編輯進度」直接開這張單的驗收單 */
 function ordOpenVerifyForm(){
@@ -585,6 +597,9 @@ async function shpSaveRow(btn){
   const id=tr.getAttribute('data-shpid');
   const fields={};
   tr.querySelectorAll('input[data-f]').forEach(inp=>{ fields[inp.getAttribute('data-f')]=inp.value; });
+  /* 2026-09-03：擋全空白列。原本按「＋新增一批」再直接按「儲存」就會存出一列什麼都沒有的紀錄，
+     訂單列上照樣長出「分批×1」徽章，點進去卻看不出是哪一批。 */
+  if(!Object.keys(fields).some(k=>String(fields[k]||'').trim())){ toast('這一批還沒填任何內容，先填出貨日或數量再儲存','err'); _busy.shpSave=false; return; }
   if(fields.invoice_last5 && !/^\d{5}$/.test(fields.invoice_last5)){ toast('發票末五碼需為 5 位數字','err'); _busy.shpSave=false; return; }
   btn.disabled=true; btn.textContent='…';
   const snap=ORDERS_CACHE;   // 寫入會清空 ORDERS_CACHE，留一份，避免關窗後訂單列表卡死在空狀態

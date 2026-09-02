@@ -344,9 +344,17 @@ function renderCusDetail(){
 }
 
 /* 明細裡的動作 */
+/* 2026-09-03：原本標準單是 openRecord()＝把整張單灌進填寫表單（會蓋掉手上打到一半的單），
+   自訂單更是死路——只 toast 叫人自己去別頁再點一次。改成兩種都直接開「預覽」，
+   關掉預覽會回到客戶管理這一頁（backPage='customer'）。 */
 function cusOpenQuote(no, src){
-  if(src==='custom'){ toast('自訂報價單請在「自訂報價單」頁面開啟','ok'); gotoPage('custom'); return; }
-  openRecord(no);
+  if(src==='custom'){
+    if(typeof recPreviewCustom==='function') recPreviewCustom(no,'customer');
+    else { toast('自訂報價單請在「自訂報價單」頁面開啟','ok'); gotoPage('custom'); }
+    return;
+  }
+  if(typeof previewRecordQuote==='function') previewRecordQuote(no,'customer');
+  else openRecord(no);
 }
 function cusGotoOrder(no){
   gotoPage('orders');
