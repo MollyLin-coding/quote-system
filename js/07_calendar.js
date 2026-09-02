@@ -41,8 +41,13 @@ function eventsOn(dstr){
     (ORDERS_CACHE||[]).forEach(o=>{
       const s=(typeof effOrdStatus==='function')?effOrdStatus(o.st):(o.st?.status||'quoted');   // 用有效狀態：已收訂金但狀態欄沒改的單，不再誤報「報價到期」
       if(s==='cancelled') return;
-      if(o.st?.ship_date_est===dstr && !o.st?.ship_date_actual) evs.push({t:'ship', txt:'🚚 '+o.client.split('｜')[0]+' 出貨', no:o.no});
-      if(o.st?.ship_date_actual===dstr) evs.push({t:'ship', txt:'🚚 '+o.client.split('｜')[0]+' 出貨 ✓', no:o.no});
+      /* 2026-09-03：改走共用的 orderShipPoints(o)——有分批的單，每一批各長一顆 🚚（主線那顆自動收起來）。
+         規則只有那一份（js/05_orders.js），別在這裡另外判斷分批。 */
+      (typeof orderShipPoints==='function'?orderShipPoints(o):[]).forEach(sp=>{
+        if(sp.date!==dstr) return;
+        evs.push({ t:'ship', no:o.no,
+          txt:'🚚 '+String(o.client||'').split('｜')[0]+' 出貨'+shpPointLabel(sp)+(sp.done?' ✓':'') });
+      });
       // 2026-08-08 Molly：報價到期不需要提醒，不再產生 ⏰ 事件。
     });
   }
@@ -159,7 +164,16 @@ function renderTodayFocus(){
       items.push({o:99,h:`<span class="ob red">待開發票</span> 🧾 ${escHtml(o.client.split('｜')[0])}（${escHtml(o.no)}）尾款已收`,click:`tdOpenOrder('${escAttr(o.no)}')`});
     }
     if(s==='cancelled'||s==='closed'||s==='paid') return;
-    if(o.st?.ship_date_est&&!o.st?.ship_date_actual){
+    /* 2026-09-03：今日焦點的出貨提醒也改走 orderShipPoints——有分批就一批一列。
+       打勾確認已出貨：整張單用 calFocusShip(單號)、單一批次用 calFocusShipBatch(批次id, 單號)。 */
+    (typeof orderShipPoints==='function'?orderShipPoints(o):[]).filter(sp=>!sp.done && sp.batch).forEach(sp=>{
+      const d=daysBetween(sp.date); if(d==null||d>7) return;
+      const box=`<span class="fdone" title="打勾＝標記這一批今天已出貨" data-sid="${escAttr(sp.id)}" data-no="${escAttr(o.no)}" onclick="event.stopPropagation();calFocusShipBatch(this.dataset.sid,this.dataset.no)"></span>`;
+      const tag=d<0?`<span class="ob red">出貨逾期 ${-d} 天</span>`:`<span class="ob warn">${d===0?'今天':d+' 天後'}</span>`;
+      items.push({o:d, h:`${box}${tag} 🚚 ${escHtml(String(o.client||'').split('｜')[0])} 出貨${escHtml(shpPointLabel(sp))}（${escHtml(o.no)}）`,
+                  click:`tdOpenOrder('${escAttr(o.no)}')`});
+    });
+    if(!(typeof shpBatchesOf==='function' && shpBatchesOf(o.no).length) && o.st?.ship_date_est && !o.st?.ship_date_actual){
       const d=daysBetween(o.st.ship_date_est);
       // 2026-08-19 Molly：出貨提醒本來沒有勾選確認已出貨的入口，只能點整列跳去訂單追蹤手動填，
       // 沒空填就會一直卡成逾期。跟備忘同一顆圈圈勾法：打勾＝把實際出貨日記為今天（同一個欄位，
@@ -214,6 +228,32 @@ function calFocusShip(no){
   if(_busy['shipFocus_'+no]) return;
   if(!confirm(`「${(o.client||'').split('｜')[0]}」（${no}）今天已出貨？\n將把訂單追蹤的實際出貨日記為今天；填錯了可以到訂單追蹤調整。`)) return;
   calFocusShipSave(no);
+}
+/* 2026-09-03：今日焦點把「某一批」標成今天已出貨（updateShipment 的 ship_date_actual）。
+   跟 calFocusShip 一樣是老闆專用、一樣先問過再寫；寫完重抓分批清單讓畫面即刻反映。 */
+async function calFocusShipBatch(sid, no){
+  if(typeof needOwner==='function' && !needOwner('標記出貨')) return;
+  if(!sid){ toast('這一批還沒存檔，請到訂單追蹤的分批出貨裡填','err'); return; }
+  if(_busy['shipBatch_'+sid]) return;
+  const today=fmtD(new Date());
+  if(!confirm(`把這一批標記成今天（${today}）已出貨？\n\n（填錯了可以到訂單追蹤「編輯進度 → 分批出貨」改）`)) return;
+  _busy['shipBatch_'+sid]=true;
+  const snapAll=(typeof SHP_ALL!=='undefined')?SHP_ALL:null, snapCal=CAL_ITEMS, snapOrd=ORDERS_CACHE;
+  try{
+    const d=await apiCall({ action:'updateShipment', token:AUTH_TOKEN, id:sid, fields:{ ship_date_actual: today } });
+    if(!d.ok) throw new Error(d.error||'儲存失敗');
+    CAL_ITEMS=snapCal; if(snapOrd) ORDERS_CACHE=snapOrd;
+    if(Array.isArray(snapAll)){                                  // 樂觀更新：直接改手上那一份，不必等重抓
+      SHP_ALL=snapAll.map(s=>String(s.id||'')===String(sid)?Object.assign({},s,{ship_date_actual:today}):s);
+    }
+    renderCalendar();
+    if(typeof loadShipmentBadges==='function') loadShipmentBadges(true);
+    toast('已標記這一批出貨，實際出貨日：'+today,'ok');
+  }catch(e){
+    CAL_ITEMS=snapCal; if(snapOrd) ORDERS_CACHE=snapOrd; if(Array.isArray(snapAll)) SHP_ALL=snapAll;
+    renderCalendar();
+    toast(e.message||'儲存失敗','err');
+  }finally{ _busy['shipBatch_'+sid]=false; }
 }
 async function calFocusShipSave(no){
   _busy['shipFocus_'+no]=true;

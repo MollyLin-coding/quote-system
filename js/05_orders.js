@@ -541,6 +541,62 @@ async function refreshInvPhotoLinks(){
    主線 order_status 出貨欄位不動；約一成例外單才用，預設收合。
    日期讀回一律過 vmLocalYmd()：純日期字串原樣通過、時間戳轉台北日期，兩種後端行為都安全。 */
 let SHP_LOADED=false, SHP_LIST=[], SHP_SUM=null;
+/* 2026-09-03：全部分批紀錄（不分單）。loadShipmentBadges 本來就會一次抓全部來算「分批×N」徽章，
+   這裡順手留一份，行事曆／今日焦點／今日待辦才有辦法把每一批各自畫出來——不用多打任何一次後端。
+   登入後的 prefetchCommon 也已經把 listShipments 放進讀取快取，所以 rcPeek 也拿得到。 */
+let SHP_ALL=null;
+function shpAllList(){
+  if(Array.isArray(SHP_ALL)) return SHP_ALL;
+  try{
+    const hit=(typeof rcPeek==='function')?rcPeek({ action:'listShipments', token:AUTH_TOKEN }):null;
+    const arr=hit&&hit.data&&(hit.data.shipments||hit.data.list);
+    if(Array.isArray(arr)){ SHP_ALL=arr; return arr; }
+  }catch(e){}
+  return [];
+}
+/* 某張單的分批紀錄（依批次序號排好）。沒有分批就回空陣列。 */
+function shpBatchesOf(no){
+  const n=String(no||'').trim(); if(!n) return [];
+  return shpAllList().filter(s=>String(s.quote_no||'')===n)
+    .slice().sort((a,b)=>(Number(a.seq)||0)-(Number(b.seq)||0));
+}
+/* ⚠⚠ 「這張單的出貨要在哪幾天顯示」只有這一份規則——行事曆月曆、今日焦點、今日待辦共用，別再各寫一份。
+   有分批 → 每一批各一筆（主線那筆就不再出現，避免同一張單同時看到兩種日期，這是 Molly 2026-09-03 選的）；
+   沒分批 → 主線那一筆（維持原本行為）。
+   單筆的日期＝有實際出貨日就用實際的（並標 done），否則用預計出貨日。 */
+function orderShipPoints(o){
+  const st=(o&&o.st)||{};
+  const ymd=v=>(typeof vmLocalYmd==='function')?(vmLocalYmd(v)||''):String(v||'');
+  const bs=shpBatchesOf(o&&o.no);
+  if(bs.length){
+    return bs.map((b,i)=>{
+      const est=ymd(b.ship_date_est), act=ymd(b.ship_date_actual);
+      return { date:act||est, est, act, done:!!act, batch:true,
+               seq:Number(b.seq)||i+1, total:bs.length, id:b.id||'', note:b.note||'' };
+    }).filter(x=>x.date);
+  }
+  const est=ymd(st.ship_date_est), act=ymd(st.ship_date_actual);
+  if(!est && !act) return [];
+  return [{ date:act||est, est, act, done:!!act, batch:false, seq:0, total:0, id:'', note:'' }];
+}
+/* 分批的批次標籤：「（第2批/共3批）」；不是分批就回空字串 */
+function shpPointLabel(sp){ return (sp&&sp.batch)?`（第${sp.seq}批/共${sp.total}批）`:''; }
+/* 只有單號、拿不到 ORDERS_CACHE 時（例如今日待辦首頁）也要查得到客戶名 */
+function shpClientOf(no){
+  const n=String(no||'').trim(); if(!n) return '';
+  try{
+    if(typeof ORDERS_CACHE!=='undefined' && ORDERS_CACHE){
+      const o=ORDERS_CACHE.find(x=>x.no===n);
+      if(o){ const c=String(o.client||'').split('｜')[0].trim(); if(c && c!=='—') return c; }
+    }
+  }catch(e){}
+  try{
+    const hit=(typeof rcPeek==='function')?rcPeek(ordPayloads()[0]):null;   // 用同一份 payload 當 key 才命中得到
+    const q=((hit&&hit.data&&hit.data.quotes)||[]).find(x=>x.quoteNo===n);
+    if(q) return String(q.clientName||'').trim();
+  }catch(e){}
+  return '';
+}
 function shpReset(){
   SHP_LOADED=false; SHP_LIST=[];
   const box=document.getElementById('shp-box'); if(box) box.style.display='none';
@@ -645,6 +701,7 @@ async function loadShipmentBadges(force){
     if(!d||!d.ok) return;
     const arr=d.shipments||d.list||[];
     if(!Array.isArray(arr)) return;
+    SHP_ALL=arr;                                   // 2026-09-03：留一份給行事曆／今日焦點／今日待辦畫每一批
     const m={}; arr.forEach(s=>{ if(s.quote_no) m[s.quote_no]=(m[s.quote_no]||0)+1; });
     SHP_SUM=m;
     renderOrders();

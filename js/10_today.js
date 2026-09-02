@@ -262,12 +262,42 @@ function tdConsignBilling(){
   }catch(e){ return []; }
 }
 function tdOpenConsign(){ gotoPage('consign'); }
+/* ⚠ 2026-09-03：今日待辦的「今天／逾期要出貨」也要看得到分批。
+   後端 digest 只認訂單追蹤主線的那一個預計出貨日，所以在前端用共用的 orderShipPoints 規則重算一次：
+   ①有分批的單 → 換成「該出而還沒出的那幾批」（主線那筆不再列，跟行事曆一致）
+   ②主線日期還沒到、但某一批已經到期的單 → 後端根本沒送來，這裡補上
+   分批資料來自 shpAllList()（登入後 prefetchCommon 已放進讀取快取），**不會多打任何一次後端**；
+   拿不到分批資料時原樣回傳後端的清單，行為完全跟以前一樣。 */
+function tdShipDueRows(list){
+  const arr=Array.isArray(list)?list.slice():[];
+  if(typeof shpAllList!=='function') return arr;
+  let all=[]; try{ all=shpAllList(); }catch(e){ return arr; }
+  if(!all.length) return arr;
+  const byNo={}; arr.forEach(o=>{ byNo[String(o.quote_no||'')]=o; });
+  const nos={}; all.forEach(s=>{ if(s.quote_no) nos[String(s.quote_no)]=1; });
+  const out=arr.filter(o=>!nos[String(o.quote_no||'')]);          // 沒有分批的單原樣保留
+  Object.keys(nos).forEach(no=>{
+    const base=byNo[no]||null;
+    const pts=(typeof orderShipPoints==='function')?orderShipPoints({no, st:{}}):[];
+    pts.forEach(sp=>{
+      if(sp.done || !sp.est) return;                              // 已出貨的批次不再催
+      const dd=daysBetween(sp.est);
+      if(dd==null || dd>0) return;                                // 只列今天與逾期的（跟後端同一條線）
+      out.push({ quote_no:no,
+        client:(base&&base.client)||((typeof shpClientOf==='function')?shpClientOf(no):'')||'',
+        plan_ship_date:sp.est, overdue_days:-dd, urgent:true,
+        batch_label:(typeof shpPointLabel==='function')?shpPointLabel(sp):'' });
+    });
+  });
+  out.sort((a,b)=>(b.overdue_days||0)-(a.overdue_days||0));
+  return out;
+}
 function renderToday(){
   const wrap = document.getElementById('td-body'); if(!wrap) return;
   const d = TD_DATA;
   if(!d){ wrap.innerHTML = tdSkeletonHtml(); return; }
 
-  const shipDue   = d.ship_due   || [];
+  const shipDue   = tdShipDueRows(d.ship_due || []);
   const finalDue  = d.final_due  || [];
   const noScan    = d.no_scan    || [];
   const noInvoice = d.no_invoice || [];
@@ -304,7 +334,7 @@ function renderToday(){
       <button type="button" class="td-row${dim?' dim':''}" style="flex:1 1 280px;min-width:0;border-bottom:none" onclick="tdOpenOrder('${escAttr(o.quote_no)}')">
         <div class="td-r1">${escHtml(o.client||o.quote_no||'—')}
           <span class="td-tag ${o.overdue_days>0?'red':'warn'}">${o.overdue_days>0?('逾期 '+o.overdue_days+' 天'):'今天'}</span></div>
-        <div class="td-r2">${escHtml(o.quote_no||'')}　預計出貨 ${escHtml(o.plan_ship_date||'—')}</div>
+        <div class="td-r2">${escHtml(o.quote_no||'')}${o.batch_label?('　'+escHtml(o.batch_label)):''}　預計出貨 ${escHtml(o.plan_ship_date||'—')}</div>
       </button>
       <button type="button" class="rec-act-btn" style="flex:0 0 auto;white-space:nowrap" title="開這張單的出貨驗收單" onclick="event.stopPropagation();tdOpenVerifyForm('${escAttr(o.quote_no)}')">驗收單</button>
     </div>`);
