@@ -265,19 +265,41 @@ function renderOrders(){
     const lot=ordCustLot(o);
     return `<tr>
       <td class="mc-main"><b>${escHtml(o.no)}</b> <span class="rec-badge ${o.typeKey==='banquet'?'banquet':o.typeKey==='custom'?'custom':'bottle'}">${o.type}</span><br>
-        <span style="color:#6B6B63;font-size:11.5px">${escHtml(o.client)}</span>${lot?`<br><span style="color:#A6824A;font-size:11px">批號 ${escHtml(lot)}</span>`:''}${o.by?`<br><span style="color:#8A8880;font-size:11px">建立者 ${escHtml(o.by)}</span>`:''}</td>
+        <span style="color:#6B6B63;font-size:11.5px">${ordClientHtml(o)}</span>${lot?`<br><span style="color:#A6824A;font-size:11px">批號 ${escHtml(lot)}</span>`:''}${o.by?`<br><span style="color:#8A8880;font-size:11px">建立者 ${escHtml(o.by)}</span>`:''}</td>
       <td data-l="進度">${orderDots(o)}${note?`<br><span class="onote">📌 ${escHtml(note)}${(o.st.track_note.includes('\n'))?'…':''}</span>`:''}</td>
       <td data-l="總計" style="text-align:right;font-weight:600">${money(ordGrandTotal(o))}</td>
       <td data-l="出貨日" style="text-align:center">${shipD}</td>
       <td data-l="提醒">${orderBadges(o)}${orderVerifyBadge(o)}</td>
       <td class="rec-actions" data-l="操作">
         <button class="rec-act-btn primary" onclick="openOrdEdit('${escAttr(o.no)}')">編輯進度</button>
+        <button class="rec-act-btn" data-no="${escAttr(o.no)}" data-src="${escAttr(o.src||'std')}" onclick="ordPreviewQuote(this.dataset.no,this.dataset.src)">預覽報價單</button>
         <button class="rec-act-btn" onclick="openChangeLog('${escAttr(o.no)}')">修改紀錄</button>
         ${['bottle','ownbrand','ownlabel','consign'].includes(o.typeKey)?`<button class="rec-act-btn" onclick="openVerifyForm('${escAttr(o.no)}')">驗收單</button>`:''}
         ${o.src==='custom'?`<button class="rec-act-btn" onclick="loadCustomFromOrders('${escAttr(o.no)}')">載入編輯</button>`:''}
       </td>
     </tr>`;
   }).join('') + (listMaybeMore(ORDERS_CACHE.length) ? moreRowHtml(6) : '');
+}
+
+/* 2026-09-03：客戶名稱空白的單，清單上標紅提示（不是顯示「—」，那看起來像正常資料）。
+   buildOrders 對沒填客戶的單一律塞 '—'，所以兩種情況都要判。 */
+function ordClientHtml(o){
+  const c=String((o&&o.client)||'').trim();
+  if(!c || c==='—') return '<span style="color:#C0453F;font-weight:600">⚠ 未填客戶名稱</span>';
+  return escHtml(c);
+}
+
+/* ---- 2026-09-03：訂單追蹤直接預覽這張報價單 ----
+   標準單走報價紀錄同一支 previewRecordQuote（會把單載進表單再開預覽），
+   自訂單走 recPreviewCustom；兩邊都帶 backPage='orders'，關掉預覽自動回訂單追蹤。 */
+function ordPreviewQuote(no, src){
+  if(src==='custom'){
+    if(typeof recPreviewCustom==='function') recPreviewCustom(no,'orders');
+    else toast('找不到自訂報價單預覽','err');
+  }else{
+    if(typeof previewRecordQuote==='function') previewRecordQuote(no,'orders');
+    else toast('找不到報價單預覽','err');
+  }
 }
 
 /* ---- 單筆進度編輯 ---- */

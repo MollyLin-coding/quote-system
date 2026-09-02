@@ -507,9 +507,17 @@ function quoteHasItems(){
 }
 async function saveQuote(){
   if(!AUTH_TOKEN){ showLogin(); return; }
-  // 擋空白單：客戶名稱空白且完全沒有品項時不儲存，避免存出一堆空單
+  /* 2026-09-03：客戶名稱改成必填。報價紀錄清單、訂單追蹤清單、正式文件 PDF 三個地方
+     都是直接印 clientName，空的就整欄不見（線上實際有兩張這種單）。在存檔前擋下來，
+     比事後回頭補資料便宜太多。原本「客戶名稱空白＋完全沒品項才擋」的規則已被這條涵蓋。 */
   const cliName=(document.getElementById('f-cli')?.value||'').trim();
-  if(!cliName && !quoteHasItems()){ toast('請至少填寫客戶名稱或一筆品項再儲存','err'); return; }
+  if(!cliName){
+    toast('請先填寫客戶名稱再儲存（報價紀錄、訂單追蹤、正式文件都要用到）','err');
+    const _c=document.getElementById('f-cli');
+    if(_c){ if(typeof gotoPage==='function' && typeof currentPage!=='undefined' && currentPage!=='new') gotoPage('new');
+            try{ _c.focus(); _c.scrollIntoView({block:'center'}); }catch(e){} }
+    return;
+  }
   const quote=collectQuote();
   const wasNewQuote=!editingQuoteNo;   // 2026-08-12：存檔前先記住是不是新單，決定要不要順便建訂單追蹤進度
   const btn=document.getElementById('btn-save');
@@ -782,11 +790,15 @@ function renderRecords(){
       // 2026-08-28 純報價單標記（後端 v67 起清單才帶 quoteOnly，舊後端拿不到就不顯示）
       const qoBadge=(q.status==='純報價'||q.quoteOnly==='Y')?' <span class="rec-badge" style="background:#F3ECDD;color:#7A5A1E">純報價</span>':'';
       const total='$'+Math.round(q.grandTotal||0).toLocaleString();
+      // 2026-09-03：客戶名稱空白的舊單標紅，讓人一眼看得到要回頭補哪幾張
+      const cliCell=String(q.clientName||'').trim()
+        ? escHtml(q.clientName)
+        : '<span style="color:#C0453F;font-weight:600">⚠ 未填客戶名稱</span>';
       if(q._custom){
         // 自訂單：開啟／預覽走自訂報價單頁；2026-09-02 起後端有 deleteCustomQuote，補上刪除鈕（老闆專用）
         return `<tr class="clickable" onclick="recOpenCustom('${escAttr(q.quoteNo)}')">
           <td class="mc-main" style="font-weight:600">${escHtml(q.quoteNo||'—')}</td>
-          <td data-l="客戶">${escHtml(q.clientName||'—')}</td>
+          <td data-l="客戶">${cliCell}</td>
           <td data-l="類型">${typeBadge}</td>
           <td data-l="報價日">${escHtml(q.quoteDate||'—')}</td>
           <td data-l="總計" style="font-weight:600">${total}</td>
@@ -800,7 +812,7 @@ function renderRecords(){
       }
       return `<tr class="clickable" onclick="openRecord('${escAttr(q.quoteNo)}')">
         <td class="mc-main" style="font-weight:600">${escHtml(q.quoteNo||'—')}</td>
-        <td data-l="客戶">${escHtml(q.clientName||'—')}</td>
+        <td data-l="客戶">${cliCell}</td>
         <td data-l="類型">${typeBadge}${qoBadge}</td>
         <td data-l="報價日">${escHtml(q.quoteDate||'—')}</td>
         <td data-l="總計" style="font-weight:600">${total}</td>
@@ -872,7 +884,7 @@ async function recCopyQuote(quoteNo){
 }
 
 /* ---- 預覽既有報價單（載入到表單後直接開預覽視窗，不用再手動點側邊「預覽報價單」）---- */
-async function previewRecordQuote(quoteNo){
+async function previewRecordQuote(quoteNo, backPage){
   if(isFormDirty() && !confirm('目前表單尚有未儲存的資料，預覽這張單會覆蓋目前內容，確定繼續？')) return;
   try {
     toast('讀取訂單資料…','ok');
@@ -881,6 +893,8 @@ async function previewRecordQuote(quoteNo){
     loadQuoteIntoForm(data.quote);
     gotoPage('new');
     openPreview();
+    // 帶了 backPage（例如從訂單追蹤點進來）就記起來，關掉預覽自動回去；沒帶＝清掉舊的記號
+    if(typeof pvSetBackPage==='function') pvSetBackPage(backPage||null);
   } catch(e){ toast(e.message||'讀取失敗','err'); }
 }
 

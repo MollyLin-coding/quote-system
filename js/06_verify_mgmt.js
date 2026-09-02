@@ -446,7 +446,13 @@ async function saveCustomToBackend(){
   if(_busy.customSave) return; _busy.customSave=true; btnBusy('c-save-backend',true);
   calcCustom();
   const q=collectCustomQuote();
-  if(!q.client && !(parseJsonSafe(q.items_json,[]).length)){ toast('請先填寫內容再儲存','err'); _busy.customSave=false; btnBusy('c-save-backend',false); return; }
+  // 2026-09-03：客戶名稱必填（跟標準報價單同一條規則，避免報價紀錄／訂單追蹤出現空白客戶）
+  if(!q.client){
+    toast('請先填寫客戶名稱再儲存','err');
+    const _c=document.getElementById('c-cli'); if(_c){ try{ _c.focus(); _c.scrollIntoView({block:'center'}); }catch(e){} }
+    _busy.customSave=false; btnBusy('c-save-backend',false); return;
+  }
+  if(!(parseJsonSafe(q.items_json,[]).length)){ toast('請先填寫內容再儲存','err'); _busy.customSave=false; btnBusy('c-save-backend',false); return; }
   try{
     const d=await apiCall({ action:'saveCustomQuote', token:AUTH_TOKEN, quote:q });
     if(!d.ok){ toast(d.error||'儲存失敗','err'); return; }
@@ -512,5 +518,5 @@ async function loadCustomQuoteByNo(no, asCopy){
 function loadCustomFromOrders(no){ loadCustomQuoteByNo(no,false); }
 /* 報價紀錄頁列出的自訂單：開啟＝載入到自訂報價單頁；預覽＝載入後直接開預覽視窗 */
 async function recOpenCustom(no){ await loadCustomQuoteByNo(no,false); }
-async function recPreviewCustom(no){ await loadCustomQuoteByNo(no,false); openCustomPreview(); }
+async function recPreviewCustom(no, backPage){ await loadCustomQuoteByNo(no,false); openCustomPreview(); if(typeof pvSetBackPage==='function') pvSetBackPage(backPage||null); }
 

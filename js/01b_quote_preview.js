@@ -315,6 +315,13 @@ function openPreview(){
   closeMobileNav();
 }
 
-function closePreview(){document.getElementById('pov').style.display='none';}
+/* 2026-09-03：從別的頁（例如訂單追蹤）點「預覽報價單」時，記住原本在哪一頁，
+   關掉預覽就自動回去，不會把人丟在報價單填寫頁。null＝照舊留在目前這頁。 */
+let PV_BACK_PAGE=null;
+function pvSetBackPage(p){ PV_BACK_PAGE=p||null; }
+function closePreview(){
+  document.getElementById('pov').style.display='none';
+  if(PV_BACK_PAGE){ const p=PV_BACK_PAGE; PV_BACK_PAGE=null; if(typeof gotoPage==='function') gotoPage(p); }
+}
 
 /* ===== 正式版 API 層 ===== */
