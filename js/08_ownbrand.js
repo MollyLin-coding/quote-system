@@ -255,26 +255,101 @@ async function loadConsignInventory(){
     }).join('');
   }catch(e){ body.innerHTML=`<tr><td colspan="3" class="rec-empty">${escHtml(e.message||'載入失敗')}</td></tr>`; }
 }
+/* ---- 2026-09-04：進出貨明細每一批「鋪貨/補貨」補一顆驗收單入口 ----
+   原本只有在「登記異動」當下勾了「產生驗收單」才會跳出那張單，事後完全沒有入口：
+   沒勾、或只按了「預覽」就關掉，那批貨就再也印不出驗收單，留底也不會有
+   （島羽 2026-09-03 那批 7 款就是這樣，線上一張 CS- 留底都沒有）。
+   單號從「那批異動的建檔時間」推回去（CS-<客戶>-<YYYYMMDDHHMMSS>），所以同一批不管補開幾次
+   都是同一個單號；已經有留底的那批會顯示「查看驗收單」，開起來走取代模式，不會多長一筆。 */
+let CS_LED_BATCHES=[];      // 這位客戶的每一批鋪貨：{no, date, note, rows:[{name,vol,qty}]}
+let CS_LED_VF={};           // CS- 單號 -> 已存在的驗收單留底 id
+function csLedBatchNo(cid, r){
+  const ts=String(r.created_at||'').replace(/[^0-9]/g,'').slice(0,14)
+        || (String(r.date||'').replace(/[^0-9]/g,'').slice(0,8)+'000000');
+  return 'CS-'+String(cid||'').replace(/[^A-Za-z0-9]/g,'')+'-'+ts;
+}
+function csLedRowItem(r){
+  const p=ownbrandBySku(r.sku_id);
+  const parts=String(r.sku_id||'').split('|');   // sku_id 找不到公版酒時的退路：<酒名>|<容量>
+  return { name:p?p.name:(parts[0]||String(r.sku_id||'')), vol:p?p.volume:(parts[1]||''), qty:parseFloat(r.qty)||0 };
+}
+/* 背景去問「哪幾批已經有留底了」：listVerifyForms 是讀取快取白名單，90 秒內不會重打。
+   沒留底的那顆用金色 primary 標起來，一眼看得出哪批漏開。 */
+function csLedMarkVerified(){
+  if(!AUTH_TOKEN) return;
+  readCall({action:'listVerifyForms', token:AUTH_TOKEN, filters:{}}).then(d=>{
+    CS_LED_VF={};
+    ((d&&d.records)||[]).forEach(f=>{ const n=String(f.no||'').trim(); if(n.indexOf('CS-')===0) CS_LED_VF[n]=String(f.id); });
+    document.querySelectorAll('#cs-ledger-body .cs-vfbtn').forEach(b=>{
+      const has=!!CS_LED_VF[b.dataset.no];
+      b.textContent=has?'查看驗收單':'補開驗收單';
+      b.classList.toggle('primary', !has);
+    });
+  }).catch(()=>{});
+}
+/* ⚠ 值一律走 data-*＋this.dataset，不要塞進 inline onclick 的字串字面值（跳脫救不了，見專案記憶）。 */
+async function csReopenVerify(i){
+  const b=CS_LED_BATCHES[+i];
+  if(!b||!b.rows||!b.rows.length){ toast('這筆明細已經重新載入過，請重選一次客戶再試','err'); return; }
+  const c=curConsignCustomer();
+  let editId=null, rows=b.rows, shipDate=b.date, handler='', note=b.note;
+  try{
+    const d=await readCall({action:'listVerifyForms', token:AUTH_TOKEN, filters:{}});
+    const f=((d&&d.records)||[]).find(x=>String(x.no||'').trim()===b.no);
+    if(f){
+      editId=String(f.id);
+      const items=Array.isArray(f.items)?f.items:parseJsonSafe(f.items_json,[]);
+      if(Array.isArray(items)&&items.length){
+        rows=items.map(it=>({ name:it.name||'', vol:it.vol||'',
+          qty:(it.thisShip!=null&&it.thisShip!=='')?it.thisShip:(it.ordered||0),
+          taster:!!(it.taster&&String(it.taster)!=='0') }));
+      }
+      shipDate=(typeof vmLocalYmd==='function'?vmLocalYmd(f.ship_date):String(f.ship_date||'').slice(0,10))||b.date;
+      handler=f.pm||'';
+      toast('這批已經有驗收單留底，已帶回舊的那一張；只要列印按「預覽」就好，按「產生驗收單」會用新版取代舊留底','ok');
+    }
+  }catch(_){}
+  openConsignVerifyForm({ no:b.no, client:(c&&c.name)||CS_CUR, shipDate, handler, note, rows }, editId);
+}
 async function loadConsignLedger(){
   const body=document.getElementById('cs-ledger-body');
   const payload={action:'getConsignLedger', token:AUTH_TOKEN};   // 同庫存：抓全部進快取，切客戶 0 秒
-  if(!rcPeek(payload)) body.innerHTML=sklTableRows(6,4);
+  if(!rcPeek(payload)) body.innerHTML=sklTableRows(7,4);
   try{
     const d=await readCall(payload);
     if(!d.ok) throw new Error(d.error||'載入明細失敗');
     // 2026-08-21：保證金制取消，舊的「退保證金」異動一併不顯示（資料仍在後端）
     let rows=(d.rows||[]).filter(r=>(!r.customer_id||String(r.customer_id)===String(CS_CUR)) && String(r.type||'')!=='deposit_refund');
     rows.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
-    if(!rows.length){ body.innerHTML='<tr><td colspan="6" class="rec-empty">尚無異動明細</td></tr>'; return; }
+    if(!rows.length){ body.innerHTML='<tr><td colspan="7" class="rec-empty">尚無異動明細</td></tr>'; CS_LED_BATCHES=[]; return; }
+    // 先把「鋪貨/補貨」照建檔時間分批（一次登記多款＝同一批＝同一張驗收單）
+    CS_LED_BATCHES=[]; const bidx={};
+    rows.forEach(r=>{
+      if(String(r.type||'')!=='in') return;
+      const no=csLedBatchNo(CS_CUR, r);
+      if(bidx[no]==null){ bidx[no]=CS_LED_BATCHES.length;
+        CS_LED_BATCHES.push({ no, date:String(r.date||'').slice(0,10), note:r.note||'', rows:[] }); }
+      CS_LED_BATCHES[bidx[no]].rows.push(csLedRowItem(r));
+    });
+    const shown={};
     body.innerHTML=rows.map(r=>{
       const p=ownbrandBySku(r.sku_id);
       const nm=p?`${p.name}（${p.volume}）`:r.sku_id;
       const up=(r.unit_price!=null&&r.unit_price!=='')?money(r.unit_price):'—';
+      let act='';
+      if(String(r.type||'')==='in'){
+        const no=csLedBatchNo(CS_CUR, r);
+        // 一批只在第一列給一顆鈕（同一批多款共用同一張驗收單）
+        if(!shown[no]){ shown[no]=1;
+          act=`<button class="rec-act-btn cs-vfbtn" data-b="${escAttr(String(bidx[no]))}" data-no="${escAttr(no)}" onclick="csReopenVerify(this.dataset.b)">驗收單</button>`; }
+      }
       return `<tr><td class="mc-main">${escHtml(r.date||'')}</td><td data-l="類型">${escHtml(CS_TYPE_LABEL[r.type]||r.type||'')}</td>
         <td data-l="公版酒">${escHtml(nm)}</td><td data-l="數量" style="text-align:right">${(parseFloat(r.qty)||0).toLocaleString()}</td>
-        <td data-l="折後單價" style="text-align:right">${up}</td><td data-l="備註">${escHtml(r.note||'')}</td></tr>`;
+        <td data-l="折後單價" style="text-align:right">${up}</td><td data-l="備註">${escHtml(r.note||'')}</td>
+        <td class="rec-actions" data-l="操作">${act}</td></tr>`;
     }).join('');
-  }catch(e){ body.innerHTML=`<tr><td colspan="6" class="rec-empty">${escHtml(e.message||'載入失敗')}</td></tr>`; }
+    csLedMarkVerified();
+  }catch(e){ body.innerHTML=`<tr><td colspan="7" class="rec-empty">${escHtml(e.message||'載入失敗')}</td></tr>`; }
 }
 function populateConsignSkuSelect(selId){
   const s=document.getElementById(selId); if(!s) return;
@@ -428,7 +503,7 @@ function csMoveSkuOptions(selectedSku){
 }
 function csAddMoveRow(){
   CS_MOVE_ROWID++;
-  csMoveItems.push({id:CS_MOVE_ROWID, sku:'', qty:'', taster:false, tasterQty:1});
+  csMoveItems.push({id:CS_MOVE_ROWID, sku:'', qty:'', taster:false, tasterQty:1, tasterVol:csTasterVolDefault('')});
   renderCsMoveItems();
 }
 function csDelMoveRow(id){
@@ -438,7 +513,42 @@ function csDelMoveRow(id){
 }
 function csMoveRowInput(id, key, val){
   const r=csMoveItems.find(x=>x.id===id); if(r) r[key]=val;
+  /* 2026-09-04：換了公版酒就把試飲瓶容量重算一次——這支酒的主檔沒有目前選的容量時
+     自動換成它有的（例如只有 100ml 的酒，就不要還停在 500ml）。 */
+  if(key==='sku' && r){
+    const vs=csTasterVols(val);
+    if(vs.indexOf(String(r.tasterVol||''))<0) r.tasterVol=csTasterVolDefault(val);
+    renderCsMoveItems();
+  }
   if(key==='taster') csMoveGenvfLock();
+}
+/* ---- 2026-09-04：試飲瓶容量改成可選 ----
+   原本整套寫死 500ml（畫面文字、驗收單的容量欄都是）。Molly 2026-09-03 給島羽的是 100ml
+   （500ml 缺貨），系統只能選 500ml，只好把 7 款 100ml 當成正式鋪貨登記進庫存帳。
+   改法：容量從公版酒主檔撈這支酒真的有的容量（sku_id＝<酒名>|<容量>），
+   並保證 500ml／100ml 兩個常用值一定在清單裡；預設仍是 500ml。 */
+const CS_TASTER_VOL_DEFAULT='500ml';
+function csTasterVols(sku){
+  const p=ownbrandBySku(sku);
+  const nm=p?p.name:String(sku||'').split('|')[0];
+  const out=[];
+  const push=v=>{ v=String(v||'').trim(); if(v && out.indexOf(v)<0) out.push(v); };
+  // 這支酒主檔真的有的容量（小的排前面，試飲瓶通常給最小那個）
+  (OWNBRAND_PRODUCTS||[]).filter(x=>nm && String(x.name||'')===String(nm))
+    .map(x=>String(x.volume||'').trim()).filter(Boolean)
+    .sort((a,b)=>(parseFloat(a)||0)-(parseFloat(b)||0))
+    .forEach(push);
+  if(!out.length){ push('100ml'); push(CS_TASTER_VOL_DEFAULT); }   // 還沒選酒款／主檔查不到：給兩個常用值
+  return out;
+}
+/* 預設仍是 500ml；但這支酒主檔沒有 500ml（例如只出 100ml）就自動用它最小的那個容量 */
+function csTasterVolDefault(sku){
+  const vs=csTasterVols(sku);
+  return vs.indexOf(CS_TASTER_VOL_DEFAULT)>=0?CS_TASTER_VOL_DEFAULT:(vs[0]||CS_TASTER_VOL_DEFAULT);
+}
+function csTasterVolOptions(sku, cur){
+  const c=String(cur||CS_TASTER_VOL_DEFAULT);
+  return csTasterVols(sku).map(v=>`<option value="${escAttr(v)}"${v===c?' selected':''}>${escHtml(v)}</option>`).join('');
 }
 /* 2026-08-12 Molly：試飲瓶只會出現在出貨驗收單上，不寫進 consign_ledger——
    一旦有任一列勾了試飲瓶，「同時產生出貨驗收單」就強制勾選＋鎖定，避免她手動取消
@@ -452,7 +562,7 @@ function csMoveGenvfLock(){
 }
 function renderCsMoveItems(){
   const body=document.getElementById('cs-m-items-body'); if(!body) return;
-  /* 2026-08-06 Molly：每款鋪貨酒都可以附一支 500ml 試飲瓶。
+  /* 2026-08-06 Molly：每款鋪貨酒都可以附試飲瓶（2026-09-04 起容量可選，預設 500ml）。
      試飲瓶是免費贈送、不進庫存帳——只會出現在出貨驗收單上並標示「試飲」，
      所以這裡只是一個旗標，不會產生 consign_ledger 異動。 */
   body.innerHTML=csMoveItems.map(r=>`<div style="margin-top:6px">
@@ -461,12 +571,15 @@ function renderCsMoveItems(){
       <input class="fi" type="number" min="0" style="flex:1" placeholder="數量" value="${(r.qty!=null&&r.qty!=='')?escAttr(r.qty):''}" oninput="csMoveRowInput(${r.id},'qty',this.value)">
       <button type="button" class="del" onclick="csDelMoveRow(${r.id})">✕</button>
     </div>
-    <label style="display:inline-flex;align-items:center;gap:5px;margin:4px 0 0 2px;font-size:11.5px;color:var(--hint);cursor:pointer">
-      <input type="checkbox" ${r.taster?'checked':''} onchange="csMoveRowInput(${r.id},'taster',this.checked)" style="width:14px;height:14px;cursor:pointer">
-      附 500ml 試飲瓶
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin:4px 0 0 2px;font-size:11.5px;color:var(--hint)">
+      <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer">
+        <input type="checkbox" ${r.taster?'checked':''} onchange="csMoveRowInput(${r.id},'taster',this.checked)" style="width:14px;height:14px;cursor:pointer">
+        附試飲瓶
+      </label>
+      <select onchange="csMoveRowInput(${r.id},'tasterVol',this.value)" style="border:1px solid var(--bd);border-radius:4px;padding:1px 4px;font-size:11px;font-family:inherit">${csTasterVolOptions(r.sku, r.tasterVol)}</select>
       <input type="number" min="1" value="${(r.tasterQty!=null&&r.tasterQty!=='')?escAttr(r.tasterQty):1}" onchange="csMoveRowInput(${r.id},'tasterQty',this.value)" style="width:46px;border:1px solid var(--bd);border-radius:4px;padding:1px 4px;font-size:11px;font-family:inherit">
-      支（免費贈送，不計價、不進庫存）
-    </label>
+      <span>支（免費贈送，不計價、不進庫存）</span>
+    </div>
   </div>`).join('');
 }
 function csGenVerifyNo(customerId){
@@ -485,7 +598,8 @@ async function saveConsignMove(){
   if(type==='in'){
     // 鋪貨/補貨：一次登記多款（一次呼叫 addConsignMovements，backend 用鎖包住避免單號互撞）
     const rows=csMoveItems.map(r=>({sku:String(r.sku||'').trim(), qty:parseFloat(r.qty),
-      taster:!!r.taster, tasterQty:Math.max(1, parseInt(r.tasterQty,10)||1)}));
+      taster:!!r.taster, tasterQty:Math.max(1, parseInt(r.tasterQty,10)||1),
+      tasterVol:String(r.tasterVol||CS_TASTER_VOL_DEFAULT).trim()||CS_TASTER_VOL_DEFAULT}));
     const hasSku=r=>!!r.sku, hasQty=r=>!isNaN(r.qty)&&r.qty>0;
     const valid=rows.filter(r=>hasSku(r)&&hasQty(r));
     /* 2026-08-12 Molly：有時只是純拜訪送試飲瓶，沒有搭配真的鋪貨——這種列允許
@@ -520,17 +634,17 @@ async function saveConsignMove(){
       // 複檢 2026-08-13 #1-2：帳動了，已產生的月結就作廢，避免匯出／轉報價單用到舊金額
       if(movements.length){ csClearMonthly(); loadConsignInventory(); loadConsignLedger(); }
       if(wantVf){
-        /* 驗收單的列：正常鋪貨列＋（有勾的話）該款的 500ml 試飲瓶列＋單獨登記的試飲瓶列。
+        /* 驗收單的列：正常鋪貨列＋（有勾的話）該款的試飲瓶列（容量依該列選的）＋單獨登記的試飲瓶列。
            試飲瓶只在這張單上出現，不寫進 consign_ledger，所以庫存不受影響。 */
         const rowsForVf=[];
         valid.forEach(r=>{
           const p=ownbrandBySku(r.sku);
           rowsForVf.push({ name:p?p.name:r.sku, vol:p?p.volume:'', qty:r.qty });
-          if(r.taster) rowsForVf.push({ name:p?p.name:r.sku, vol:'500ml', qty:r.tasterQty, taster:true });
+          if(r.taster) rowsForVf.push({ name:p?p.name:r.sku, vol:r.tasterVol, qty:r.tasterQty, taster:true });
         });
         tasterOnly.forEach(r=>{
           const p=ownbrandBySku(r.sku);
-          rowsForVf.push({ name:p?p.name:r.sku, vol:'500ml', qty:r.tasterQty, taster:true });
+          rowsForVf.push({ name:p?p.name:r.sku, vol:r.tasterVol, qty:r.tasterQty, taster:true });
         });
         openConsignVerifyForm({
           no: csGenVerifyNo(CS_CUR),

@@ -250,7 +250,7 @@ function vmRenderForms(){
    「附試飲瓶」勾選是同一份資料，只是這裡換一個角度彙整成可查詢的清單，不是新的紀錄來源。 */
 function vmRenderTaster(){
   const list=vmTasterList();
-  if(!list.length) return `<div class="rec-empty">尚無試飲瓶紀錄（登記寄售鋪貨時勾選「附 500ml 試飲瓶」，或單獨登記試飲瓶並產生驗收單後會出現在這裡）</div>`;
+  if(!list.length) return `<div class="rec-empty">尚無試飲瓶紀錄（登記寄售鋪貨時勾選「附試飲瓶」，或單獨登記試飲瓶並產生驗收單後會出現在這裡）</div>`;
   const byClient={};
   list.forEach(r=>{ const k=r.client||'(未歸戶)'; byClient[k]=(byClient[k]||0)+(r.qty||0); });
   const summary=Object.keys(byClient).sort((a,b)=>byClient[b]-byClient[a])
