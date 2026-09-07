@@ -140,8 +140,11 @@ const ymd=d=>{const t=new Date();t.setDate(t.getDate()+d);const p=n=>String(n).p
     && rows.find(r=>r.quote_no==='B-1').overdue_days===3, JSON.stringify(rows));
   check('11b 已經出貨的批次不再催（D-8 從清單消失）', !rows.some(r=>r.quote_no==='D-8'), JSON.stringify(rows.map(r=>r.quote_no)));
   check('11c 沒有分批的單原樣保留', rows.some(r=>r.quote_no==='Z-0'&&!r.batch_label), JSON.stringify(rows.map(r=>[r.quote_no,r.batch_label||''])));
-  check('12 主線還沒到期、但某一批到期的單會被補進來（含客戶名）',
-    rows.some(r=>r.quote_no==='C-9'&&r.client==='囍酒工藝'&&r.batch_label==='（第1批/共1批）'), JSON.stringify(rows));
+  /* 2026-09-07：shpPointLabel 改成 total<=1 不再顯示「第1批/共1批」（見 fix_20260907_shp_sync_verify.md）
+     ——C-9 這裡只有一筆分批紀錄（S9），batch_label 從「（第1批/共1批）」改成空字串，這是刻意變更、
+     鎖住新行為，不是放鬆斷言。「有沒有被補進來」這件事本身沒變，一樣要斷言。 */
+  check('12 主線還沒到期、但某一批到期的單會被補進來（含客戶名；只出一次貨不再標「第1批/共1批」）',
+    rows.some(r=>r.quote_no==='C-9'&&r.client==='囍酒工藝'&&r.batch_label===''), JSON.stringify(rows));
   check('13 沒有任何分批資料時，後端給什麼就顯示什麼（行為不變）',
     JSON.stringify(r11.untouched)===JSON.stringify([{quote_no:'B-1', client:'滿枝枒', plan_ship_date:ymd(40), overdue_days:0, urgent:true},
       {quote_no:'Z-0', client:'沒分批的單', plan_ship_date:ymd(0), overdue_days:0, urgent:true},
