@@ -343,7 +343,9 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
    用 minmax(0,Nfr) 而不是單純 Nfr：格子裡塞了兩三個事件標籤時，欄寬才不會被內容「撐開」導致七欄寬度不平均（.cd 也要 overflow:hidden 配合） */
 .cal{display:grid;grid-template-columns:repeat(5,minmax(0,1.08fr)) repeat(2,minmax(0,0.85fr));gap:4px}
 .cwd{font-size:10px;color:#A8A69C;text-align:center;padding:4px 0;font-weight:600}
-.cd{background:#FAF9F5;border:1px solid var(--bd);border-radius:8px;min-height:64px;padding:4px 5px;font-size:10px;cursor:pointer;position:relative;overflow:hidden}
+/* 2026-09-07 Molly：格子加高，事件文字換行後才有地方顯示（原本 64px 只塞得下單行的事件）。
+   min-height 不是固定高度——格子還是會被內容撐高，這裡只是讓沒事件／少事件的格子不要太扁。 */
+.cd{background:#FAF9F5;border:1px solid var(--bd);border-radius:8px;min-height:92px;padding:4px 5px;font-size:10px;cursor:pointer;position:relative;overflow:hidden}
 .cd:hover{border-color:var(--gold)}
 .cd .n{font-size:10.5px;color:#6B6B63;font-weight:600;display:block}
 .cd.dim{opacity:.3;cursor:default}
@@ -353,7 +355,14 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
 .cd.holiday .n{color:#B03A2E;font-weight:700}
 .holname{display:block;font-size:8.5px;color:#B03A2E;margin-top:1px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .lunar-mark{font-size:9px;color:#A8A69C;margin-left:3px}
-.cev{display:block;font-size:9px;border-radius:4px;padding:1.5px 4px;margin-top:3px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+/* 2026-09-07 Molly 回報「內容無法完整顯示」：原本是 white-space:nowrap＋省略號，長事件一律被切掉。
+   改成最多換到 3 行（-webkit-line-clamp）——實測她真實的出貨事件（客戶名＋第N批/共M批＋單號，
+   例如「🚚 酒肉朋友 出貨（第1批/共3批）（20260806-01）」「🚚 囍酒工藝股份有限公司 出貨（20260813-01）」）
+   3 行都放得下、完整顯示（量 scrollHeight===clientHeight 確認沒有被截）。
+   留 3 行上限是為了避免某天塞三四筆事件時把整個月曆撐得超長；真的超過 3 行才會出現省略號，
+   那時滑鼠移上去看 title 提示（20260907b 加的）。
+   ⚠ 要改成「完全不截斷」就是把 line-clamp 兩個宣告拿掉；要改幾行就改那兩個數字（要一起改）。 */
+.cev{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;line-clamp:3;font-size:9px;border-radius:4px;padding:1.5px 4px;margin-top:3px;line-height:1.35;white-space:normal;overflow-wrap:anywhere;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .cev.ship{background:#EFF4EE;color:#3E7A4E;border:1px solid #C9DCCE}
 .cev.exp{background:#F9ECEA;color:#B03A2E;border:1px solid #E8C7C2}
 .cev.memo{background:#EEF0F4;color:#4A5A78;border:1px solid #CDD5E3}
@@ -462,7 +471,8 @@ a.rec-act-btn{text-decoration:none;display:inline-block}
   .phead{padding:11px 14px;flex-wrap:wrap;row-gap:8px}
   .phbtns{flex-wrap:wrap;gap:6px}
   .cal{gap:3px}
-  .cd{min-height:44px;padding:3px 3px;font-size:9px}
+  /* 2026-09-07：手機版格子也跟著加高（手機一格更窄，換行後更需要高度） */
+  .cd{min-height:68px;padding:3px 3px;font-size:9px}
   .calhead{gap:8px}
   .rpt-head button.rec-act-btn{float:none!important;margin-top:8px;display:inline-block}
   .login-box{padding:30px 22px}
