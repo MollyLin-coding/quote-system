@@ -579,8 +579,9 @@ function orderShipPoints(o){
   if(!est && !act) return [];
   return [{ date:act||est, est, act, done:!!act, batch:false, seq:0, total:0, id:'', note:'' }];
 }
-/* 分批的批次標籤：「（第2批/共3批）」；不是分批就回空字串 */
-function shpPointLabel(sp){ return (sp&&sp.batch)?`（第${sp.seq}批/共${sp.total}批）`:''; }
+/* 分批的批次標籤：「（第2批/共3批）」；不是分批、或這張單其實只出過一次貨（total<=1，
+   單純用「產生驗收單」記一次出貨日）就回空字串，別讓沒真的拆分的單也被貼「第1批/共1批」。 */
+function shpPointLabel(sp){ return (sp&&sp.batch&&sp.total>1)?`（第${sp.seq}批/共${sp.total}批）`:''; }
 /* 只有單號、拿不到 ORDERS_CACHE 時（例如今日待辦首頁）也要查得到客戶名 */
 function shpClientOf(no){
   const n=String(no||'').trim(); if(!n) return '';
@@ -692,6 +693,37 @@ async function shpDelRow(btn){
     loadShipmentBadges();                    // 順手刷新訂單列的「分批×N」徽章
   }catch(e){ if(snap&&!ORDERS_CACHE) ORDERS_CACHE=snap; toast(e.message||'刪除失敗','err'); }
   finally{ btn.disabled=false; btn.textContent='刪除'; _busy.shpDel=false; }
+}
+/* 2026-09-07 Molly 回報「酒肉朋友分了好幾天出貨但行事曆都沒顯示」→ 查證發現：她每次分批出貨
+   用的是「產生Lot驗收單」（09_verify_form.js），配送日期只存進驗收單留底；行事曆／今日焦點／
+   今日待辦看的分批出貨（上面這整組 shp*／order_shipments）是另一個藏在「編輯進度」裡、標「例外
+   時才用」的獨立區塊，她從沒填過，全系統因此一直是 0 筆分批紀錄。
+   照設計主軸（輸入一次、全部同步）補上：產生 Lot 驗收單時，順便把這次的配送日期同步寫一筆
+   分批出貨，行事曆／今日焦點／今日待辦就會自動看得到，不用她另外去點那個「例外」區塊。
+   冪等做法：用 note 裡的 [VF:單號:第幾次出貨] 當標記——同一張單同一次出貨重印／編輯（改了配送
+   日期或箱數再按一次「產生」），找得到舊的那筆就用 updateShipment 蓋掉，不會越印越多筆分批。 */
+function shpVfTag(no, seq){ return '[VF:'+String(no||'').trim()+':'+String(seq||'1')+']'; }
+async function shpSyncFromVerify(d){
+  try{
+    if(!d || !d.no || !d.shipDate) return;
+    const tag=shpVfTag(d.no, d.shipSeq||1);
+    // 通常這張單的分批資料早就在讀取快取裡（prefetchCommon／loadShipmentBadges 已經抓過），
+    // 找不到才強制打一次，避免快取沒更新時誤判成「沒有舊紀錄」而重複新增。
+    let list=shpAllList().filter(s=>String(s.quote_no||'')===String(d.no).trim());
+    if(!list.some(s=>String(s.note||'').indexOf(tag)>=0)){
+      const fresh=await apiCall({ action:'listShipments', token:AUTH_TOKEN, quote_no:d.no }).catch(()=>null);
+      if(fresh && fresh.ok){ const arr=fresh.shipments||fresh.list; if(Array.isArray(arr)) list=arr; }
+    }
+    const hit=list.find(s=>String(s.note||'').indexOf(tag)>=0);
+    const note=tag+(d.boxes?(' 配送 '+d.boxes+' 箱'):'')+(d.shipper?('，PM '+d.shipper):'');
+    const fields={ ship_date_actual:d.shipDate, note };
+    if(hit) await apiCall({ action:'updateShipment', token:AUTH_TOKEN, id:hit.id, fields });
+    else await apiCall(Object.assign({ action:'addShipment', token:AUTH_TOKEN, quote_no:d.no, fields }, fields));
+    SHP_ALL=null;   // apiCall 的 rcClear() 只洗 RC_STORE，SHP_ALL 是另存的本地快照，要自己清掉才會重抓
+    if(typeof loadShipmentBadges==='function') loadShipmentBadges(true);
+  }catch(e){
+    toast('⚠ 這批出貨沒能同步到行事曆，請到「訂單追蹤→編輯進度→分批出貨」手動補一列','err');
+  }
 }
 /* 訂單列「分批×N」徽章：試打不帶 quote_no 的 listShipments，後端若回全部就能顯示；不支援就靜默略過 */
 async function loadShipmentBadges(force){

@@ -277,6 +277,9 @@ function generateVerifyPdf(mode){
   /* 複檢 2026-08-13 #1-3：留底一定要先存。原本是彈窗被瀏覽器擋掉就直接 return，留底一筆都不會存
      → 下次開同一張單的驗收單，「已出貨」歸零、「本次出貨」又帶成全部訂購量，第二批會印成整批數量。 */
   saveVerifyFormRecord(d);
+  /* 2026-09-07：同步寫一筆分批出貨，行事曆／今日焦點／今日待辦才看得到這次配送日期
+     （背景執行不擋列印；冪等，重印／編輯同一次出貨不會多長一筆，見 05_orders.js shpSyncFromVerify）。 */
+  if(typeof shpSyncFromVerify==='function') shpSyncFromVerify(d);
   /* 2026-08-28：同步寫進客戶寄倉帳（勾了才做；背景執行不擋列印，冪等所以重印不會重複計） */
   try{
     const _stOn=document.getElementById('vf-st-on');
