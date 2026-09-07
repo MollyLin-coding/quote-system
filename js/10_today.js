@@ -286,7 +286,10 @@ function tdShipDueRows(list){
       out.push({ quote_no:no,
         client:(base&&base.client)||((typeof shpClientOf==='function')?shpClientOf(no):'')||'',
         plan_ship_date:sp.est, overdue_days:-dd, urgent:true,
-        batch_label:(typeof shpPointLabel==='function')?shpPointLabel(sp):'' });
+        /* 2026-09-07 Molly：出貨要顯示 Lot 號。批次標籤＋Lot 用共用的 shpPointSuffix
+           （跟月曆、今日焦點同一份規則）；欄位名沿用 batch_label，渲染那一行不用動。 */
+        batch_label:(typeof shpPointSuffix==='function')?shpPointSuffix(sp)
+                   :((typeof shpPointLabel==='function')?shpPointLabel(sp):'') });
     });
   });
   out.sort((a,b)=>(b.overdue_days||0)-(a.overdue_days||0));

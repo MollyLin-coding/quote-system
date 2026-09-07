@@ -46,7 +46,9 @@ function eventsOn(dstr){
       (typeof orderShipPoints==='function'?orderShipPoints(o):[]).forEach(sp=>{
         if(sp.date!==dstr) return;
         evs.push({ t:'ship', no:o.no,
-          txt:'🚚 '+String(o.client||'').split('｜')[0]+' 出貨'+shpPointLabel(sp)+(sp.done?' ✓':'') });
+          /* 2026-09-07 Molly：出貨要顯示 Lot 號 → 改用共用的 shpPointSuffix（批次標籤＋Lot），
+             別在這裡自己組，今日焦點與今日待辦是同一份規則。 */
+          txt:'🚚 '+String(o.client||'').split('｜')[0]+' 出貨'+shpPointSuffix(sp)+(sp.done?' ✓':'') });
       });
       // 2026-08-08 Molly：報價到期不需要提醒，不再產生 ⏰ 事件。
     });
@@ -172,7 +174,7 @@ function renderTodayFocus(){
       const d=daysBetween(sp.date); if(d==null||d>7) return;
       const box=`<span class="fdone" title="打勾＝標記這一批今天已出貨" data-sid="${escAttr(sp.id)}" data-no="${escAttr(o.no)}" onclick="event.stopPropagation();calFocusShipBatch(this.dataset.sid,this.dataset.no)"></span>`;
       const tag=d<0?`<span class="ob red">出貨逾期 ${-d} 天</span>`:`<span class="ob warn">${d===0?'今天':d+' 天後'}</span>`;
-      items.push({o:d, h:`${box}${tag} 🚚 ${escHtml(String(o.client||'').split('｜')[0])} 出貨${escHtml(shpPointLabel(sp))}（${escHtml(o.no)}）`,
+      items.push({o:d, h:`${box}${tag} 🚚 ${escHtml(String(o.client||'').split('｜')[0])} 出貨${escHtml(shpPointSuffix(sp))}（${escHtml(o.no)}）`,
                   click:`tdOpenOrder('${escAttr(o.no)}')`});
     });
     if(!(typeof shpBatchesOf==='function' && shpBatchesOf(o.no).length) && o.st?.ship_date_est && !o.st?.ship_date_actual){

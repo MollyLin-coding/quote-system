@@ -582,6 +582,12 @@ function orderShipPoints(o){
 /* 分批的批次標籤：「（第2批/共3批）」；不是分批、或這張單其實只出過一次貨（total<=1，
    單純用「產生驗收單」記一次出貨日）就回空字串，別讓沒真的拆分的單也被貼「第1批/共1批」。 */
 function shpPointLabel(sp){ return (sp&&sp.batch&&sp.total>1)?`（第${sp.seq}批/共${sp.total}批）`:''; }
+/* ⚠ 出貨事件「出貨」後面要接的整串標示（批次＋Lot），月曆、今日焦點、今日待辦共用一份，別再各寫一份。
+   例：「（第2批/共3批） Lot 3」／只有 Lot 時「 Lot 3」／兩者都沒有時回空字串。 */
+function shpPointSuffix(sp){
+  const lot=shpLotOf(sp);
+  return shpPointLabel(sp)+(lot?(' '+lot):'');
+}
 /* 只有單號、拿不到 ORDERS_CACHE 時（例如今日待辦首頁）也要查得到客戶名 */
 function shpClientOf(no){
   const n=String(no||'').trim(); if(!n) return '';
@@ -703,6 +709,19 @@ async function shpDelRow(btn){
    冪等做法：用 note 裡的 [VF:單號:第幾次出貨] 當標記——同一張單同一次出貨重印／編輯（改了配送
    日期或箱數再按一次「產生」），找得到舊的那筆就用 updateShipment 蓋掉，不會越印越多筆分批。 */
 function shpVfTag(no, seq){ return '[VF:'+String(no||'').trim()+':'+String(seq||'1')+']'; }
+/* 2026-09-07 Molly：「出貨要顯示 Lot 號」。⚠ `order_shipments` 表沒有 lot 欄位，Lot 是存在驗收單留底裡的，
+   所以改成同步時把 Lot 一起寫進 `note`（格式「[VF:單號:第幾次] Lot 3 · 配送 5 箱，PM Vic」），
+   顯示時再從 note 解析出來。這樣手動在「分批出貨」那個區塊自己打的備註若寫了 Lot，一樣認得出來。
+   ⚠ 留底裡的 lot 有時是字串「Lot 17」、有時是純數字 1／15（Molly 兩種都打過），所以要正規化。 */
+function shpLotText(v){
+  const s=String(v==null?'':v).trim();
+  if(!s) return '';
+  return /^lot\b/i.test(s) ? s.replace(/^lot\s*/i,'Lot ').trim() : ('Lot '+s);
+}
+function shpLotOf(sp){
+  const m=String((sp&&sp.note)||'').match(/\bLot\s*([^\s·，,、]+)/i);
+  return m ? ('Lot '+m[1]) : '';
+}
 async function shpSyncFromVerify(d){
   try{
     if(!d || !d.no || !d.shipDate) return;
@@ -715,7 +734,8 @@ async function shpSyncFromVerify(d){
       if(fresh && fresh.ok){ const arr=fresh.shipments||fresh.list; if(Array.isArray(arr)) list=arr; }
     }
     const hit=list.find(s=>String(s.note||'').indexOf(tag)>=0);
-    const note=tag+(d.boxes?(' 配送 '+d.boxes+' 箱'):'')+(d.shipper?('，PM '+d.shipper):'');
+    const lot=shpLotText(d.lot);   // 2026-09-07：Lot 要寫進 note，行事曆才顯示得出來（見 shpLotOf）
+    const note=tag+(lot?(' '+lot):'')+(d.boxes?(' · 配送 '+d.boxes+' 箱'):'')+(d.shipper?('，PM '+d.shipper):'');
     const fields={ ship_date_actual:d.shipDate, note };
     if(hit) await apiCall({ action:'updateShipment', token:AUTH_TOKEN, id:hit.id, fields });
     else await apiCall(Object.assign({ action:'addShipment', token:AUTH_TOKEN, quote_no:d.no, fields }, fields));
