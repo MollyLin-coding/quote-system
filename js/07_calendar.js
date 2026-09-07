@@ -95,7 +95,9 @@ function calEvHtml(e){
     const c=CAL_CATEGORY_COLORS[e.item.category];
     if(c) style=` style="background:${c.bg};color:${c.fg};border-color:${c.bd}"`;
   }
-  return `<span class="cev ${cls}${e.done?' done':''}"${style} ${click}>${escHtml(e.txt)}</span>`;
+  /* 2026-09-07 Molly 回報「月曆格子文字被截斷看不完整」：格子本來就窄，長文字會被 CSS 省略號截斷
+     （.cev 的 text-overflow:ellipsis），滑鼠移上去用瀏覽器原生 title 提示看完整內容，不用點進去。 */
+  return `<span class="cev ${cls}${e.done?' done':''}"${style} title="${escAttr(e.txt)}" ${click}>${escHtml(e.txt)}</span>`;
 }
 function renderCalMonth(el){
   const first=new Date(CAL_Y, CAL_M, 1);
