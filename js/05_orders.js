@@ -38,7 +38,11 @@ function orderTimelineHtml(o){
   const st=o.st||{}; const steps=orderSteps(st);
   steps[0].date=o.quoteDate||'';
   const _ship=steps.find(x=>x.key==='ship'), _final=steps.find(x=>x.key==='final');
-  if(!_ship.done && st.ship_date_est)   _ship.sub='預計 '+st.ship_date_est.slice(5);
+  /* 2026-09-07 Molly：還沒出完時要看得到「出到哪了」，不用點進驗收單自己算。
+     有留底才顯示；出完了那一關本來就會打勾，不再標數字。 */
+  const _sp=(typeof ordShipProgress==='function')?ordShipProgress(o.no):null;
+  if(!_ship.done && _sp) _ship.sub='已出 '+_sp.shipped+'/'+_sp.ordered;
+  else if(!_ship.done && st.ship_date_est)   _ship.sub='預計 '+st.ship_date_est.slice(5);
   if(!_final.done && st.final_date_est) _final.sub='預計 '+st.final_date_est.slice(5);
   // 目前進行到的關卡＝最後一個已完成的下一關
   let curIdx=0; steps.forEach((sp,i)=>{ if(sp.done) curIdx=i; });
@@ -163,7 +167,23 @@ async function loadOrderVerifyBadges(force){
     // 客戶批號備援：每張單取最新一張驗收單上填的客戶批號（records 已是新→舊）
     const lots={};
     ((lf&&lf.records)||[]).forEach(r=>{ if(r.no && String(r.lot||'').trim() && !(r.no in lots)) lots[r.no]=String(r.lot).trim(); });
-    ORDER_VSUM={ forms:(lf&&lf.summary)||{}, reps:(gv&&gv.summary)||{}, repList:(gv&&gv.records)||[], lots };
+    /* 2026-09-07 Molly 要「還沒出完時看得到出到哪」：這份 records 本來就抓進來了（只取了客戶批號），
+       順手把每張單的「訂購總數／已出總數」算出來，編輯進度的出貨那一關就能標「已出 182/224」，
+       不必再多打一次 API。⚠ 訂購數以**最新一張**驗收單上的 ordered 為準（改過數量以新的為準）；
+       已出＝所有留底的 thisShip 加總。 */
+    const ship={};
+    ((lf&&lf.records)||[]).slice().sort((a,b)=>new Date(a.created_at||0)-new Date(b.created_at||0)).forEach(r=>{
+      if(!r.no) return;
+      const s=ship[r.no]||(ship[r.no]={ordered:null, shipped:0});
+      let ord=0, hasOrd=false;
+      (r.items||[]).forEach(it=>{
+        const o=parseFloat(it.ordered), t=parseFloat(it.thisShip)||0;
+        if(!isNaN(o)){ ord+=o; hasOrd=true; }
+        s.shipped+=t;
+      });
+      if(hasOrd) s.ordered=ord;                 // 後面的覆蓋前面的＝取最新一張
+    });
+    ORDER_VSUM={ forms:(lf&&lf.summary)||{}, reps:(gv&&gv.summary)||{}, repList:(gv&&gv.records)||[], lots, ship };
     renderOrders();
   }catch(_){}
 }
@@ -181,6 +201,14 @@ function orderVerifyBadge(o){
   const unh=orderUnhandledCount(o.no);
   if(unh>0) h+=`<span class="ob red">客訴 ${unh} 待處理</span>`;
   return h;
+}
+/* 這張單「訂購總數／已出總數」（資料來自 ORDER_VSUM.ship，見 loadOrderVerifyBadges）。
+   沒有留底、訂購數不明、或已經出完（shipped>=ordered）就回 null＝不顯示進度數字。 */
+function ordShipProgress(no){
+  const s=ORDER_VSUM&&ORDER_VSUM.ship&&ORDER_VSUM.ship[no];
+  if(!s || s.ordered==null || !(s.ordered>0)) return null;
+  if(s.shipped>=s.ordered) return null;
+  return { shipped:s.shipped, ordered:s.ordered };
 }
 /* 訂單的客戶批號：編輯進度手動填的優先，沒填就帶最新驗收單上的 */
 function ordCustLot(o){
@@ -587,6 +615,46 @@ function shpPointLabel(sp){ return (sp&&sp.batch&&sp.total>1)?`（第${sp.seq}�
 function shpPointSuffix(sp){
   const lot=shpLotOf(sp);
   return shpPointLabel(sp)+(lot?(' '+lot):'');
+}
+/* ⚠⚠ 2026-09-07 Molly：「我已經產出過出貨單且完成出貨了，訂單進度卻沒有跟著更改」。
+   查證：訂單進度那七關（orderSteps／effOrdStatus）**只看主線的 `st.ship_date_actual`**，
+   而「產生Lot驗收單」從頭到尾沒有人去寫那個欄位（9/7 補的 shpSyncFromVerify 只寫 order_shipments），
+   所以就算驗收單開好開滿、貨全出光，進度還是卡在「排產中」，
+   連帶「已出貨未開發票」「該催的尾款」這些報表也永遠不會把這張單算進去。
+   照設計主軸（輸入一次、全部同步）補上：驗收單這次出完之後**如果每一項的待出貨都歸零**，
+   就把主線的實際出貨日填成這次的配送日 → effOrdStatus 自動推進成「已出貨」。
+   ⚠ 還沒出完（remain>0）就不動主線——部分出貨不該被當成整張單出完。 */
+function vfRemainOf(rows){
+  const arr=Array.isArray(rows)?rows:[];
+  let total=0, any=false;
+  arr.forEach(r=>{
+    const ordered=parseFloat(r&&r.ordered), shipped=parseFloat(r&&r.shipped)||0, ship=parseFloat(r&&r.thisShip)||0;
+    if(isNaN(ordered)) return;          // 訂購數不明的列（例如附加費用列）不列入判斷
+    any=true;
+    const rest=ordered-shipped-ship;
+    total+=(rest>0?rest:0);
+  });
+  return any?total:null;                // null＝沒有任何可判斷的品項，不要亂推進度
+}
+async function ordSyncShippedFromVerify(d){
+  try{
+    if(!d || !d.no || !d.shipDate || !AUTH_TOKEN) return;
+    const remain=vfRemainOf(d.rows);
+    if(remain===null || remain>0) return;                     // 還沒出完 → 主線不動
+    const o=(typeof ORDERS_CACHE!=='undefined'&&ORDERS_CACHE)?ORDERS_CACHE.find(x=>x.no===d.no):null;
+    const cur=String((o&&o.st&&o.st.ship_date_actual)||'').slice(0,10);
+    if(cur===String(d.shipDate).slice(0,10)) return;          // 已經是這個日期了，重印不必再打一次
+    const r=await apiCall({ action:'updateOrderStatus', token:AUTH_TOKEN, quote_no:d.no,
+                            fields:{ ship_date_actual:d.shipDate } });
+    if(!r || !r.ok) throw new Error((r&&r.error)||'儲存失敗');
+    if(o) o.st=Object.assign({}, o.st||{}, { ship_date_actual:d.shipDate });
+    if(typeof loadOrders==='function') loadOrders().catch(()=>{});
+    // 比照 calFocusShipSave：標了出貨就背景補一次日曆同步，不用等每小時排程
+    apiCall({ action:'syncCalendarNow', token:AUTH_TOKEN }).catch(()=>{});
+    toast('這張單已全部出貨完畢，訂單進度已推進到「已出貨」（實際出貨日 '+d.shipDate+'）','ok');
+  }catch(e){
+    toast('⚠ 訂單進度沒能自動推進到「已出貨」，請到「訂單追蹤→編輯進度」把實際出貨日填一下','err');
+  }
 }
 /* 只有單號、拿不到 ORDERS_CACHE 時（例如今日待辦首頁）也要查得到客戶名 */
 function shpClientOf(no){

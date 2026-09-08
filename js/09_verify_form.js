@@ -280,6 +280,9 @@ function generateVerifyPdf(mode){
   /* 2026-09-07：同步寫一筆分批出貨，行事曆／今日焦點／今日待辦才看得到這次配送日期
      （背景執行不擋列印；冪等，重印／編輯同一次出貨不會多長一筆，見 05_orders.js shpSyncFromVerify）。 */
   if(typeof shpSyncFromVerify==='function') shpSyncFromVerify(d);
+  /* 2026-09-07：這次出完就沒有待出貨了 → 順便把訂單進度推進到「已出貨」
+     （只在全部出完時才動主線，部分出貨不動；見 05_orders.js ordSyncShippedFromVerify）。 */
+  if(typeof ordSyncShippedFromVerify==='function') ordSyncShippedFromVerify(d);
   /* 2026-08-28：同步寫進客戶寄倉帳（勾了才做；背景執行不擋列印，冪等所以重印不會重複計） */
   try{
     const _stOn=document.getElementById('vf-st-on');
@@ -319,7 +322,16 @@ function previewVerifyPdf(mode){
    編輯模式（VF_EDIT_ID 有值）＝「取代」：先存新留底，成功後刪掉舊的那筆，再重整驗收管理清單。 */
 function saveVerifyFormRecord(d){
   try{
-    if(!AUTH_TOKEN) return;
+    /* ⚠⚠ 2026-09-07 Molly 回報「我已經產出過出貨單且完成出貨了，訂單進度卻沒有跟著更改」——
+       查證發現她那張驗收單**整筆沒有存進資料庫**（後端 summary 顯示該單只有 3 筆、停在 9/2）。
+       root cause 就是原本這一行 `if(!AUTH_TOKEN) return;`：**完全不出聲就結束**，
+       但 PDF 照樣印得出來（20260806 早於 20260813，不需要 QR 驗證碼，vfKeyReady 直接放行），
+       所以她拿到列印好的驗收單、以為存好了，實際上留底／出貨量／行事曆全都沒記到。
+       （2026-08-06 #23 修過「API 失敗不出聲」那條路，但漏了「根本沒登入」這條。） */
+    if(!AUTH_TOKEN){
+      toast('⚠ 目前沒有登入（可能是登入過期了），這張驗收單「沒有」留底：出貨量、行事曆、訂單進度都不會記到。請重新登入後再按一次「產生」','err');
+      return;
+    }
     const editId=VF_EDIT_ID; VF_EDIT_ID=null;
     const record={ no:d.no, lot:d.lot, shipDate:d.shipDate, pm:d.shipper, boxes:d.boxes,
       items:(d.rows||[]).map(r=>({ name:r.name, lot:r.lot, vol:r.vol, mfg:r.mfg, thisShip:r.thisShip, ordered:r.ordered, shipped:r.shipped })) };
