@@ -176,6 +176,33 @@ function fxShouldImport_(o) {
 function fxLotDigits_(lot) { var m = String(lot == null ? '' : lot).match(/\d+/); return m ? m[0] : ''; }
 function fxVolMl_(v) { var m = String(v == null ? '' : v).match(/\d+(\.\d+)?/); return m ? m[0] : ''; }
 function fxNum_(v) { if (v === '' || v == null) return ''; var n = Number(v); return isNaN(n) ? '' : n; }
+// 報價單裡「運費」那一列（extra 品項，名稱含「運費」、正數；「運費折抵」是負數、「整批出貨免運」是 freeship 型，都不算）
+function fxShippingOfItems_(items) {
+  var sum = 0;
+  (items || []).forEach(function (it) {
+    if (String(it.itemType) !== 'extra') return;
+    if (String(it.name || '').indexOf('運費') < 0) return;
+    var v = Number(it.subtotal != null && it.subtotal !== '' ? it.subtotal : it.unitPrice) || 0;
+    if (v > 0) sum += v;
+  });
+  return Math.round(sum);
+}
+// 一次讀整張品項表，回 { quote_no: 運費 }（同步時 20 幾張單不用各讀一次）
+function fxShippingMap_() {
+  var m = {};
+  try {
+    var sh = ssApp_().getSheetByName(SHEET_ITEMS);
+    if (!sh || sh.getLastRow() < 2) return m;
+    var data = sh.getRange(2, 1, sh.getLastRow() - 1, effW_(sh, ITEM_HEADERS)).getValues();
+    data.forEach(function (r) {
+      if (String(r[ITEM_COLS.itemType - 1]) !== 'extra') return;
+      if (String(r[ITEM_COLS.name - 1] || '').indexOf('運費') < 0) return;
+      var v = Number(r[ITEM_COLS.subtotal - 1] !== '' ? r[ITEM_COLS.subtotal - 1] : r[ITEM_COLS.unitPrice - 1]) || 0;
+      if (v > 0) { var q = String(r[ITEM_COLS.quoteNo - 1]); m[q] = (m[q] || 0) + Math.round(v); }
+    });
+  } catch (e) {}
+  return m;
+}
 function fxOrderStatusOf_(quoteNo) {
   var all = v2ReadAll_(SHEET_ORDER_STATUS, ORDER_STATUS_HEADERS);
   for (var i = 0; i < all.length; i++) if (String(all[i].quote_no) === String(quoteNo)) return all[i];
@@ -192,6 +219,7 @@ function fxBuildOrderPayload_(quote, os, map) {
   var lot = '';
   (quote.items || []).some(function (it) { if (String(it.itemType) === 'bottle' && fxLotDigits_(it.lot)) { lot = fxLotDigits_(it.lot); return true; } return false; });
   var gt = Number(quote.grandTotal) || 0;
+  var ship = fxShippingOfItems_(quote.items);   // 廠務「總金額」不含運費、運費另有「運費金額」欄
   var dep = os ? fxNum_(os.deposit_amt) : '';
   var fin = os ? fxNum_(os.final_amt) : '';
   var balance = (fin !== '') ? fin : (dep !== '' ? Math.max(0, gt - dep) : gt);
@@ -203,7 +231,7 @@ function fxBuildOrderPayload_(quote, os, map) {
     deliveryDate: (os && os.ship_date_est) || quote.expectedShipDate || '',
     actualDeliveryDate: (os && os.ship_date_actual) || '',
     items: JSON.stringify(items),
-    total: gt, balance: balance, depositStatus: depositStatus,
+    total: Math.max(0, gt - ship), balance: balance, depositStatus: depositStatus,
     pm: quote.handler || '', lot: lot,
     orderCreator: '報價系統(' + quote.quoteNo + ')',
     orderNote: ('報價單 ' + quote.quoteNo + (quote.remark ? '｜' + String(quote.remark).slice(0, 200) : '')),
@@ -212,7 +240,7 @@ function fxBuildOrderPayload_(quote, os, map) {
     finalAmount: fin, finalDueDate: (os && os.final_date_est) || '', finalPaidDate: (os && os.final_date) || '',
     finalAdjusted: 'false', finalAdjustedAmount: '', finalAdjustNote: '',
     // 配送八欄
-    shipMethod: '', shipFee: '', recvName: quote.shipContact || quote.contactName || '', recvPhone: quote.shipPhone || quote.contactPhone || '',
+    shipMethod: '', shipFee: (ship > 0 ? ship : ''), shipFeePayer: (ship > 0 ? '客戶付運費' : ''), recvName: quote.shipContact || quote.contactName || '', recvPhone: quote.shipPhone || quote.contactPhone || '',
     recvAddr: quote.shipAddress || quote.clientAddress || '', taxId: quote.clientTaxId || '',
     invoiceSent: 'false', invoiceLast5: (os && os.invoice_last5) || ''
   };
@@ -244,15 +272,21 @@ function handleFactoryPushOrder_(params) {
 
 // ═══ 同步：廠務 → 報價系統 ═══════════════════════════════
 // 金流比對：兩邊都有值且不同才算不符（'' 視為未填不比）
-function fxFinCompare_(os, o) {
+function fxFinCompare_(os, o, quoteShip) {
   var out = [];
+  var ship = Number(quoteShip) || 0;
+  var fxShipFee = fxNum_(o.shipFee);
   function cmp(label, a, b) {
     a = fxNum_(a); b = fxNum_(b);
     if (a === '' || b === '') return;
-    if (Math.round(a) !== Math.round(b)) out.push(label + '：報價 ' + a + ' ≠ 廠務 ' + b);
+    if (Math.round(a) === Math.round(b)) return;
+    // 2026-09-09 Molly：報價單含運費、廠務「總金額」不含（運費另填在「運費金額」欄，同仁常留空）→ 差額剛好＝運費就算一致
+    if (ship > 0 && fxShipFee === '' && Math.round(a) === Math.round(b) + ship) return;
+    out.push(label + '：報價 ' + a + ' ≠ 廠務 ' + b);
   }
   if (!os) return out;
-  cmp('總額', os.grand_total, (Number(o.total) || 0) > 0 ? o.total : '');   // 廠務 total 預設 0＝未填
+  var fxTotal = (Number(o.total) || 0) > 0 ? (Number(o.total) + (fxShipFee !== '' ? fxShipFee : 0)) : '';   // 廠務 total 預設 0＝未填
+  cmp('總額', os.grand_total, fxTotal);
   cmp('訂金', os.deposit_amt, o.depositAmount);
   var fxFinal = (o.finalAdjusted && o.finalAdjustedAmount !== '') ? o.finalAdjustedAmount : o.finalAmount;
   cmp('尾款', os.final_amt, fxFinal);
@@ -401,6 +435,7 @@ function handleFactorySync_(params) {
     var osBy = {}; osAll.forEach(function (o) { osBy[String(o.quote_no)] = o; });
     var ships = v2ReadAll_(SHEET_ORDER_SHIPMENTS, ORDER_SHIP_HEADERS);
     var customers = []; try { customers = v2ReadAll_(SHEET_CUSTOMERS, CUSTOMERS_HEADERS); } catch (e) {}
+    var shipMap = fxShippingMap_();
     var priceCtx = null;
     var now = tpeNow_();
     var synced = 0, imported = [], mismatches = [], errors = [], shipChanged = 0;
@@ -424,7 +459,7 @@ function handleFactorySync_(params) {
           imported.push({ factory_order_no: o.orderNo, quote_no: quoteNo, client: imp.clientName });
         }
         var os = osBy[quoteNo] || null;
-        var mis = fxFinCompare_(os, o);
+        var mis = fxFinCompare_(os, o, shipMap[quoteNo] || 0);
         var sres = fxSyncShipments_(quoteNo, o, shipRows, ships);
         shipChanged += sres.changed;
         var actual = '';
@@ -495,4 +530,52 @@ function handleFactoryLinkExisting_(params) {
   var sync = null;
   try { sync = handleFactorySync_({ noImport: '1' }); } catch (e) {}
   return { ok: true, quote_no: quoteNo, factory_order_no: orderNo, synced: !!(sync && sync.ok) };
+}
+
+// ═══ 2026-09-09 Molly：「報價單資訊有更改，訂單追蹤要跟著一起更新」═══════════════════
+// 報價單存檔（updateQuote）後呼叫：訂單追蹤的 總額／訂金／尾款 依報價單重算。
+//   總額＝報價單總計；訂金／尾款＝從付款條件文字解析（orderPayFromQuote_，解析不出來就不動這兩欄）。
+//   ⚠ 只更新「已存在」的訂單追蹤列（不新建：純報價單／還沒建追蹤的單不碰）；日期欄一律不動。
+//   回 {changed:[欄位…]}，一個欄位都沒變就回空陣列。
+function syncOrderStatusFromQuote_(quoteNo) {
+  var q = getQuoteWithItems_(quoteNo);
+  if (!q) return { ok: false, error: '找不到報價單' };
+  if (String(q.status || '') === '純報價' || String(q.status || '') === '已刪除') return { ok: true, changed: [], skipped: q.status };
+  var os = fxOrderStatusOf_(quoteNo);
+  if (!os) return { ok: true, changed: [], skipped: 'no-order-status' };
+  var gt = Math.round(Number(q.grandTotal) || 0);
+  var pay = orderPayFromQuote_(quoteNo, gt);
+  var fields = {}, changed = [];
+  if (gt > 0 && Math.round(Number(os.grand_total) || 0) !== gt) { fields.grand_total = gt; changed.push('總額 ' + (os.grand_total === '' ? '—' : os.grand_total) + '→' + gt); }
+  if (pay) {
+    if (fxNum_(os.deposit_amt) !== pay.dep) { fields.deposit_amt = pay.dep; changed.push('訂金 ' + (os.deposit_amt === '' ? '—' : os.deposit_amt) + '→' + pay.dep); }
+    if (fxNum_(os.final_amt) !== pay.bal) { fields.final_amt = pay.bal; changed.push('尾款 ' + (os.final_amt === '' ? '—' : os.final_amt) + '→' + pay.bal); }
+  }
+  if (!changed.length) return { ok: true, changed: [] };
+  handleUpdateOrderStatus_({ quote_no: quoteNo, fields: fields });
+  try { logChange_('syncOrderStatusFromQuote', quoteNo, fields); } catch (e) {}
+  return { ok: true, changed: changed, fields: fields };
+}
+// action: resyncOrderStatusFromQuotes {dry:'1'?} → 全部訂單追蹤列重算一遍（一次性補救／定期核對用）
+function handleResyncOrderStatusFromQuotes_(params) {
+  var dry = params && String(params.dry || '') === '1';
+  var all = v2ReadAll_(SHEET_ORDER_STATUS, ORDER_STATUS_HEADERS);
+  var out = [], errors = [];
+  all.forEach(function (row) {
+    var no = String(row.quote_no || ''); if (!no) return;
+    try {
+      if (dry) {
+        var q = getQuoteWithItems_(no); if (!q || String(q.status || '') === '純報價' || String(q.status || '') === '已刪除') return;
+        var gt = Math.round(Number(q.grandTotal) || 0), pay = orderPayFromQuote_(no, gt), ch = [];
+        if (gt > 0 && Math.round(Number(row.grand_total) || 0) !== gt) ch.push('總額 ' + row.grand_total + '→' + gt);
+        if (pay && fxNum_(row.deposit_amt) !== pay.dep) ch.push('訂金 ' + row.deposit_amt + '→' + pay.dep);
+        if (pay && fxNum_(row.final_amt) !== pay.bal) ch.push('尾款 ' + row.final_amt + '→' + pay.bal);
+        if (ch.length) out.push({ quote_no: no, client: q.clientName, changed: ch, parsed: !!pay });
+      } else {
+        var r = syncOrderStatusFromQuote_(no);
+        if (r && r.changed && r.changed.length) out.push({ quote_no: no, changed: r.changed });
+      }
+    } catch (e) { errors.push(no + '：' + (e && e.message || e)); }
+  });
+  return { ok: true, dry: dry, updated: out, errors: errors };
 }
