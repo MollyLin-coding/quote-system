@@ -150,8 +150,15 @@ function fxLinkUpsert_(quoteNo, fields) {
 // ── 工具 ──────────────────────────────────────────────
 // 廠務 createdAt 是 zh-TW toLocaleString（例「2026/9/8 下午3:20:11」）→ 正規化成 'yyyy-MM-dd HH:mm'；解析不了回 ''
 function fxParseTw_(s) {
-  var m = String(s || '').match(/(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s*(上午|下午)?\s*(\d{1,2}):(\d{2}))?/);
-  if (!m) return '';
+  var str = String(s || '').trim();
+  if (!str) return '';
+  var m = str.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s*(上午|下午)?\s*(\d{1,2}):(\d{2}))?/);
+  if (!m) {
+    // ⚠ 實測 extGetOrders 回來的 createdAt 是 Sheets 已轉成 Date 的 toString（「Wed Sep 09 2026 09:07:51 GMT+0800 (...)」）
+    var t = Date.parse(str);
+    if (isNaN(t)) return '';
+    return Utilities.formatDate(new Date(t), 'Asia/Taipei', 'yyyy-MM-dd HH:mm');
+  }
   var h = Number(m[5] || 0);
   if (m[4] === '下午' && h < 12) h += 12;
   if (m[4] === '上午' && h === 12) h = 0;
