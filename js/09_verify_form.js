@@ -121,7 +121,27 @@ async function openVerifyForm(no){
     let _stOn=false;
     try{ const _do=(q.items||[]).find(it=>it&&it.itemType==='docopts');
          if(_do&&_do.flavorList){ const _o=JSON.parse(_do.flavorList); _stOn=!!(_o.storage&&_o.storage!=='0'&&_o.storage!=='N'); } }catch(_){}
+    /* 2026-09-07 Molly：「驗收單如是分批出貨預設帶入第一批資訊（可供修改），不要每次都須打一次」。
+       第 2 次以後出貨，把第一批已經填過、而且每批通常都一樣的欄位帶進來：
+       **製造日期＋我方批號（逐列比對品名＋容量）、總箱數、PM、客戶批號**。
+       ⚠ **配送日期不帶**——那本來就是「這次哪一天出的」，沿用舊日期反而會把出貨日記錯（維持預設今天）。
+       ⚠ 也不帶數量：數量已經有更聰明的算法（已出貨＝前幾次加總、本次＝剩餘量），別覆蓋掉。
+       取「第一批」而不是「最近一批」是 Molly 指定的（同一批生產的貨，製造日期／批號以第一張為準）。 */
+    const _first=priorForms.slice().sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')))[0]||null;
+    const _firstItem={};
+    if(_first){
+      const _its=Array.isArray(_first.items)?_first.items:parseJsonSafe(_first.items_json,[]);
+      (_its||[]).forEach(pi=>{ const k=keyOf(pi.name, pi.vol); if(!(k in _firstItem)) _firstItem[k]=pi; });
+    }
+    const _ymd=v=>{ const s=String(v==null?'':v); if(!s) return '';
+                    return (typeof vmLocalYmd==='function')?(vmLocalYmd(v)||''):s.slice(0,10); };
     VERIFY_DATA={ no:q.quoteNo, client:q.clientName||'', priorCount, storage:_stOn,
+      /* 抬頭欄的「第一批預設值」：buildVerifyModal 讀這幾個；沒有前一批就是空的＝行為跟以前一樣。
+         ⚠ 從留底編輯（vmEditForm）是自己組 VERIFY_DATA、不會有這幾個欄位，而且它本來就會把
+         該筆的箱數／PM／日期直接 set 回去，所以不受影響。 */
+      defBoxes:(_first&&_first.boxes!=null&&_first.boxes!=='')?_first.boxes:'',
+      defPm:(_first&&_first.pm)||'',
+      defLot:(_first&&_first.lot!=null)?String(_first.lot):'',
       rows:items.map(it=>{
         const ordered=parseFloat(it.qty)||0;
         const k=keyOf(it.name, it.volume);
@@ -129,7 +149,9 @@ async function openVerifyForm(no){
         const shipped=(ordered>0)?Math.min(avail, ordered):avail;   // 這一列最多只認到自己的訂購量
         poolLeft[k]=avail-shipped;
         const remain=ordered-shipped;
-        return { name:it.name||'', lot:it.lot||'', vol:it.volume||'', ordered, mfg:'',
+        const f0=_firstItem[k]||null;
+        return { name:it.name||'', lot:it.lot||(f0&&f0.lot)||'', vol:it.volume||'', ordered,
+          mfg:_ymd(f0&&f0.mfg),
           thisShip: shipped>0 ? (remain>0?remain:0) : ordered, shipped };
       }) };
     /* 2026-09-01 複檢 #22：客戶批號其實訂單追蹤裡就有一欄（而且「驗收單→訂單追蹤」那個方向
@@ -148,7 +170,14 @@ async function openVerifyForm(no){
     if(priorCount>0 && _leftover>0){
       toast(`⚠ 這是第 ${priorCount+1} 次出貨，但有 ${Math.round(_leftover)} 個單位的舊出貨紀錄對不上目前的品項（報價單的品名或容量改過？）。「已出貨」可能少算，請自行核對後手動修正數量再產生。`,'err');
     } else if(priorCount>0 && VERIFY_DATA.rows.some(r=>r.shipped>0)){
-      toast(`已帶入前 ${priorCount} 張驗收單的出貨數量：「已出貨」＝之前出過的、「本次出貨」＝剩餘量（都可以再改）`,'ok');
+      /* 2026-09-07：連同「第一批帶入了哪些欄位」一起講，Molly 才知道那些數字是自動帶的、可以改。 */
+      const _f=[];
+      if(VERIFY_DATA.rows.some(r=>String(r.mfg||'').trim()!=='')) _f.push('製造日期');
+      if(String(VERIFY_DATA.defBoxes||'')!=='') _f.push('箱數');
+      if(String(VERIFY_DATA.defPm||'')!=='') _f.push('PM');
+      toast(`已帶入前 ${priorCount} 張驗收單的出貨數量：「已出貨」＝之前出過的、「本次出貨」＝剩餘量`
+        + (_f.length?`；${_f.join('、')}也帶了第一批的內容`:'')
+        + `（都可以再改；配送日期預設今天）`,'ok');
     }
   }catch(e){ toast(e.message||'讀取失敗','err'); }
 }
@@ -180,11 +209,11 @@ function buildVerifyModal(hdrLot){
   document.getElementById('vf-body').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
       <div class="fl"><label>客戶</label><input class="fi ro" value="${escHtml(d.client)}" readonly></div>
-      <div class="fl"><label>客戶批號</label><input class="fi" id="vf-lot" value="${escHtml(hdrLot||'')}" placeholder="客戶自己的批號／貨號（選填）"></div>
+      <div class="fl"><label>客戶批號</label><input class="fi" id="vf-lot" value="${escHtml(hdrLot||d.defLot||'')}" placeholder="客戶自己的批號／貨號（選填）"></div>
       <div class="fl"><label>單號</label><input class="fi ro" value="${escHtml(d.no)}" readonly></div>
       <div class="fl"><label>配送日期</label><input class="fi" type="date" id="vf-shipdate" value="${today}"></div>
-      <div class="fl"><label>專案經理 PM</label><input class="fi" id="vf-shipper" value="${escAttr(typeof VF_LAST_PM!=='undefined'?(VF_LAST_PM||''):'')}" placeholder="PM 姓名"></div>
-      <div class="fl"><label>此次配送總箱數</label><input class="fi" type="number" min="0" id="vf-boxes" placeholder="箱數"></div>
+      <div class="fl"><label>專案經理 PM</label><input class="fi" id="vf-shipper" value="${escAttr(d.defPm||(typeof VF_LAST_PM!=='undefined'?(VF_LAST_PM||''):''))}" placeholder="PM 姓名"></div>
+      <div class="fl"><label>此次配送總箱數</label><input class="fi" type="number" min="0" id="vf-boxes" value="${escAttr(d.defBoxes==null?'':d.defBoxes)}" placeholder="箱數"></div>
       <div class="fl"><label>第幾次出貨（分批用）</label><input class="fi" type="number" min="1" id="vf-shipseq" value="${(d.priorCount||0)+1}"></div>
     </div>
     <label style="display:inline-flex;align-items:center;gap:6px;margin-top:12px;font-size:12px;color:var(--fg);cursor:pointer">
