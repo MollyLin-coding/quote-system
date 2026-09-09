@@ -285,8 +285,11 @@ function fxFinCompare_(os, o, quoteShip) {
     out.push(label + '：報價 ' + a + ' ≠ 廠務 ' + b);
   }
   if (!os) return out;
-  var fxTotal = (Number(o.total) || 0) > 0 ? (Number(o.total) + (fxShipFee !== '' ? fxShipFee : 0)) : '';   // 廠務 total 預設 0＝未填
-  cmp('總額', os.grand_total, fxTotal);
+  // 總額拆成「貨款」與「運費」各比各的：報價單總計含運費、廠務「總金額」不含（運費另一欄）
+  var fxGoods = (Number(o.total) || 0) > 0 ? Number(o.total) : '';   // 廠務 total 預設 0＝未填
+  var qsGoods = (fxNum_(os.grand_total) === '') ? '' : (fxNum_(os.grand_total) - ship);
+  if (fxGoods !== '' && qsGoods !== '' && Math.round(fxGoods) !== Math.round(qsGoods)) out.push('貨款（不含運費）：報價 ' + qsGoods + ' ≠ 廠務 ' + fxGoods);
+  if (fxGoods !== '' && fxShipFee !== '' && Math.round(fxShipFee) !== ship) out.push('運費：報價 ' + ship + ' ≠ 廠務 ' + fxShipFee);
   cmp('訂金', os.deposit_amt, o.depositAmount);
   var fxFinal = (o.finalAdjusted && o.finalAdjustedAmount !== '') ? o.finalAdjustedAmount : o.finalAmount;
   cmp('尾款', os.final_amt, fxFinal);
