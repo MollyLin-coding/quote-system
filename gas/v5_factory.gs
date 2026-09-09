@@ -577,7 +577,9 @@ function fxOrderStatusDiff_(os, q) {
   if (!q) return { fields: fields, changed: changed };
   if (q.gt > 0 && Math.round(Number(os.grand_total) || 0) !== q.gt) { fields.grand_total = q.gt; changed.push('總額 ' + (os.grand_total === '' ? '—' : os.grand_total) + '→' + q.gt); }
   if (q.pay) {
-    if (fxNum_(os.deposit_amt) !== q.pay.dep) { fields.deposit_amt = q.pay.dep; changed.push('訂金 ' + (os.deposit_amt === '' ? '—' : os.deposit_amt) + '→' + q.pay.dep); }
+    // 全額型（訂金 0）而追蹤列訂金空白＝同一個意思（空＝沒有訂金這回事），不要把空白硬寫成 0（今日待辦／月報的「待收訂金」判斷靠這個分別）
+    var depSame = (fxNum_(os.deposit_amt) === q.pay.dep) || (q.pay.dep === 0 && fxNum_(os.deposit_amt) === '');
+    if (!depSame) { fields.deposit_amt = q.pay.dep; changed.push('訂金 ' + (os.deposit_amt === '' ? '—' : os.deposit_amt) + '→' + q.pay.dep); }
     if (fxNum_(os.final_amt) !== q.pay.bal) { fields.final_amt = q.pay.bal; changed.push('尾款 ' + (os.final_amt === '' ? '—' : os.final_amt) + '→' + q.pay.bal); }
   }
   return { fields: fields, changed: changed };
