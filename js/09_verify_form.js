@@ -235,6 +235,8 @@ function buildVerifyModal(hdrLot){
     <p style="font-size:11px;color:var(--hint);margin-top:10px;line-height:1.6">
       「待出貨」＝總受訂數 − 已出貨 − 本次出貨數，系統自動算。<br>
       一次全部出貨用「產生整批驗收單」；分幾次出貨用「產生分批驗收單」（會多印訂購總數／待出貨欄）。PDF 下方含「驗收與品質說明」，右下 QR 供客戶收貨後線上驗收回報。</p>`;
+  // 2026-09-08 廠務連結：這張單在廠務已有出貨紀錄 → 最上方多一條「帶入這次出貨」（13_factory.js）
+  if(typeof fxVerifyBar==='function') fxVerifyBar(d.no);
 }
 
 /* 2026-08-28：寄倉自動登記區塊（只有報價單勾了「開放客戶寄倉」才出現）

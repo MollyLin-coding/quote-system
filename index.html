@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260909a">
-<script src="js/00_qrcode.js?v=20260909a"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260909b">
+<script src="js/00_qrcode.js?v=20260909b"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -690,6 +690,8 @@
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center">
         <div id="ord-filters" style="display:flex;flex-wrap:wrap;gap:8px"></div>
         <button class="rec-act-btn" onclick="loadOrders(true)"><i class="ti ti-refresh"></i> 重新整理</button>
+        <button class="rec-act-btn" id="fx-sync-btn" onclick="fxSyncNow(this)" title="把廠務系統的製作狀態、Lot、出貨紀錄抓回來；同仁在廠務新建的訂單會自動建成草稿報價單">🏭 同步廠務</button>
+        <button class="rec-act-btn" onclick="fxOpenMap()" title="客戶／酒款名稱在兩邊系統不一樣時的對照">🏭 廠務對照</button>
       </div>
       <div class="tbl-scroll">
       <table class="rec-table mcard">
@@ -1207,20 +1209,21 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260909a"></script>
-<script src="js/01_quote_form.js?v=20260909a"></script>
-<script src="js/01b_quote_preview.js?v=20260909a"></script>
-<script src="js/02_core_api.js?v=20260909a"></script>
-<script src="js/03_quote_custom.js?v=20260909a"></script>
-<script src="js/04_company.js?v=20260909a"></script>
-<script src="js/05_orders.js?v=20260909a"></script>
-<script src="js/06_verify_mgmt.js?v=20260909a"></script>
-<script src="js/07_calendar.js?v=20260909a"></script>
-<script src="js/08_ownbrand.js?v=20260909a"></script>
-<script src="js/09_verify_form.js?v=20260909a"></script>
-<script src="js/10_today.js?v=20260909a"></script>
-<script src="js/11_customers.js?v=20260909a"></script>
-<script src="js/12_storage.js?v=20260909a"></script>
-<script src="js/99_boot.js?v=20260909a"></script>
+<script src="js/00_utils.js?v=20260909b"></script>
+<script src="js/01_quote_form.js?v=20260909b"></script>
+<script src="js/01b_quote_preview.js?v=20260909b"></script>
+<script src="js/02_core_api.js?v=20260909b"></script>
+<script src="js/03_quote_custom.js?v=20260909b"></script>
+<script src="js/04_company.js?v=20260909b"></script>
+<script src="js/05_orders.js?v=20260909b"></script>
+<script src="js/06_verify_mgmt.js?v=20260909b"></script>
+<script src="js/07_calendar.js?v=20260909b"></script>
+<script src="js/08_ownbrand.js?v=20260909b"></script>
+<script src="js/09_verify_form.js?v=20260909b"></script>
+<script src="js/10_today.js?v=20260909b"></script>
+<script src="js/11_customers.js?v=20260909b"></script>
+<script src="js/12_storage.js?v=20260909b"></script>
+<script src="js/13_factory.js?v=20260909b"></script>
+<script src="js/99_boot.js?v=20260909b"></script>
 </body>
 </html>

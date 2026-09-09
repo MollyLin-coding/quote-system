@@ -33,7 +33,8 @@ function runHooks(name, arg){
    ---------------------------------------------------------------- */
 const RC_TTL_MS = 90000;
 /* 白名單：只有這些 action 算「純讀取」。沒列到的一律當成寫入（寧可多清一次快取）。 */
-const RC_READ_ACTIONS = ['getQuotes','getQuoteById','getCompanyData','getOrderStatusList',
+const RC_READ_ACTIONS = ['getFactoryLinks','getFactoryMap',   // 2026-09-08 廠務連結（13_factory.js）
+  'getQuotes','getQuoteById','getCompanyData','getOrderStatusList',
   'listQuotePdfs','listShipments','listCustomQuotes','listCalendarItems','getChangeLog',
   'getOwnbrandProducts','getOwnbrandTiers','getConsignCustomers','getConsignInventory',
   'getConsignLedger','getConsignMonthly','getVerifications','listVerifyForms',

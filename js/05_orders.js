@@ -115,6 +115,8 @@ async function loadOrders(force){
 function ordSideBadges(force){
   loadOrderVerifyBadges(force);
   loadShipmentBadges(force);
+  // 2026-09-08 廠務連結：廠務狀態徽章＋開頁自動同步（13_factory.js；10 分鐘內不重打）
+  if(typeof loadFactoryLinks==='function') loadFactoryLinks(force).then(()=>{ if(typeof fxAutoSync==='function') fxAutoSync(); });
 }
 /* ── 卡關天數（2026-08-11 優化建議 #3）─────────────────────────────
    「這張單停在〈排產中〉幾天了」。取「讓它進到目前這一關的那個日期」往今天算：
@@ -153,6 +155,7 @@ function orderBadges(o){
     else if(d!=null && d<=3) h+=`<span class="ob warn">尾款倒數 ${d} 天</span>`;
   }
   if(SHP_SUM && SHP_SUM[o.no]) h+=`<span class="ob info">分批×${SHP_SUM[o.no]}</span>`;
+  if(typeof fxBadges==='function') h+=fxBadges(o);   // 2026-09-08 廠務狀態／金額不符
   return h;
 }
 /* 訂單列的驗收單／客訴徽章（資料來自 ORDER_VSUM，非同步載入後重繪） */
@@ -304,6 +307,7 @@ function renderOrders(){
         <button class="rec-act-btn" onclick="openChangeLog('${escAttr(o.no)}')">修改紀錄</button>
         ${['bottle','ownbrand','ownlabel','consign'].includes(o.typeKey)?`<button class="rec-act-btn" onclick="openVerifyForm('${escAttr(o.no)}')">驗收單</button>`:''}
         ${o.src==='custom'?`<button class="rec-act-btn" onclick="loadCustomFromOrders('${escAttr(o.no)}')">載入編輯</button>`:''}
+        ${typeof fxActionBtn==='function'?fxActionBtn(o):''}
       </td>
     </tr>`;
   }).join('') + (listMaybeMore(ORDERS_CACHE.length) ? moreRowHtml(6) : '');
