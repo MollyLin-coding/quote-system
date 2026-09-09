@@ -533,48 +533,84 @@ function handleFactoryLinkExisting_(params) {
 }
 
 // ═══ 2026-09-09 Molly：「報價單資訊有更改，訂單追蹤要跟著一起更新」═══════════════════
+// 付款條件文字 → {dep, bal}（跟 v2_extensions 的 orderPayFromQuote_ 同一套規則，但吃文字不讀表，才能整批一次算）
+function fxParsePay_(detail, gt) {
+  var s = String(detail || '').replace(/<br\s*\/?>/gi, '\n');
+  if (!s) return null;
+  if (!/支付訂金/.test(s)) {
+    var mFull = s.match(/支付(?:全額)?款項新台幣\s*\$?([\d,]+(?:\.\d+)?)\s*元整/);
+    if (!mFull) return null;
+    var mPct = s.match(/元整\s*之\s*(\d+(?:\.\d+)?)\s*%/);
+    if (mPct && Math.round(parseFloat(mPct[1])) !== 100) return null;
+    var full = Math.round(parseFloat(String(mFull[1]).replace(/,/g, '')) || 0);
+    if (gt > 0 && full !== Math.round(gt)) return null;
+    return { dep: 0, bal: full };
+  }
+  var mDep = s.match(/支付訂金(?:總計)?新台幣\s*\$?([\d,]+(?:\.\d+)?)\s*元整/);
+  if (!mDep) return null;
+  var dep = Math.round(parseFloat(String(mDep[1]).replace(/,/g, '')) || 0);
+  var mBal = s.match(/支付尾款新台幣\s*\$?([\d,]+(?:\.\d+)?)\s*元整/);
+  var bal;
+  if (mBal) bal = Math.round(parseFloat(String(mBal[1]).replace(/,/g, '')) || 0);
+  else if (/無須另付尾款/.test(s)) bal = 0;
+  else return null;
+  if (gt > 0 && (dep + bal) !== Math.round(gt)) return null;
+  return { dep: dep, bal: bal };
+}
+// 讀一次報價單主表 → { quoteNo: {client, status, gt, pay} }
+function fxQuoteFinMap_() {
+  var m = {};
+  var sh = ssApp_().getSheetByName(SHEET_MAIN);
+  if (!sh || sh.getLastRow() < 2) return m;
+  var data = sh.getRange(2, 1, sh.getLastRow() - 1, effW_(sh, MAIN_HEADERS)).getValues();
+  data.forEach(function (r) {
+    var no = String(r[MAIN_COLS.quoteNo - 1] || ''); if (!no) return;
+    var gt = Math.round(Number(r[MAIN_COLS.grandTotal - 1]) || 0);
+    m[no] = { client: String(r[MAIN_COLS.clientName - 1] || ''), status: String(r[MAIN_COLS.status - 1] || ''), gt: gt,
+      pay: fxParsePay_(r[MAIN_COLS.paymentDetail - 1], gt) };
+  });
+  return m;
+}
+// 算這一列該改什麼：回 {fields, changed}（changed 空＝不用動）
+function fxOrderStatusDiff_(os, q) {
+  var fields = {}, changed = [];
+  if (!q) return { fields: fields, changed: changed };
+  if (q.gt > 0 && Math.round(Number(os.grand_total) || 0) !== q.gt) { fields.grand_total = q.gt; changed.push('總額 ' + (os.grand_total === '' ? '—' : os.grand_total) + '→' + q.gt); }
+  if (q.pay) {
+    if (fxNum_(os.deposit_amt) !== q.pay.dep) { fields.deposit_amt = q.pay.dep; changed.push('訂金 ' + (os.deposit_amt === '' ? '—' : os.deposit_amt) + '→' + q.pay.dep); }
+    if (fxNum_(os.final_amt) !== q.pay.bal) { fields.final_amt = q.pay.bal; changed.push('尾款 ' + (os.final_amt === '' ? '—' : os.final_amt) + '→' + q.pay.bal); }
+  }
+  return { fields: fields, changed: changed };
+}
 // 報價單存檔（updateQuote）後呼叫：訂單追蹤的 總額／訂金／尾款 依報價單重算。
-//   總額＝報價單總計；訂金／尾款＝從付款條件文字解析（orderPayFromQuote_，解析不出來就不動這兩欄）。
+//   總額＝報價單總計；訂金／尾款＝從付款條件文字解析（解析不出來就不動這兩欄）。
 //   ⚠ 只更新「已存在」的訂單追蹤列（不新建：純報價單／還沒建追蹤的單不碰）；日期欄一律不動。
-//   回 {changed:[欄位…]}，一個欄位都沒變就回空陣列。
 function syncOrderStatusFromQuote_(quoteNo) {
-  var q = getQuoteWithItems_(quoteNo);
+  var q = fxQuoteFinMap_()[String(quoteNo)];
   if (!q) return { ok: false, error: '找不到報價單' };
-  if (String(q.status || '') === '純報價' || String(q.status || '') === '已刪除') return { ok: true, changed: [], skipped: q.status };
+  if (q.status === '純報價' || q.status === '已刪除') return { ok: true, changed: [], skipped: q.status };
   var os = fxOrderStatusOf_(quoteNo);
   if (!os) return { ok: true, changed: [], skipped: 'no-order-status' };
-  var gt = Math.round(Number(q.grandTotal) || 0);
-  var pay = orderPayFromQuote_(quoteNo, gt);
-  var fields = {}, changed = [];
-  if (gt > 0 && Math.round(Number(os.grand_total) || 0) !== gt) { fields.grand_total = gt; changed.push('總額 ' + (os.grand_total === '' ? '—' : os.grand_total) + '→' + gt); }
-  if (pay) {
-    if (fxNum_(os.deposit_amt) !== pay.dep) { fields.deposit_amt = pay.dep; changed.push('訂金 ' + (os.deposit_amt === '' ? '—' : os.deposit_amt) + '→' + pay.dep); }
-    if (fxNum_(os.final_amt) !== pay.bal) { fields.final_amt = pay.bal; changed.push('尾款 ' + (os.final_amt === '' ? '—' : os.final_amt) + '→' + pay.bal); }
-  }
-  if (!changed.length) return { ok: true, changed: [] };
-  handleUpdateOrderStatus_({ quote_no: quoteNo, fields: fields });
-  try { logChange_('syncOrderStatusFromQuote', quoteNo, fields); } catch (e) {}
-  return { ok: true, changed: changed, fields: fields };
+  var d = fxOrderStatusDiff_(os, q);
+  if (!d.changed.length) return { ok: true, changed: [] };
+  handleUpdateOrderStatus_({ quote_no: quoteNo, fields: d.fields });
+  try { logChange_('syncOrderStatusFromQuote', quoteNo, d.fields); } catch (e) {}
+  return { ok: true, changed: d.changed, fields: d.fields };
 }
-// action: resyncOrderStatusFromQuotes {dry:'1'?} → 全部訂單追蹤列重算一遍（一次性補救／定期核對用）
+// action: resyncOrderStatusFromQuotes {dry:'1'?} → 全部訂單追蹤列重算一遍（一次性補救／定期核對用）。主表只讀一次，20 幾張單幾秒內做完。
 function handleResyncOrderStatusFromQuotes_(params) {
   var dry = params && String(params.dry || '') === '1';
+  var qm = fxQuoteFinMap_();
   var all = v2ReadAll_(SHEET_ORDER_STATUS, ORDER_STATUS_HEADERS);
   var out = [], errors = [];
   all.forEach(function (row) {
     var no = String(row.quote_no || ''); if (!no) return;
+    var q = qm[no]; if (!q || q.status === '純報價' || q.status === '已刪除') return;
     try {
-      if (dry) {
-        var q = getQuoteWithItems_(no); if (!q || String(q.status || '') === '純報價' || String(q.status || '') === '已刪除') return;
-        var gt = Math.round(Number(q.grandTotal) || 0), pay = orderPayFromQuote_(no, gt), ch = [];
-        if (gt > 0 && Math.round(Number(row.grand_total) || 0) !== gt) ch.push('總額 ' + row.grand_total + '→' + gt);
-        if (pay && fxNum_(row.deposit_amt) !== pay.dep) ch.push('訂金 ' + row.deposit_amt + '→' + pay.dep);
-        if (pay && fxNum_(row.final_amt) !== pay.bal) ch.push('尾款 ' + row.final_amt + '→' + pay.bal);
-        if (ch.length) out.push({ quote_no: no, client: q.clientName, changed: ch, parsed: !!pay });
-      } else {
-        var r = syncOrderStatusFromQuote_(no);
-        if (r && r.changed && r.changed.length) out.push({ quote_no: no, changed: r.changed });
-      }
+      var d = fxOrderStatusDiff_(row, q);
+      if (!d.changed.length) return;
+      if (!dry) { handleUpdateOrderStatus_({ quote_no: no, fields: d.fields }); try { logChange_('syncOrderStatusFromQuote', no, d.fields); } catch (e) {} }
+      out.push({ quote_no: no, client: q.client, changed: d.changed, parsed: !!q.pay });
     } catch (e) { errors.push(no + '：' + (e && e.message || e)); }
   });
   return { ok: true, dry: dry, updated: out, errors: errors };
