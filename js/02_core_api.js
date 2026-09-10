@@ -744,11 +744,12 @@ async function loadRecords(force){
   if(hitC && hitC.data && hitC.data.ok!==false) REC_CUSTOM=hitC.data.quotes||[];
   if(hit && hit.data && !force){ REC_QUOTES=hit.data.quotes||[]; renderRecords(); }
   else body.innerHTML=sklTableRows(6,5);
+  recLoadLots(force);                                      // 2026-09-10：Lot 背景補（走快取，不擋清單）
   if(!force && rcFresh(P) && rcFresh(PC)) return;         // 90 秒內剛抓過就不重打
   try {
     const [data,dataC]=await readCallMany([P,PC], force);
     if(!data || !data.ok){
-      if(!hit) body.innerHTML=`<tr><td colspan="6" class="rec-empty">${(data&&data.error)||'載入失敗'}</td></tr>`;
+      if(!hit) body.innerHTML=`<tr><td colspan="5" class="rec-empty">${(data&&data.error)||'載入失敗'}</td></tr>`;
       return;
     }
     REC_QUOTES=data.quotes||[];
@@ -756,8 +757,39 @@ async function loadRecords(force){
     window._CQ_CACHE=REC_CUSTOM||[];   // 讓「開啟自訂單」直接用，不用再打一次後端
     renderRecords();
   } catch(e){
-    if(!hit) body.innerHTML=`<tr><td colspan="6" class="rec-empty">${e.message||'載入失敗'}</td></tr>`;
+    if(!hit) body.innerHTML=`<tr><td colspan="5" class="rec-empty">${e.message||'載入失敗'}</td></tr>`;
   }
+}
+/* 2026-09-10 Molly：「報價紀錄版面太亂，而且比起報價單號我更需要看 Lot 號」。
+   Lot 的來源（跟訂單追蹤 ordCustLot 同一套優先序，再多一層廠務）：
+   ①訂單進度手動填的客戶批號 cust_lot → ②驗收單留底最新一張的 lot（ORDER_VSUM.lots）→ ③廠務連結的 factory_lot。
+   三份資料訂單追蹤頁本來就會抓，這裡走同樣的讀取快取，背景補進來後重畫一次（不擋清單）。 */
+let REC_OS=null;   // { quote_no: order_status 列 }
+async function recLoadLots(force){
+  if(!AUTH_TOKEN) return;
+  try{
+    const jobs=[ readCall({action:'getOrderStatusList', token:AUTH_TOKEN}, force).catch(()=>null) ];
+    if((force || typeof ORDER_VSUM==='undefined' || !ORDER_VSUM) && typeof loadOrderVerifyBadges==='function') jobs.push(loadOrderVerifyBadges(force));
+    if((force || typeof FX_LINKS==='undefined' || !FX_LINKS) && typeof loadFactoryLinks==='function') jobs.push(loadFactoryLinks(force));
+    const [os]=await Promise.all(jobs);
+    if(os && os.orders){ REC_OS={}; os.orders.forEach(o=>{ if(o&&o.quote_no) REC_OS[o.quote_no]=o; }); }
+    renderRecords();
+  }catch(_){}
+}
+function recLotOf(no){
+  const m=(REC_OS && REC_OS[no] && String(REC_OS[no].cust_lot||'').trim())||'';
+  const v=(typeof ORDER_VSUM!=='undefined' && ORDER_VSUM && ORDER_VSUM.lots && ORDER_VSUM.lots[no])||'';
+  const f=(typeof fxLinkOf==='function') ? fxLinkOf(no) : null;
+  const fl=(f && String(f.factory_lot||'').trim())||'';
+  const raw=String(m||v||fl||'').trim();
+  if(!raw) return '';
+  return (typeof shpLotText==='function') ? shpLotText(raw) : raw;
+}
+function recTypeBadge(t){
+  const map={ bottle:['bottle','瓶裝酒代工'], ownbrand:['ownbrand','公版酒買斷'], ownlabel:['ownbrand','公版酒客製標'],
+              consign:['consign','寄售月結'], custom:['custom','自訂報價單'], banquet:['banquet','宴會酒水'] };
+  const x=map[t]||map.banquet;
+  return `<span class="rec-badge ${x[0]}">${x[1]}</span>`;
 }
 function renderRecords(){
   const body=document.getElementById('rec-body');
@@ -771,61 +803,62 @@ function renderRecords(){
       quoteType:'custom', quoteDate:String(c.quote_date||'').slice(0,10),
       grandTotal:(parseJsonSafe(c.totals_json,{}).total)||0 }));
     let merged=(tf==='custom')?customs.slice():(tf?quotes.filter(q=>q.quoteType===tf):quotes.concat(customs));
-    if(kw){ const k=kw.toLowerCase(); merged=merged.filter(q=> String(q.clientName||'').toLowerCase().includes(k) || String(q.quoteNo||'').toLowerCase().includes(k)); }
+    merged.forEach(q=>{ q._lot=recLotOf(q.quoteNo); });
+    // 搜尋：客戶／單號／Lot 都比對（打「15」就找得到 Lot 15）
+    if(kw){ const k=kw.toLowerCase(); merged=merged.filter(q=> String(q.clientName||'').toLowerCase().includes(k) || String(q.quoteNo||'').toLowerCase().includes(k) || String(q._lot||'').toLowerCase().includes(k)); }
     // 單號皆為 YYYYMMDD-NN 格式，直接以單號新→舊排序（自訂單與標準單自然交錯）
     merged.sort((a,b)=>String(b.quoteNo||'').localeCompare(String(a.quoteNo||'')));
-    if(merged.length===0){ body.innerHTML='<tr><td colspan="7" class="rec-empty">'+((REC_QUOTES.length||customs.length)?'沒有符合條件的報價單':'尚無報價單記錄')+'</td></tr>'; return; }
+    if(merged.length===0){ body.innerHTML='<tr><td colspan="5" class="rec-empty">'+((REC_QUOTES.length||customs.length)?'沒有符合條件的報價單':'尚無報價單記錄')+'</td></tr>'; return; }
     body.innerHTML=merged.map(q=>{
-      const typeBadge=q.quoteType==='bottle'
-        ? '<span class="rec-badge bottle">瓶裝酒代工</span>'
-        : q.quoteType==='ownbrand'
-        ? '<span class="rec-badge ownbrand">公版酒買斷</span>'
-        : q.quoteType==='ownlabel'
-        ? '<span class="rec-badge ownbrand">公版酒客製標</span>'
-        : q.quoteType==='consign'
-        ? '<span class="rec-badge consign">寄售月結</span>'
-        : q.quoteType==='custom'
-        ? '<span class="rec-badge custom">自訂報價單</span>'
-        : '<span class="rec-badge banquet">宴會酒水</span>';
+      const no=escAttr(q.quoteNo);
       // 2026-08-28 純報價單標記（後端 v67 起清單才帶 quoteOnly，舊後端拿不到就不顯示）
-      const qoBadge=(q.status==='純報價'||q.quoteOnly==='Y')?' <span class="rec-badge" style="background:#F3ECDD;color:#7A5A1E">純報價</span>':'';
-      const total='$'+Math.round(q.grandTotal||0).toLocaleString();
+      const qoBadge=(q.status==='純報價'||q.quoteOnly==='Y')?' <span class="rec-badge qo">純報價</span>':'';
       // 2026-09-03：客戶名稱空白的舊單標紅，讓人一眼看得到要回頭補哪幾張
       const cliCell=String(q.clientName||'').trim()
         ? escHtml(q.clientName)
-        : '<span style="color:#C0453F;font-weight:600">⚠ 未填客戶名稱</span>';
+        : '<span class="rec-warn">⚠ 未填客戶名稱</span>';
+      // 主欄：Lot 放最前面最大（Molly 用 Lot 認單）；沒有 Lot 的單就只放客戶；單號＋建立者退到第二行小字
+      const lotTag=q._lot ? `<span class="rec-lot">${escHtml(q._lot)}</span>` : '';
+      const sub=`<span class="rec-sub">${escHtml(q.quoteNo||'—')}${(!q._custom && q.createdBy)?`<span class="rec-dot">·</span>${escHtml(q.createdBy)}`:''}</span>`;
+      const main=`<div class="rec-main">${lotTag}<span class="rec-cli">${cliCell}</span></div>${sub}`;
+      const total=money(q.grandTotal||0);
       if(q._custom){
         // 自訂單：開啟／預覽走自訂報價單頁；2026-09-02 起後端有 deleteCustomQuote，補上刪除鈕（老闆專用）
-        return `<tr class="clickable" onclick="recOpenCustom('${escAttr(q.quoteNo)}')">
-          <td class="mc-main" style="font-weight:600">${escHtml(q.quoteNo||'—')}</td>
-          <td data-l="客戶">${cliCell}</td>
-          <td data-l="類型">${typeBadge}</td>
-          <td data-l="報價日">${escHtml(q.quoteDate||'—')}</td>
-          <td data-l="總計" style="font-weight:600">${total}</td>
-          <td data-l="建立者">—</td>
+        return `<tr class="clickable" onclick="recOpenCustom('${no}')">
+          <td class="mc-main rec-id">${main}</td>
+          <td data-l="類型">${recTypeBadge('custom')}</td>
+          <td data-l="報價日" class="rec-date">${escHtml(q.quoteDate||'—')}</td>
+          <td data-l="總計" class="rec-total">${total}</td>
           <td class="rec-actions" data-l="操作" onclick="event.stopPropagation()">
-            <button class="rec-act-btn primary" onclick="recOpenCustom('${escAttr(q.quoteNo)}')">開啟</button>
-            <button class="rec-act-btn" onclick="recPreviewCustom('${escAttr(q.quoteNo)}')">預覽</button>
-            <button class="rec-act-btn danger" onclick="deleteCustomRecord('${escAttr(q.quoteNo)}','${escAttr(q.clientName||'')}')">刪除</button>
+            <span class="rec-act-grp">
+              <button class="rec-act-btn primary" onclick="recOpenCustom('${no}')">開啟</button>
+              <button class="rec-act-btn" onclick="recPreviewCustom('${no}')">預覽</button>
+            </span>
+            <span class="rec-act-grp rec-act-sec">
+              <button class="rec-act-btn del" onclick="deleteCustomRecord('${no}','${escAttr(q.clientName||'')}')">刪除</button>
+            </span>
           </td>
         </tr>`;
       }
-      return `<tr class="clickable" onclick="openRecord('${escAttr(q.quoteNo)}')">
-        <td class="mc-main" style="font-weight:600">${escHtml(q.quoteNo||'—')}</td>
-        <td data-l="客戶">${cliCell}</td>
-        <td data-l="類型">${typeBadge}${qoBadge}</td>
-        <td data-l="報價日">${escHtml(q.quoteDate||'—')}</td>
-        <td data-l="總計" style="font-weight:600">${total}</td>
-        <td data-l="建立者">${escHtml(q.createdBy||'—')}</td>
+      const hasVf=['bottle','ownbrand','ownlabel','consign'].includes(q.quoteType);
+      return `<tr class="clickable" onclick="openRecord('${no}')">
+        <td class="mc-main rec-id">${main}</td>
+        <td data-l="類型">${recTypeBadge(q.quoteType)}${qoBadge}</td>
+        <td data-l="報價日" class="rec-date">${escHtml(q.quoteDate||'—')}</td>
+        <td data-l="總計" class="rec-total">${total}</td>
         <td class="rec-actions" data-l="操作" onclick="event.stopPropagation()">
-          <button class="rec-act-btn primary" onclick="openRecord('${escAttr(q.quoteNo)}')">開啟</button>
-          <button class="rec-act-btn" onclick="previewRecordQuote('${escAttr(q.quoteNo)}')">預覽</button>
-          <button class="rec-act-btn" onclick="recCopyQuote('${escAttr(q.quoteNo)}')">複製</button>
-          ${['bottle','ownbrand','ownlabel','consign'].includes(q.quoteType)?`<button class="rec-act-btn" onclick="openVerifyForm('${escAttr(q.quoteNo)}')">驗收單</button>`:''}
-          <button class="rec-act-btn del" onclick="deleteRecord('${escAttr(q.quoteNo)}','${escAttr((q.clientName||'').replace(/'/g,''))}')">刪除</button>
+          <span class="rec-act-grp">
+            <button class="rec-act-btn primary" onclick="openRecord('${no}')">開啟</button>
+            <button class="rec-act-btn" onclick="previewRecordQuote('${no}')">預覽</button>
+            ${hasVf?`<button class="rec-act-btn" onclick="openVerifyForm('${no}')">驗收單</button>`:''}
+          </span>
+          <span class="rec-act-grp rec-act-sec">
+            <button class="rec-act-btn" onclick="recCopyQuote('${no}')" title="用這張單的內容開一張新單">複製</button>
+            <button class="rec-act-btn del" onclick="deleteRecord('${no}','${escAttr((q.clientName||'').replace(/'/g,''))}')">刪除</button>
+          </span>
         </td>
       </tr>`;
-    }).join('') + (listMaybeMore(REC_QUOTES.length) ? moreRowHtml(6) : '');
+    }).join('') + (listMaybeMore(REC_QUOTES.length) ? moreRowHtml(5) : '');
   }
 }
 
