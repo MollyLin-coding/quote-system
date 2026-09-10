@@ -25,6 +25,14 @@ var FX_IMPORT_TYPES = [FX_TYPE_OEM, FX_TYPE_SHIP, '自有酒款庫存出貨訂�
 var FX_PUSH_QUOTE_TYPES = { bottle: FX_TYPE_OEM, ownbrand: FX_TYPE_SHIP, ownlabel: FX_TYPE_SHIP };
 // 廠務客戶名前綴（反向匯入時剝掉來對報價系統客戶主檔）
 var FX_CLIENT_PREFIX_RE = /^(OEM-|全客製-|換前標-|經銷商[－-]|經銷商)/;
+// 廠務「運費支付方」選項（字串要跟廠務 index.html dlv_feepayer 完全一致）
+var FX_PAYER_CO = '南坡萬付運費';
+var FX_PAYER_CLIENT = '客戶付運費';
+// 公司自付的運費＝成本：回數字；不是公司付／沒填運費 → ''
+function fxShipCostOf_(o) {
+  if (String(o.shipFeePayer || '').trim() !== FX_PAYER_CO) return '';
+  var v = fxNum_(o.shipFee); return (v === '' || v <= 0) ? '' : Math.round(v);
+}
 
 function fxCfg_() {
   var pr = PropertiesService.getScriptProperties();
@@ -187,14 +195,35 @@ function fxShippingOfItems_(items) {
   });
   return Math.round(sum);
 }
-// 一次讀整張品項表，回 { quote_no: 運費 }（同步時 20 幾張單不用各讀一次）
+// 報價單是否「未稅顯示」（docopts 特殊列 flavorList JSON 的 taxDisplay==='excl'）
+function fxExclOfItems_(items) {
+  var ex = false;
+  (items || []).forEach(function (it) {
+    if (String(it.itemType) !== 'docopts') return;
+    try { var o = JSON.parse(it.flavorList || '{}'); if (o && o.taxDisplay === 'excl') ex = true; } catch (e) {}
+  });
+  return ex;
+}
+// 2026-09-10 Molly 選 A：廠務一律看「報價單上印的數字」——未稅顯示的單就送未稅。
+//   回 { excl, factor }：factor＝未稅總計／含稅總計（含稅單或稅額 0 就是 1），總額／訂金／尾款／運費一律乘這個係數
+function fxConv_(excl, grandTotal, taxAmount) {
+  var gt = Number(grandTotal) || 0, tax = Number(taxAmount) || 0;
+  if (!excl || gt <= 0 || tax <= 0) return { excl: !!excl, factor: 1, net: Math.round(gt), gt: Math.round(gt), tax: Math.round(tax) };
+  return { excl: true, factor: (gt - tax) / gt, net: Math.round(gt - tax), gt: Math.round(gt), tax: Math.round(tax) };
+}
+function fxConvAmt_(v, conv) { v = fxNum_(v); return v === '' ? '' : Math.round(v * conv.factor); }
+// 一次讀整張品項表，回 { quote_no: 運費 }；另附 __excl:{quote_no:true}（未稅顯示的單）
 function fxShippingMap_() {
-  var m = {};
+  var m = { __excl: {} };
   try {
     var sh = ssApp_().getSheetByName(SHEET_ITEMS);
     if (!sh || sh.getLastRow() < 2) return m;
     var data = sh.getRange(2, 1, sh.getLastRow() - 1, effW_(sh, ITEM_HEADERS)).getValues();
     data.forEach(function (r) {
+      if (String(r[ITEM_COLS.itemType - 1]) === 'docopts') {
+        try { var o = JSON.parse(r[ITEM_COLS.flavorList - 1] || '{}'); if (o && o.taxDisplay === 'excl') m.__excl[String(r[ITEM_COLS.quoteNo - 1])] = true; } catch (e) {}
+        return;
+      }
       if (String(r[ITEM_COLS.itemType - 1]) !== 'extra') return;
       if (String(r[ITEM_COLS.name - 1] || '').indexOf('運費') < 0) return;
       var v = Number(r[ITEM_COLS.subtotal - 1] !== '' ? r[ITEM_COLS.subtotal - 1] : r[ITEM_COLS.unitPrice - 1]) || 0;
@@ -210,6 +239,17 @@ function fxOrderStatusOf_(quoteNo) {
 }
 
 // ═══ 轉單：報價單 → 廠務訂單 ═══════════════════════════
+// 建單人員＝目前登入者名稱（例：Molly），後面帶報價單號；排程同步無登入者時退回「報價系統」
+function fxCreatorName_() {
+  try {
+    if (typeof CURRENT_USER_ !== 'undefined' && CURRENT_USER_ && CURRENT_USER_.name) {
+      var n = String(CURRENT_USER_.name).trim();
+      if (n && n !== '廠務APP') return n;   // 廠務APP 是反向匯入時的暫代身分，不算登入者
+    }
+  } catch (e) {}
+  return '報價系統';
+}
+
 function fxBuildOrderPayload_(quote, os, map) {
   var items = (quote.items || []).filter(function (it) { return String(it.itemType) === 'bottle' && String(it.name || '').trim(); })
     .map(function (it) {
@@ -218,11 +258,14 @@ function fxBuildOrderPayload_(quote, os, map) {
     }).filter(function (it) { return it.qty > 0; });
   var lot = '';
   (quote.items || []).some(function (it) { if (String(it.itemType) === 'bottle' && fxLotDigits_(it.lot)) { lot = fxLotDigits_(it.lot); return true; } return false; });
-  var gt = Number(quote.grandTotal) || 0;
-  var ship = fxShippingOfItems_(quote.items);   // 廠務「總金額」不含運費、運費另有「運費金額」欄
-  var dep = os ? fxNum_(os.deposit_amt) : '';
-  var fin = os ? fxNum_(os.final_amt) : '';
+  var conv = fxConv_(fxExclOfItems_(quote.items), quote.grandTotal, quote.taxAmount);
+  var gt = conv.excl ? conv.net : (Number(quote.grandTotal) || 0);           // 未稅顯示的單＝送未稅總計（Molly 2026-09-10 選 A）
+  var ship = fxConvAmt_(fxShippingOfItems_(quote.items), conv) || 0;        // 廠務「總金額」不含運費、運費另有「運費金額」欄
+  var dep = os ? fxConvAmt_(os.deposit_amt, conv) : '';
+  var fin = os ? fxConvAmt_(os.final_amt, conv) : '';
+  if (conv.excl && dep !== '' && fin !== '' && (dep + fin) !== gt && Math.round((fxNum_(os.deposit_amt) + fxNum_(os.final_amt))) === conv.gt) fin = gt - dep;   // 換算後進位差，讓訂金＋尾款＝總計
   var balance = (fin !== '') ? fin : (dep !== '' ? Math.max(0, gt - dep) : gt);
+  var taxNote = conv.excl ? '｜報價單未稅顯示：未稅 ' + conv.net + '（含稅 ' + conv.gt + '，稅 ' + conv.tax + '）' : '';
   var depositStatus = (os && os.final_date) ? '已結清' : ((os && os.deposit_date) ? '已收訂' : '未收');
   return {
     quoteNo: quote.quoteNo,
@@ -233,14 +276,14 @@ function fxBuildOrderPayload_(quote, os, map) {
     items: JSON.stringify(items),
     total: Math.max(0, gt - ship), balance: balance, depositStatus: depositStatus,
     pm: quote.handler || '', lot: lot,
-    orderCreator: '報價系統(' + quote.quoteNo + ')',
-    orderNote: ('報價單 ' + quote.quoteNo + (quote.remark ? '｜' + String(quote.remark).slice(0, 200) : '')),
+    orderCreator: fxCreatorName_() + '(' + quote.quoteNo + ')',
+    orderNote: ('報價單 ' + quote.quoteNo + taxNote + (quote.remark ? '｜' + String(quote.remark).slice(0, 200) : '')),
     // 金流九欄（報價系統為主）
     depositAmount: dep, depositDueDate: '', depositPaidDate: (os && os.deposit_date) || '',
     finalAmount: fin, finalDueDate: (os && os.final_date_est) || '', finalPaidDate: (os && os.final_date) || '',
     finalAdjusted: 'false', finalAdjustedAmount: '', finalAdjustNote: '',
     // 配送八欄
-    shipMethod: '', shipFee: (ship > 0 ? ship : ''), shipFeePayer: (ship > 0 ? '客戶付運費' : ''), recvName: quote.shipContact || quote.contactName || '', recvPhone: quote.shipPhone || quote.contactPhone || '',
+    shipMethod: '', shipFee: (ship > 0 ? ship : ''), shipFeePayer: (ship > 0 ? FX_PAYER_CLIENT : ''), recvName: quote.shipContact || quote.contactName || '', recvPhone: quote.shipPhone || quote.contactPhone || '',
     recvAddr: quote.shipAddress || quote.clientAddress || '', taxId: quote.clientTaxId || '',
     invoiceSent: 'false', invoiceLast5: (os && os.invoice_last5) || ''
   };
@@ -272,14 +315,18 @@ function handleFactoryPushOrder_(params) {
 
 // ═══ 同步：廠務 → 報價系統 ═══════════════════════════════
 // 金流比對：兩邊都有值且不同才算不符（'' 視為未填不比）
-function fxFinCompare_(os, o, quoteShip) {
+function fxFinCompare_(os, o, quoteShip, conv) {
   var out = [];
-  var ship = Number(quoteShip) || 0;
+  conv = conv || { excl: false, factor: 1 };
+  var ship = fxConvAmt_(Number(quoteShip) || 0, conv) || 0;
   var fxShipFee = fxNum_(o.shipFee);
+  var payer = String(o.shipFeePayer || '').trim();
+  var coPays = (payer === FX_PAYER_CO);   // 2026-09-10 Molly：南坡萬自付的運費＝成本，不進營收、不跟報價單比
+  var tag = conv.excl ? '（未稅）' : '';
   function cmp(label, a, b) {
     a = fxNum_(a); b = fxNum_(b);
     if (a === '' || b === '') return;
-    if (Math.round(a) === Math.round(b)) return;
+    if (Math.abs(Math.round(a) - Math.round(b)) <= (conv.excl ? 1 : 0)) return;   // 未稅換算允許 1 元進位差
     // 2026-09-09 Molly：報價單含運費、廠務「總金額」不含（運費另填在「運費金額」欄，同仁常留空）→ 差額剛好＝運費就算一致
     if (ship > 0 && fxShipFee === '' && Math.round(a) === Math.round(b) + ship) return;
     out.push(label + '：報價 ' + a + ' ≠ 廠務 ' + b);
@@ -287,12 +334,17 @@ function fxFinCompare_(os, o, quoteShip) {
   if (!os) return out;
   // 總額拆成「貨款」與「運費」各比各的：報價單總計含運費、廠務「總金額」不含（運費另一欄）
   var fxGoods = (Number(o.total) || 0) > 0 ? Number(o.total) : '';   // 廠務 total 預設 0＝未填
-  var qsGoods = (fxNum_(os.grand_total) === '') ? '' : (fxNum_(os.grand_total) - ship);
-  if (fxGoods !== '' && qsGoods !== '' && Math.round(fxGoods) !== Math.round(qsGoods)) out.push('貨款（不含運費）：報價 ' + qsGoods + ' ≠ 廠務 ' + fxGoods);
-  if (fxGoods !== '' && fxShipFee !== '' && Math.round(fxShipFee) !== ship) out.push('運費：報價 ' + ship + ' ≠ 廠務 ' + fxShipFee);
-  cmp('訂金', os.deposit_amt, o.depositAmount);
+  var qsGoods = (fxNum_(os.grand_total) === '') ? '' : (fxConvAmt_(os.grand_total, conv) - ship);
+  if (fxGoods !== '' && qsGoods !== '' && Math.abs(Math.round(fxGoods) - Math.round(qsGoods)) > (conv.excl ? 1 : 0)) out.push('貨款（不含運費）' + tag + '：報價 ' + qsGoods + ' ≠ 廠務 ' + fxGoods);
+  if (coPays) {
+    // 廠務標「南坡萬付運費」：這筆是成本（記在 factory_fin_json.shipCost 給月報表用）。報價單若還向客戶收運費就是兩邊講法不同，提示一下
+    if (ship > 0) out.push('運費支付方：報價單向客戶收運費 ' + ship + '，廠務卻標「' + FX_PAYER_CO + '」');
+  } else if (fxGoods !== '' && fxShipFee !== '' && Math.round(fxShipFee) !== ship) {
+    out.push('運費' + tag + '：報價 ' + ship + ' ≠ 廠務 ' + fxShipFee + (ship === 0 && !payer ? '（若是南坡萬自付，請在廠務把「運費支付方」改成「' + FX_PAYER_CO + '」就不會再提示）' : ''));
+  }
+  cmp('訂金' + tag, fxConvAmt_(os.deposit_amt, conv), o.depositAmount);
   var fxFinal = (o.finalAdjusted && o.finalAdjustedAmount !== '') ? o.finalAdjustedAmount : o.finalAmount;
-  cmp('尾款', os.final_amt, fxFinal);
+  cmp('尾款' + tag, fxConvAmt_(os.final_amt, conv), fxFinal);
   return out;
 }
 function fxShipTag_(orderNo, seq) { return '[FX:' + orderNo + ':' + seq + ']'; }
@@ -439,6 +491,7 @@ function handleFactorySync_(params) {
     var ships = v2ReadAll_(SHEET_ORDER_SHIPMENTS, ORDER_SHIP_HEADERS);
     var customers = []; try { customers = v2ReadAll_(SHEET_CUSTOMERS, CUSTOMERS_HEADERS); } catch (e) {}
     var shipMap = fxShippingMap_();
+    var finMap = fxQuoteFinMap_();
     var priceCtx = null;
     var now = tpeNow_();
     var synced = 0, imported = [], mismatches = [], errors = [], shipChanged = 0;
@@ -462,7 +515,8 @@ function handleFactorySync_(params) {
           imported.push({ factory_order_no: o.orderNo, quote_no: quoteNo, client: imp.clientName });
         }
         var os = osBy[quoteNo] || null;
-        var mis = fxFinCompare_(os, o, shipMap[quoteNo] || 0);
+        var qf = finMap[quoteNo] || {};
+        var mis = fxFinCompare_(os, o, shipMap[quoteNo] || 0, fxConv_(!!shipMap.__excl[quoteNo], qf.gt, qf.tax));
         var sres = fxSyncShipments_(quoteNo, o, shipRows, ships);
         shipChanged += sres.changed;
         var actual = '';
@@ -475,7 +529,8 @@ function handleFactorySync_(params) {
           factory_order_no: o.orderNo, factory_status: o.status || '', factory_lot: o.lot || '',
           factory_ship_est: o.deliveryDate || '', factory_ship_actual: actual || (o.shipDateConfirmed ? o.actualDeliveryDate : ''),
           factory_fin_json: JSON.stringify({ total: o.total, depositAmount: o.depositAmount, depositPaidDate: o.depositPaidDate, finalAmount: o.finalAmount,
-            finalPaidDate: o.finalPaidDate, finalAdjusted: !!o.finalAdjusted, finalAdjustedAmount: o.finalAdjustedAmount, depositStatus: o.depositStatus, pm: o.pm, client: o.client }),
+            finalPaidDate: o.finalPaidDate, finalAdjusted: !!o.finalAdjusted, finalAdjustedAmount: o.finalAdjustedAmount, depositStatus: o.depositStatus, pm: o.pm, client: o.client,
+            shipFee: fxNum_(o.shipFee), shipFeePayer: String(o.shipFeePayer || ''), shipCost: fxShipCostOf_(o) }),
           fin_mismatch: mis.join('；'),
           ship_json: JSON.stringify({ orderNo: o.orderNo, client: o.client, lot: o.lot || '', pm: o.pm || '', items: (o.items || []).map(function (it) { return { product: it.product, volume: it.volume, bottleType: it.bottleType, qty: it.qty, shipped: it.shipped || 0 }; }), batches: sres.batches }),
           last_sync: now
@@ -570,6 +625,7 @@ function fxQuoteFinMap_() {
     var no = String(r[MAIN_COLS.quoteNo - 1] || ''); if (!no) return;
     var gt = Math.round(Number(r[MAIN_COLS.grandTotal - 1]) || 0);
     m[no] = { client: String(r[MAIN_COLS.clientName - 1] || ''), status: String(r[MAIN_COLS.status - 1] || ''), gt: gt,
+      tax: Math.round(Number(r[MAIN_COLS.taxAmount - 1]) || 0),
       pay: fxParsePay_(r[MAIN_COLS.paymentDetail - 1], gt) };
   });
   return m;

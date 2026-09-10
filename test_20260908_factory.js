@@ -28,6 +28,20 @@ async function run(){
     await loadFactoryLinks(true);
     const oA={no:'Q-A',typeKey:'bottle',src:'std',st:{}}, oB={no:'Q-B',typeKey:'bottle',src:'std',st:{}}, oC={no:'Q-C',typeKey:'banquet',src:'std',st:{}};
     const out={ badgesA: fxBadges(oA), badgesB: fxBadges(oB), btnA: fxActionBtn(oA), btnB: fxActionBtn(oB), btnC: fxActionBtn(oC) };
+    // 2026-09-10 公司付運費＝成本：徽章＋月報表扣成交淨額（報價單不動）
+    FX_LINKS['Q-S']={ quote_no:'Q-S', factory_order_no:'260818-001', factory_status:'已出貨', factory_fin_json:'{"total":24668,"shipFee":850,"shipFeePayer":"南坡萬付運費","shipCost":850}' };
+    out.badgeS = fxBadges({no:'Q-S',typeKey:'bottle',src:'std',st:{}});
+    out.costS = fxShipCost('Q-S'); out.costA = fxShipCost('Q-A');
+    if(typeof renderReport==='function'){
+      let box=document.getElementById('rpt-box'); const made=!box; if(made){ box=document.createElement('div'); box.id='rpt-box'; document.body.appendChild(box); }
+      const mm=new Date(); const ym=mm.getFullYear()+'-'+String(mm.getMonth()+1).padStart(2,'0');
+      RPT_Y=mm.getFullYear(); RPT_M=mm.getMonth()+1;
+      ORDERS_CACHE=[{no:'Q-S',client:'Babyface',typeKey:'bottle',src:'std',total:24668,quoteDate:ym+'-01',st:{status:'shipped',grand_total:24668,ship_date_actual:ym+'-05'}},
+                    {no:'Q-A',client:'島羽',typeKey:'bottle',src:'std',total:10000,quoteDate:ym+'-02',st:{status:'shipped',grand_total:10000,ship_date_actual:ym+'-06'}}];
+      try{ renderReport(); }catch(e){ out.rptErr=String(e&&e.stack||e); }
+      out.rpt = box.textContent;
+      if(made) box.remove(); else box.innerHTML='';
+    }
     // 轉單
     const btn=document.createElement('button'); document.body.appendChild(btn);
     await fxPushOrderDo('Q-B', btn);
@@ -81,6 +95,8 @@ async function run(){
   check('8 帶入第 2 次：本次 40、已出貨 60、日期／第幾次／PM 都填、待出貨 0', !r.missing && r.fill.thisShip==='40' && r.fill.shipped==='60' && r.fill.date==='2026-09-16' && r.fill.seq==='2' && r.fill.pm==='小李' && r.fill.remain==='0', JSON.stringify(r.fill));
   check('9 對照視窗：客戶列＝主檔 2 筆、預填、連線正常', !r.missing && r.mapInputs===2 && r.mapPrefill==='OEM-Babyface' && r.mapPing, JSON.stringify([r.mapInputs,r.mapPrefill,r.mapPing]));
   check('10 儲存對照送出 client×2＋product×1', !r.missing && r.saveRows && r.saveRows.filter(x=>x.kind==='client').length===2 && r.saveRows.filter(x=>x.kind==='product').length===1 && r.saveRows.find(x=>x.qs_name==='A').factory_name==='A V2', JSON.stringify(r.saveRows));
+  check('12 公司付運費徽章＋fxShipCost', !r.missing && /公司付運費 \$850/.test(r.badgeS) && r.costS===850 && r.costA===0, JSON.stringify([r.badgeS,r.costS,r.costA]));
+  check('13 月報表：成交金額 34,668、公司付運費 −850、成交淨額 33,818', !r.missing && r.rpt && /\$34,668/.test(r.rpt) && /−\$850/.test(r.rpt) && /\$33,818/.test(r.rpt), (r.rptErr||'')+' :: '+(r.rpt||'').slice(0,300));
   check('11 沒有 JS 錯誤', errors.length===0, errors.join(' | '));
   results.forEach(x=>console.log((x.pass?'PASS':'FAIL')+' '+x.name+(x.pass?'':'  ← '+(x.info||''))));
   console.log(`${results.filter(x=>x.pass).length}/${results.length} PASS`);

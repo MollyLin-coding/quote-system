@@ -10,6 +10,13 @@ const FX_AUTO_SYNC_MS = 10 * 60 * 1000;   // 開訂單追蹤頁時最多每 10 �
 const FX_PUSH_TYPES = ['bottle', 'ownbrand', 'ownlabel'];
 
 function fxLinkOf(no){ return (FX_LINKS && FX_LINKS[String(no)]) || null; }
+/* 2026-09-10 Molly：廠務標「南坡萬付運費」的運費＝公司成本（不進營收、不跟報價單比）。
+   後端同步時寫進 factory_fin_json.shipCost；月報表用它算「本月公司付運費」與成交淨額。沒有就回 0 */
+function fxShipCost(no){
+  const l = fxLinkOf(no); if(!l) return 0;
+  const fin = fxParse(l.factory_fin_json, {});
+  const v = parseFloat(fin.shipCost); return (isFinite(v) && v > 0) ? v : 0;
+}
 function fxParse(s, dflt){ try{ return s ? (typeof s==='string' ? JSON.parse(s) : s) : dflt; }catch(e){ return dflt; } }
 
 /* 讀 factory_links（走讀取快取；訂單追蹤頁每次 loadOrders 都會叫，快取內就 0 秒） */
@@ -35,6 +42,8 @@ function fxBadges(o){
   const cls = st === '已出貨' ? 'info' : (st === '已完成' ? 'info' : (st === '製作中' ? 'warn' : ''));
   const tip = `廠務訂單 ${l.factory_order_no || ''}${l.last_sync ? '｜上次同步 ' + String(l.last_sync).slice(5, 16) : ''}`;
   if(l.factory_order_no) h += `<span class="ob ${cls}" title="${escAttr(tip)}">🏭 ${escHtml(st || '已轉廠務')}${lot ? ' · Lot ' + escHtml(lot) : ''}</span>`;
+  const sc = fxShipCost(o.no);
+  if(sc > 0) h += `<span class="ob" title="廠務標「南坡萬付運費」：這筆是公司成本，不算營收、不跟報價單比；月報表會扣在「成交淨額」">🚚 公司付運費 ${money(sc)}</span>`;
   const mis = String(l.fin_mismatch || '').trim();
   if(mis) h += `<span class="ob red" title="${escAttr(mis)}" style="cursor:help" data-no="${escAttr(o.no)}" onclick="fxShowMismatch(this.dataset.no)">⚠ 金額與廠務不符</span>`;
   return h;

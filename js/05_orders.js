@@ -966,6 +966,11 @@ function renderReport(){
   // 也不再被手動狀態卡住：只要有填收款/出貨日期，就算狀態忘了改也會列入
   const dealt=ORDERS_CACHE.filter(o=>rptDealDate(o).startsWith(mm));
   const sum=dealt.reduce((s,o)=>s+ordGrandTotal(o),0);
+  /* 2026-09-10 Molly：南坡萬自付的運費（廠務「運費支付方」＝南坡萬付運費）是成本，不進營收；
+     報價單本身不動，只在這裡扣出「成交淨額」。資料來自廠務同步（13_factory.js fxShipCost），沒連廠務的單就是 0 */
+  const shipCostOf=(o)=>(typeof fxShipCost==='function'?fxShipCost(o.no):0);
+  const shipCost=dealt.reduce((s,o)=>s+shipCostOf(o),0);
+  const shipCostN=dealt.filter(o=>shipCostOf(o)>0).length;
   const byC={}; dealt.forEach(o=>{ const k=o.client.split('｜')[0]; byC[k]=byC[k]||{n:0,a:0}; byC[k].n++; byC[k].a+=ordGrandTotal(o); });
   const rows=Object.entries(byC).sort((a,b)=>b[1].a-a[1].a);
 
@@ -1005,6 +1010,8 @@ function renderReport(){
     <div class="rpt-stats">
       <div class="rpt-stat"><div class="k">成交筆數</div><div class="v">${dealt.length} 筆</div></div>
       <div class="rpt-stat"><div class="k">成交金額</div><div class="v" style="color:#A6824A">${money(sum)}</div></div>
+      ${shipCost>0?`<div class="rpt-stat"><div class="k">本月公司付運費（成本）</div><div class="v" style="color:#B5541F">−${money(shipCost)}</div><div style="font-size:10px;color:#A8A69C;margin-top:2px">${shipCostN} 筆，來自廠務「南坡萬付運費」</div></div>
+      <div class="rpt-stat"><div class="k">成交淨額</div><div class="v" style="color:#A6824A">${money(sum-shipCost)}</div></div>`:''}
       <div class="rpt-stat"><div class="k">本月報價</div><div class="v">${inMonth.length} 筆</div></div>
       <div class="rpt-stat"><div class="k">本月已收訂金</div><div class="v" style="color:#2E7D4F">${money(depositSum)}</div>${amtHint(depEst,depMiss)}</div>
       <div class="rpt-stat"><div class="k">本月已收尾款</div><div class="v" style="color:#2E7D4F">${money(paidSum)}</div>${amtHint(paidEst,0)}</div>
