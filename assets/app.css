@@ -251,6 +251,35 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-se
 .rec-act-btn.primary{border-color:rgba(166,130,74,.55);color:var(--gold-deep);background:var(--gold-pale);font-weight:600}
 .rec-act-btn.primary:hover{border-color:var(--gold-deep)}
 .rec-act-btn.del:hover{border-color:#C0453F;color:#C0453F}
+/* 2026-09-10 報價紀錄新版面：Lot 為主識別、單號退到第二行、操作分主／次兩組、日期金額不換行 */
+.rec-list{table-layout:auto}
+.rec-list th.rec-date,.rec-list td.rec-date,.rec-list th.rec-total,.rec-list td.rec-total,.rec-list td.rec-actions{white-space:nowrap}
+.rec-list th.rec-total,.rec-list td.rec-total{text-align:right}
+.rec-list td.rec-total{font-weight:600;font-size:13px}
+.rec-list td.rec-date{color:var(--sub)}
+.rec-list th.rec-actions{width:1%}
+.rec-list th.rec-total{width:1%}
+.rec-list th.rec-date{width:1%}
+.rec-th-sub{margin-left:8px;font-weight:500;color:var(--hint);letter-spacing:0}
+.rec-main{display:flex;align-items:center;gap:8px;flex-wrap:wrap;line-height:1.3}
+.rec-lot{display:inline-block;padding:3px 9px;border-radius:6px;background:var(--gold-deep);color:#fff;font-size:12.5px;font-weight:700;letter-spacing:.3px;white-space:nowrap}
+.rec-cli{font-size:14px;font-weight:600;color:var(--ink)}
+.rec-warn{color:#C0453F;font-weight:600}
+.rec-sub{display:block;margin-top:4px;font-size:11px;color:var(--hint);letter-spacing:.2px}
+.rec-dot{margin:0 5px}
+.rec-badge.qo{background:#F3ECDD;color:#7A5A1E;margin-left:4px}
+.rec-act-grp{display:inline-flex;gap:5px;vertical-align:middle}
+.rec-act-sec{margin-left:12px;padding-left:12px;border-left:1px solid var(--bd)}
+.rec-act-sec .rec-act-btn{border-color:transparent;color:var(--hint);padding:5px 6px}
+.rec-act-sec .rec-act-btn:hover{border-color:var(--bd);color:var(--ink)}
+.rec-act-sec .rec-act-btn.del:hover{border-color:#C0453F;color:#C0453F}
+@media (max-width:760px){
+  .rec-act-sec{margin-left:6px;padding-left:6px}
+  .mcard td.rec-actions .rec-act-grp{display:contents}
+  .mcard td.rec-actions .rec-act-sec{border:none;margin:0;padding:0}
+  .mcard td.rec-total{justify-content:flex-start}
+  .rec-th-sub{display:none}
+}
 .page{display:none}
 .page.on{display:block}
 
