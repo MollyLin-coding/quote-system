@@ -46,7 +46,11 @@ const RC_READ_ACTIONS = ['getFactoryLinks','getFactoryMap',   // 2026-09-08 廠�
   /* 2026-09-01 複檢：這兩支也是純讀取，原本漏列 → 開一次驗收單（要拿 QR 驗證碼）或按一次
      行事曆的「自我檢查」，就會被當成寫入把整站快取清光：公司報價檔跟著失效（級距價/MOQ 全停）、
      驗收管理的資料被清成空的但畫面不重畫（按鈕按了沒反應）。兩支都只讀不寫，放進白名單。 */
-  'getVerifyKey','calendarSelfCheck'];
+  'getVerifyKey','calendarSelfCheck',
+  /* 2026-09-11 複檢：factorySync 每 10 分鐘在背景自動打一次；原本被當成寫入 → 每次都把全站快取
+     連同 CAL_ITEMS 清光，人正停在行事曆時備忘整批消失、接著每一頁都變回冷的。改成由 fxSyncNow
+     自己判斷「這次真的有變化」才 rcClear()＋重抓（見 13_factory.js）。 */
+  'factorySync'];
 const RC_STORE = {};      // key -> {at, data}
 const RC_INFLIGHT = {};   // key -> Promise（同一份資料同時被要時共用）
 const RC_RESETS = [];     // 各模組登記「快取被清掉時，我的衍生資料也要歸零」

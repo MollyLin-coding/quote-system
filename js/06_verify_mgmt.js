@@ -170,7 +170,7 @@ function vmRenderReports(pendingOnly){
   reps.sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
   if(!reps.length) return bar+`<div class="rec-empty">${VM_CAT!=='all'?('「'+VM_CAT+'」目前沒有紀錄'):(pendingOnly?'目前沒有待處理的客戶回報 🎉':'尚無客戶回報紀錄')}</div>`;
   const rows=reps.map(r=>{
-    const photos=vmPhotos(r.photos).map((src,i)=>`<img class="vth" src="${escAttr(src)}" onclick="window.open('${escAttr(src)}','_blank')" alt="照片${i+1}">`).join('');
+    const photos=vmPhotos(r.photos).map((src,i)=>`<img class="vth" src="${escAttr(src)}" data-src="${escAttr(src)}" onclick="window.open(this.dataset.src,'_blank')" alt="照片${i+1}">`).join('');
     const issue=vmIsIssue(r);
     const cat=vmCat(r);
     const catCls=cat==='回報問題'?'issue':(cat==='驗收無誤'?'good':'other');

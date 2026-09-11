@@ -1180,7 +1180,13 @@ function getPayTerms(){
     const est=document.getElementById('p2-est')?.value||'—';
     return `甲方應於收貨後第 ${mon} 個月 ${day} 號支付全額款項新台幣 ${tot} 元整，預估付款日：${est}。`;
   }
-  if(payTab===3) return document.getElementById('p3-txt')?.value||'（請填寫自訂付款條款）';
+  if(payTab===3){
+    /* 2026-09-11 複檢：自訂條款是 textarea 多行文字，直接塞 innerHTML 換行全部黏成一段、
+       含 < 的字會被吃掉。比照寄倉條款：跳脫後把換行轉成 <br>。 */
+    const raw=document.getElementById('p3-txt')?.value||'';
+    if(!raw.trim()) return '（請填寫自訂付款條款）';
+    return ((typeof escHtml==='function')?escHtml(raw):raw).replace(/\r?\n/g,'<br>');
+  }
   if(payTab===4) return '';
   return '';
 }

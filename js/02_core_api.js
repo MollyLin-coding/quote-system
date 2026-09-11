@@ -226,6 +226,7 @@ function doLogout(){
 async function loadLoginUsers(){
   const sel = document.getElementById('login-user');
   if(!sel) return;
+  LOGIN_USERS_REQ=true;
   sel.innerHTML = '<option value="">載入中…</option>';
   try{
     const d = await apiCall({ action:'getLoginUsers' });
@@ -276,7 +277,17 @@ async function doLogin(){
     btn.disabled = false; btn.textContent = '登入';
   }
 }
-function showLogin(){ document.getElementById('login-overlay').style.display='flex'; }
+function showLogin(){
+  document.getElementById('login-overlay').style.display='flex';
+  /* 2026-09-11 複檢：登入逾時彈回來的登入框，使用者下拉是空的（名單只在開頁沒 token 那條路載）
+     → 選不到自己是誰、送出的 name 是空字串。名單空的就補載一次。 */
+  setTimeout(()=>{ try{
+    const s=document.getElementById('login-user');
+    const empty=s && (s.options.length===0 || (s.options.length===1 && !s.options[0].value));
+    if(empty && !LOGIN_USERS_REQ && typeof loadLoginUsers==='function') loadLoginUsers();
+  }catch(e){} }, 0);
+}
+let LOGIN_USERS_REQ=false;   // loadLoginUsers 打過（含進行中）就 true，避免 boot 與 showLogin 各打一趟
 function hideLogin(){
   document.getElementById('login-overlay').style.display='none';
   document.getElementById('login-pin').value='';
@@ -835,7 +846,7 @@ function renderRecords(){
               <button class="rec-act-btn" onclick="recPreviewCustom('${no}')">預覽</button>
             </span>
             <span class="rec-act-grp rec-act-sec">
-              <button class="rec-act-btn del" onclick="deleteCustomRecord('${no}','${escAttr(q.clientName||'')}')">刪除</button>
+              <button class="rec-act-btn del" data-no="${no}" data-cli="${escAttr(q.clientName||'')}" onclick="deleteCustomRecord(this.dataset.no,this.dataset.cli)">刪除</button>
             </span>
           </td>
         </tr>`;
@@ -889,6 +900,9 @@ async function detachAsNewQuote_(){
     if(typeof LOADED_PAY_SIG!=='undefined') LOADED_PAY_SIG=null;
   }
   const dt=document.getElementById('f-dt'); if(dt) dt.value=todayStr();
+  /* 2026-09-11 複檢：「訂單追蹤進度」三格（訂金日／客戶批號／備註）在編輯舊單時只是被藏起來、值還在，
+     另存／複製後 wasNewQuote=true 會拿上一張單的訂金日替新單建進度 → 一毛沒收就標成已收訂金。一律清空。 */
+  ['f-ord-depdate','f-ord-lot','f-ord-note'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
   if(typeof onDate==='function') onDate();   // 有效日+1月＋upNo 重編單號（editingQuoteNo 已斷開）
   if(typeof autoNextSerial==='function'){ try{ await autoNextSerial(); }catch(e){} }
   if(typeof updateOrdProgVisibility==='function') updateOrdProgVisibility();

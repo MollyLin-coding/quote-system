@@ -117,7 +117,7 @@ function cusBuild(qs, cq, os, gv, lf, gc){
     c.dealSum=dealt.reduce((s,q)=>s+(q.total||0),0);
     c.unpaidList=c.quotes.filter(q=>{ if(!q.st) return false; const s=effOrdStatus(q.st); return (s==='shipped'||s==='invoiced') && !q.st.final_date; });
     c.unpaid=c.unpaidList.reduce((s,q)=>s+cusFinalAmt(q).amt,0);
-    c.openList=c.quotes.filter(q=>{ const s=effOrdStatus(q.st); return s!=='closed' && s!=='cancelled' && s!=='paid'; });
+    c.openList=c.quotes.filter(q=>{ if(!q.st) return false; const s=effOrdStatus(q.st); return s!=='closed' && s!=='cancelled' && s!=='paid'; });   // 2026-09-11：沒建進度的純報價不算「進行中」
     c.lastDate=c.quotes.length?(c.quotes[0].date||''):'';
     c.pending=c.reports.filter(r=>typeof vmIsUnhandled==='function' && vmIsUnhandled(r)).length;
     return c;
@@ -203,7 +203,7 @@ function renderCustomers(){
     body.innerHTML=list.map(c=>{
       const d=daysBetween(c.lastDate);
       const ago=(d==null)?'—':(d===0?'今天':(-d)+' 天前');
-      return `<tr class="clickable${CUS_SEL===c.key?' cus-on':''}" onclick="cusOpen(decodeURIComponent('${encodeURIComponent(c.key)}'))">
+      return `<tr class="clickable${CUS_SEL===c.key?' cus-on':''}" onclick="cusOpen(decodeURIComponent('${cusEnc(c.key)}'))">
         <td class="mc-main" style="font-weight:600">${escHtml(c.name)}${c.pending?`<span class="ob warn" style="margin-left:6px">客訴 ${c.pending}</span>`:''}${
           cusTagsHtml(c)}${c.master?'':'<span class="ob grey" style="margin-left:6px">未建主檔</span>'}</td>
         <td data-l="聯絡">${escHtml(c.contact||'—')}${c.phone?'<span style="color:#A8A69C"> ／ </span>'+escHtml(c.phone):''}</td>
@@ -212,9 +212,9 @@ function renderCustomers(){
         <td data-l="未收尾款" style="text-align:right;${c.unpaid?'color:#B03A2E;font-weight:600':'color:#A8A69C'}">${c.unpaid?money(c.unpaid):'—'}</td>
         <td data-l="最後往來" style="text-align:center;white-space:nowrap">${escHtml(c.lastDate||'—')}<span style="font-size:10.5px;color:#A8A69C">　${ago}</span></td>
         <td class="rec-actions" data-l="操作" onclick="event.stopPropagation()">
-          <button class="rec-act-btn" onclick="cusOpen(decodeURIComponent('${encodeURIComponent(c.key)}'))">${CUS_SEL===c.key?'收起':'明細'}</button>
-          <button class="rec-act-btn" onclick="openCusEdit(decodeURIComponent('${encodeURIComponent(c.key)}'))">編輯</button>
-          <button class="rec-act-btn" onclick="cusNewQuote(decodeURIComponent('${encodeURIComponent(c.key)}'))">開新單</button>
+          <button class="rec-act-btn" onclick="cusOpen(decodeURIComponent('${cusEnc(c.key)}'))">${CUS_SEL===c.key?'收起':'明細'}</button>
+          <button class="rec-act-btn" onclick="openCusEdit(decodeURIComponent('${cusEnc(c.key)}'))">編輯</button>
+          <button class="rec-act-btn" onclick="cusNewQuote(decodeURIComponent('${cusEnc(c.key)}'))">開新單</button>
         </td>
       </tr>`;
     }).join('');
@@ -232,8 +232,11 @@ function cusCloseDetail(){ CUS_SEL=null; renderCustomers(); }
 function cusKv(label, val, copy){
   const v=String(val==null?'':val).trim();
   return `<div class="cus-kv"><div class="k">${escHtml(label)}</div><div class="v">${v?escHtml(v):'<span style="color:#C4C2B8">—</span>'}${
-    (v&&copy!==false)?`<button class="cus-copy" title="複製" onclick="cusCopy(decodeURIComponent('${encodeURIComponent(v)}'))"><i class="ti ti-copy"></i></button>`:''}</div></div>`;
+    (v&&copy!==false)?`<button class="cus-copy" title="複製" onclick="cusCopy(decodeURIComponent('${cusEnc(v)}'))"><i class="ti ti-copy"></i></button>`:''}</div></div>`;
 }
+/* 2026-09-11 複檢：encodeURIComponent 不會編碼單引號，塞進 onclick="fn(decodeURIComponent('…'))" 會把 JS 字串截斷
+   → 客戶名含 ' 的那一列四顆鈕全失效，精心構造的值還能執行任意程式。單引號一律轉成 %27。 */
+function cusEnc(v){ return encodeURIComponent(String(v==null?'':v)).replace(/'/g,'%27'); }
 function cusCopy(t){
   const done=()=>{ if(typeof toast==='function') toast('已複製：'+t,'ok'); };
   try{
@@ -273,7 +276,7 @@ function renderCusDetail(){
   const qRows=c.quotes.map(q=>{
     const s=q.st?effOrdStatus(q.st):'';
     const pill=s?`<span class="ob ${s==='cancelled'?'grey':(s==='closed'||s==='paid')?'':'info'}">${escHtml(stageLabel(s))}</span>`:'<span class="ob grey">未建進度</span>';
-    return `<tr class="clickable" onclick="cusOpenQuote(decodeURIComponent('${encodeURIComponent(q.no)}'),'${escAttr(q.src)}')">
+    return `<tr class="clickable" onclick="cusOpenQuote(decodeURIComponent('${cusEnc(q.no)}'),'${escAttr(q.src)}')">
       <td class="mc-main" style="font-weight:600">${escHtml(q.no||'—')}</td>
       <td data-l="日期">${escHtml(q.date||'—')}</td>
       <td data-l="類型">${escHtml(cusTypeLabel(q.typeKey))}${q.tag?'<span style="color:#A8A69C">｜'+escHtml(q.tag)+'</span>':''}</td>
@@ -289,7 +292,7 @@ function renderCusDetail(){
     const owe=(stat==='shipped'||stat==='invoiced')&&!s.final_date;
     const fde=s.final_date_est; let fdeTxt='—';
     if(fde){ const d=daysBetween(fde); fdeTxt=(d!=null&&d<0)?`<span style="color:#B03A2E;font-weight:600">${escHtml(String(fde).slice(5))}（逾期${-d}天）</span>`:escHtml(String(fde).slice(5)); }
-    return `<tr class="clickable" onclick="cusGotoOrder(decodeURIComponent('${encodeURIComponent(q.no)}'))">
+    return `<tr class="clickable" onclick="cusGotoOrder(decodeURIComponent('${cusEnc(q.no)}'))">
       <td class="mc-main" style="font-weight:600">${escHtml(q.no)}</td>
       <td data-l="進度">${escHtml(stageLabel(stat))}</td>
       <td data-l="出貨日" style="text-align:center">${escHtml(s.ship_date_actual||s.ship_date_est||'—')}${(!s.ship_date_actual&&s.ship_date_est)?'<span style="color:#A8A69C;font-size:10.5px">（預計）</span>':''}</td>
@@ -314,8 +317,8 @@ function renderCusDetail(){
   el.innerHTML=`<div class="card cus-detail">
     <div class="ch"><i class="ti ti-user"></i><span>${escHtml(c.name)}</span>${cusTagsHtml(c)}
       <span class="ch-opt">
-        <button class="rec-act-btn" onclick="openCusEdit(decodeURIComponent('${encodeURIComponent(c.key)}'))"><i class="ti ti-edit"></i> ${c.master?'編輯客戶資料':'建立客戶主檔'}</button>
-        <button class="rec-act-btn" onclick="cusNewQuote(decodeURIComponent('${encodeURIComponent(c.key)}'))"><i class="ti ti-file-plus"></i> 用這客戶開新報價單</button>
+        <button class="rec-act-btn" onclick="openCusEdit(decodeURIComponent('${cusEnc(c.key)}'))"><i class="ti ti-edit"></i> ${c.master?'編輯客戶資料':'建立客戶主檔'}</button>
+        <button class="rec-act-btn" onclick="cusNewQuote(decodeURIComponent('${cusEnc(c.key)}'))"><i class="ti ti-file-plus"></i> 用這客戶開新報價單</button>
         <button class="rec-act-btn" onclick="cusCloseDetail()">收起</button>
       </span></div>
     <div class="cb">

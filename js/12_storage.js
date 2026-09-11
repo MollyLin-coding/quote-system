@@ -76,7 +76,7 @@ function stRender(){
   { const dl=document.getElementById('st-cuslist');
     if(dl){
       const extra=[];
-      try{ (typeof CUS_DATA!=='undefined' && CUS_DATA ? (CUS_DATA.customers||CUS_DATA||[]) : []).forEach(c=>{
+      try{ ((typeof CUS_MASTER!=='undefined' && Array.isArray(CUS_MASTER)) ? CUS_MASTER : []).forEach(c=>{   // 2026-09-11 複檢：原本讀錯成 CUS_DATA（只有進過客戶管理才有），員工永遠是空的
         const nm=String((c&&(c.name||c.client||c.company))||'').trim();
         if(nm && cus.indexOf(nm)<0 && extra.indexOf(nm)<0) extra.push(nm);
       }); }catch(e){}
@@ -129,7 +129,7 @@ function stOpenForm(dir){
 }
 function stCloseForm(){
   const box=document.getElementById('st-form'); if(box) box.style.display='none';
-  ['st-f-cus','st-f-qty','st-f-no','st-f-note','st-f-name','st-f-vol'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  ['st-f-cus','st-f-qty','st-f-no','st-f-note','st-f-name','st-f-vol','st-f-date'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });   // 2026-09-11：日期也清，下一筆才會回到今天
   { const s=document.getElementById('st-f-sku'); if(s) s.value=''; }
   stSkuChange();
 }
@@ -230,8 +230,11 @@ async function stRemoveMovesBySrc(no, srcTag){
 }
 /* 這張驗收單上這些酒款，客戶目前在我方倉庫還有多少（用來決定「入倉／提領」的預設） */
 function stBalanceForRows(cus, rows){
-  let bal=0;
-  (rows||[]).forEach(r=>{ bal += stBalanceFor(cus, '', r.name, r.vol); });
+  let bal=0; const seen={};
+  (rows||[]).forEach(r=>{   // 2026-09-11 複檢：同品名同容量兩個 LOT 會算兩次 → 先去重
+    const k=stNm(r.name)+'|'+stVol(r.vol); if(seen[k]) return; seen[k]=1;
+    bal += stBalanceFor(cus, '', r.name, r.vol);
+  });
   return bal;
 }
 function stCustomerTotal(cus){

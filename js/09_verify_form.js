@@ -305,6 +305,7 @@ function generateVerifyPdf(mode){
   vfRememberPm(d.shipper);   // 2026-09-01：記住 PM，下一張自動帶
   d.shipSeq=parseInt(gvl('vf-shipseq'),10)||1; // 「第幾次出貨」改成人工填，不再自動算
   if(!vfKeyReady(d.no)) return;   // 複檢 #2-1：沒有 QR 驗證碼就先別印
+  const _wasEdit=!!VF_EDIT_ID;   // 2026-09-11 複檢：saveVerifyFormRecord 會同步清掉 VF_EDIT_ID，寄倉重寫的旗標要先記
   /* 複檢 2026-08-13 #1-3：留底一定要先存。原本是彈窗被瀏覽器擋掉就直接 return，留底一筆都不會存
      → 下次開同一張單的驗收單，「已出貨」歸零、「本次出貨」又帶成全部訂購量，第二批會印成整批數量。 */
   saveVerifyFormRecord(d);
@@ -323,7 +324,7 @@ function generateVerifyPdf(mode){
       /* 2026-09-01 複檢 #8：這是「編輯／重印」既有留底（VF_EDIT_ID 有值）→ 數量可能改過了，
          要先把上一次寫進寄倉的同一批紀錄刪掉再重寫，否則後端看到相同的 src 會直接跳過，
          寄倉數字永遠停在第一次的舊值。 */
-      stSyncFromVerify(Object.assign({}, d, {__stReplace:!!VF_EDIT_ID}), _dir, d.shipSeq)
+      stSyncFromVerify(Object.assign({}, d, {__stReplace:_wasEdit}), _dir, d.shipSeq)
         .catch(e=>toast(e.message||'寄倉登記失敗，請到「客戶寄倉」手動登記','err'));
     }
   }catch(_){}
@@ -768,7 +769,10 @@ function generateConsignVerifyPdf(){
    編輯模式（CONSIGN_VF_EDIT_ID 有值）＝取代：先存新的，成功後刪舊的那筆。 */
 function saveConsignVerifyFormRecord(d){
   try{
-    if(!AUTH_TOKEN) return;
+    if(!AUTH_TOKEN){   // 2026-09-11 複檢：比照報價單那套，沒登入不能靜默不留底（試飲瓶紀錄只存在留底裡）
+      toast('⚠ 目前沒有登入（可能是登入過期了），這張寄售驗收單「沒有」留底：試飲瓶紀錄、驗收管理都不會記到。請重新登入後再產生一次','err');
+      return;
+    }
     const editId=CONSIGN_VF_EDIT_ID; CONSIGN_VF_EDIT_ID=null;
     const record={ no:d.no, lot:'', shipDate:d.shipDate, pm:d.handler||'', boxes:'', client:d.client,
       // taster 一起存進 items_json，之後從留底編輯這張單時「試飲」標示不會掉

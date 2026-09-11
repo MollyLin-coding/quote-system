@@ -603,11 +603,14 @@ function orderShipPoints(o){
   const no=o&&o.no;
   const bs=shpBatchesOf(no);
   if(bs.length){
-    const pts=bs.map((b,i)=>{
+    /* 2026-09-11 複檢：兩個日期都空白的分批列（只填金額／備註）不會畫成點，
+       但「共 N 批」若用過濾前的筆數算，最新那批的 seq≠total → 「已出 N/M」標籤消失。先過濾再算。 */
+    const bsOk=bs.filter(b=>ymd(b.ship_date_est)||ymd(b.ship_date_actual));
+    const pts=bsOk.map((b,i)=>{
       const est=ymd(b.ship_date_est), act=ymd(b.ship_date_actual);
       return { date:act||est, est, act, done:!!act, batch:true, no,
-               seq:Number(b.seq)||i+1, total:bs.length, id:b.id||'', note:b.note||'' };
-    }).filter(x=>x.date);
+               seq:i+1, total:bsOk.length, id:b.id||'', note:b.note||'' };
+    });
     /* 2026-09-11 Molly：「好野吧昨天是分批出貨，行事曆卻沒有正確顯示」。
        查證：那張單只出了第 1 批（46/126），order_shipments 只有一筆 → total=1 → 沒有批次標籤，
        月曆上看起來像整張出完；而主線的預計出貨日又因為「有分批就收起主線那顆」整個消失，
@@ -863,8 +866,32 @@ async function loadShipmentBadges(force){
 function shpRerenderSide_(){
   try{
     if(typeof currentPage==='undefined') return;
-    if(currentPage==='cal' && typeof renderCalendar==='function') renderCalendar();
+    if(currentPage==='cal' && typeof renderCalendar==='function'){
+      /* 2026-09-11 複檢：某支寫入 API 的 rcClear() 會把 CAL_ITEMS 清成 []，這時直接重畫月曆
+         備忘／重複行程會整批消失。空的就先（走讀取快取）把備忘抓回來再畫；不呼叫 loadCalendar
+         是因為它會再叫 loadOrders → 又回到這裡，會繞圈。 */
+      if((!CAL_ITEMS || !CAL_ITEMS.length) && AUTH_TOKEN && typeof readCall==='function'){
+        readCall({ action:'listCalendarItems', token:AUTH_TOKEN })
+          .then(d=>{ if(d && d.ok) CAL_ITEMS=d.items||[]; renderCalendar(); })
+          .catch(()=>renderCalendar());
+      } else renderCalendar();
+    }
     if(currentPage==='today' && typeof renderToday==='function') renderToday();
+  }catch(_){}
+}
+/* 2026-09-11 複檢：今日待辦是登入後的預設頁，ORDERS_CACHE／ORDER_VSUM 都沒載 → 分批出貨的
+   「已出 N/M」「尚餘 N 待出貨」在那一頁長不出來。prefetchCommon 抓完後這兩份都在讀取快取裡
+   （0 次額外 API），順手建起來再重畫一次。 */
+async function shpEnsureSideData_(){
+  try{
+    if(!AUTH_TOKEN) return;
+    // ⚠ 只在讀取快取都在手上時才建（不准為了這個多打後端：今日待辦「只打一趟 getTodayDigest」是鐵則）
+    const need=ordPayloads().concat([{action:'listVerifyForms', token:AUTH_TOKEN, filters:{}},{action:'getVerifications', token:AUTH_TOKEN, filters:{}}]);
+    if(!need.every(p=>{ const h=rcPeek(p); return h && h.data; })) return;
+    const jobs=[];
+    if(!ORDERS_CACHE && typeof loadOrders==='function') jobs.push(loadOrders().catch(()=>{}));
+    if((typeof ORDER_VSUM==='undefined' || !ORDER_VSUM) && typeof loadOrderVerifyBadges==='function') jobs.push(loadOrderVerifyBadges());
+    if(jobs.length){ await Promise.all(jobs); shpRerenderSide_(); }
   }catch(_){}
 }
 

@@ -397,7 +397,7 @@ function renderConsignExceptions(id){
     const p=ownbrandBySku(d.sku_id); const nm=p?`${p.name}（${p.volume}）`:d.sku_id;
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #EEEDE6;font-size:12.5px">
       <span>${escHtml(nm)}　→　${(parseFloat(d.discount)*10)}折</span>
-      <button class="del" onclick="delConsignException('${escHtml(d.sku_id)}')">✕</button></div>`;
+      <button class="del" data-sku="${escAttr(d.sku_id)}" onclick="delConsignException(this.dataset.sku)">✕</button></div>`;
   }).join('');
 }
 async function addConsignException(){
@@ -845,6 +845,8 @@ function prefetchCommon(){
            把「資料寫進快取」往後推一點點，剛好在切頁的當下就可能讓別處誤判成快取還沒好而重打一次
            （test_cache 的「切走再切回訂單追蹤：完全不打後端」就是這樣被我弄得更容易踩到）。 */
         setTimeout(()=>{ try{ if(typeof currentPage!=='undefined' && currentPage==='today' && typeof renderToday==='function') renderToday(); }catch(e){} }, 0);
+        // 2026-09-11：預抓完把訂單快取／驗收進度也建起來（全部走快取），今日待辦的分批進度才長得出來
+        setTimeout(()=>{ try{ if(typeof shpEnsureSideData_==='function') shpEnsureSideData_(); }catch(e){} }, 10);
       })
       .catch(()=>{});
   }, 2500);

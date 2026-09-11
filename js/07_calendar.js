@@ -303,8 +303,12 @@ function openCalAdd(dstr, kind){
   document.getElementById('ce-time').value='';
   document.getElementById('ce-time-end').value='';
   document.getElementById('ce-freq').value='weekly';
-  document.getElementById('ce-weekday').value='1';
-  document.getElementById('ce-mday').value='5';
+  /* 2026-09-11 複檢：①點了哪一天就用那天的星期／日／月當預設（不用再改一次）
+     ②ce-mon 原本沒重設，會沿用上一筆編輯過的月份 → 「每年」行程月份錯、要到明年才發現 */
+  { const base=dstr?new Date(dstr+'T00:00:00'):new Date(); const ok=!isNaN(base);
+    document.getElementById('ce-weekday').value=ok?String(base.getDay()):'1';
+    document.getElementById('ce-mday').value=ok?String(base.getDate()):'5';
+    const mon=document.getElementById('ce-mon'); if(mon) mon.value=ok?String(base.getMonth()+1):'1'; }
   document.getElementById('ce-interval').value='1';
   onCalKindChange();
   onAllDayChange();

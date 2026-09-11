@@ -99,10 +99,18 @@ async function fxSyncNow(btn, silent){
     if(r.shipChanged) parts.push(`出貨紀錄更新 ${r.shipChanged} 筆`);
     if(r.errors && r.errors.length) parts.push(`有 ${r.errors.length} 筆錯誤：` + r.errors.slice(0, 2).join('；'));
     if(!silent || parts.length) toast(parts.length ? parts.join('\n') : `已同步 ${r.synced} 張廠務訂單，沒有變化`, (r.errors && r.errors.length) ? 'err' : 'ok');
-    // 有寫入就整批重抓（apiCall 非讀取 action 已把讀取快取清掉）
-    if(typeof loadOrders === 'function') loadOrders(true).catch(() => {});
-    else await loadFactoryLinks(true);
-    if(typeof loadShipmentBadges === 'function') loadShipmentBadges(true);
+    /* 2026-09-11 複檢：factorySync 已改列讀取白名單（不自動 rcClear）。這裡自己判斷：
+       真的有匯入／金額不符／出貨紀錄變動才清快取整批重抓；沒變化（背景自動同步 99% 的情況）
+       就什麼都不動，行事曆備忘不會消失、90 秒快取也不會白白倒掉。手動按鈕至少刷一次徽章。 */
+    const changed = !!((r.imported && r.imported.length) || (r.mismatches && r.mismatches.length) || r.shipChanged || (r.errors && r.errors.length));
+    if(changed){
+      if(typeof rcClear === 'function') rcClear();
+      if(typeof loadOrders === 'function') loadOrders(true).catch(() => {});
+      else await loadFactoryLinks(true);
+      if(typeof loadShipmentBadges === 'function') loadShipmentBadges(true);
+    } else if(!silent){
+      await loadFactoryLinks(true);
+    }
     return r;
   }catch(e){ if(!silent) toast(e.message || '同步失敗', 'err'); return null; }
   finally{ if(btn) btnBusy(btn, false); }

@@ -94,6 +94,7 @@ async function loadToday(force){
     TD_DATA = d; TD_FROM_CACHE = false; TD_CACHED_AT = new Date().toISOString(); TD_LAST_FETCH = Date.now();
     tdCacheWrite(d);
     renderToday();
+    if(typeof shpEnsureSideData_==='function') shpEnsureSideData_();   // 2026-09-11：分批進度要用的兩份資料（走快取）
   }catch(e){
     if(!TD_DATA) body.innerHTML = `<div class="td-none" style="padding:24px">讀取失敗：${escHtml(e.message||'請稍後再試')}</div>`;
     toast(e.message || '今日待辦讀取失敗', 'err');
@@ -281,6 +282,9 @@ function tdShipDueRows(list){
     // 2026-09-11：帶主線的預計出貨日進去，還沒出完的單才長得出「尚餘 N 待出貨」那一點
     const ost=((ORDERS_CACHE||[]).find(x=>String(x.no)===String(no))||{}).st||{};
     const pts=(typeof orderShipPoints==='function')?orderShipPoints({no, st:ost}):[];
+    /* ⚠ 每一批都出了＝不再催（9/3 定的規則，test_shipbatch_cal 11b 鎖著）。還沒出完的單要靠
+       orderShipPoints 的 pending 點（需要 ORDER_VSUM），今日待辦頁由 shpEnsureSideData_ 在
+       prefetch 後補建，建好會重畫一次。 */
     pts.forEach(sp=>{
       if(sp.done || !sp.est) return;                              // 已出貨的批次不再催
       const dd=daysBetween(sp.est);
