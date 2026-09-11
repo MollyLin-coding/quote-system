@@ -172,7 +172,10 @@ function renderTodayFocus(){
        打勾確認已出貨：整張單用 calFocusShip(單號)、單一批次用 calFocusShipBatch(批次id, 單號)。 */
     (typeof orderShipPoints==='function'?orderShipPoints(o):[]).filter(sp=>!sp.done && sp.batch).forEach(sp=>{
       const d=daysBetween(sp.date); if(d==null||d>7) return;
-      const box=`<span class="fdone" title="打勾＝標記這一批今天已出貨" data-sid="${escAttr(sp.id)}" data-no="${escAttr(o.no)}" onclick="event.stopPropagation();calFocusShipBatch(this.dataset.sid,this.dataset.no)"></span>`;
+      // 2026-09-11：「尚餘 N 待出貨」是還沒開驗收單的批次（沒有 id），不能打勾——給「開驗收單」的入口
+      const box=sp.pending
+        ? `<span class="ob" title="剩下的還沒出，開驗收單登記這一批" data-no="${escAttr(o.no)}" onclick="event.stopPropagation();openVerifyForm(this.dataset.no)" style="cursor:pointer">📋 開驗收單</span>`
+        : `<span class="fdone" title="打勾＝標記這一批今天已出貨" data-sid="${escAttr(sp.id)}" data-no="${escAttr(o.no)}" onclick="event.stopPropagation();calFocusShipBatch(this.dataset.sid,this.dataset.no)"></span>`;
       const tag=d<0?`<span class="ob red">出貨逾期 ${-d} 天</span>`:`<span class="ob warn">${d===0?'今天':d+' 天後'}</span>`;
       items.push({o:d, h:`${box}${tag} 🚚 ${escHtml(String(o.client||'').split('｜')[0])} 出貨${escHtml(shpPointSuffix(sp))}（${escHtml(o.no)}）`,
                   click:`tdOpenOrder('${escAttr(o.no)}')`});

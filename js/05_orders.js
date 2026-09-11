@@ -188,6 +188,7 @@ async function loadOrderVerifyBadges(force){
     });
     ORDER_VSUM={ forms:(lf&&lf.summary)||{}, reps:(gv&&gv.summary)||{}, repList:(gv&&gv.records)||[], lots, ship };
     renderOrders();
+    shpRerenderSide_();   // 2026-09-11：月曆／今日待辦的出貨標籤要用 ship 進度，資料到了要重畫
   }catch(_){}
 }
 function orderUnhandledCount(no){
@@ -599,21 +600,47 @@ function shpBatchesOf(no){
 function orderShipPoints(o){
   const st=(o&&o.st)||{};
   const ymd=v=>(typeof vmLocalYmd==='function')?(vmLocalYmd(v)||''):String(v||'');
-  const bs=shpBatchesOf(o&&o.no);
+  const no=o&&o.no;
+  const bs=shpBatchesOf(no);
   if(bs.length){
-    return bs.map((b,i)=>{
+    const pts=bs.map((b,i)=>{
       const est=ymd(b.ship_date_est), act=ymd(b.ship_date_actual);
-      return { date:act||est, est, act, done:!!act, batch:true,
+      return { date:act||est, est, act, done:!!act, batch:true, no,
                seq:Number(b.seq)||i+1, total:bs.length, id:b.id||'', note:b.note||'' };
     }).filter(x=>x.date);
+    /* 2026-09-11 Molly：「好野吧昨天是分批出貨，行事曆卻沒有正確顯示」。
+       查證：那張單只出了第 1 批（46/126），order_shipments 只有一筆 → total=1 → 沒有批次標籤，
+       月曆上看起來像整張出完；而主線的預計出貨日又因為「有分批就收起主線那顆」整個消失，
+       剩下的 80 瓶在月曆／今日焦點／今日待辦上全部不見。
+       補法：每一批都貼上 sp.no，標籤那邊拿 ordShipProgress() 判斷「還沒出完」；
+       還沒出完＋主線有預計出貨日＋主線還沒填實際出貨日 → 多長一顆「尚餘 N 待出貨」的待辦點掛在預計日，
+       出完（ordSyncShippedFromVerify 填了主線實際日）就自動消失。 */
+    const prog=(typeof ordShipProgress==='function')?ordShipProgress(no):null;
+    const mEst=ymd(st.ship_date_est), mAct=ymd(st.ship_date_actual);
+    if(prog && mEst && !mAct && pts.every(x=>x.done)){
+      const last=pts[pts.length-1];
+      const lot=(last&&typeof shpLotOf==='function')?shpLotOf(last):'';
+      pts.push({ date:mEst, est:mEst, act:'', done:false, batch:true, pending:true, no,
+                 remain:prog.ordered-prog.shipped, seq:pts.length+1, total:pts.length, id:'', note:lot });
+    }
+    return pts;
   }
   const est=ymd(st.ship_date_est), act=ymd(st.ship_date_actual);
   if(!est && !act) return [];
-  return [{ date:act||est, est, act, done:!!act, batch:false, seq:0, total:0, id:'', note:'' }];
+  return [{ date:act||est, est, act, done:!!act, batch:false, no, seq:0, total:0, id:'', note:'' }];
 }
 /* 分批的批次標籤：「（第2批/共3批）」；不是分批、或這張單其實只出過一次貨（total<=1，
-   單純用「產生驗收單」記一次出貨日）就回空字串，別讓沒真的拆分的單也被貼「第1批/共1批」。 */
-function shpPointLabel(sp){ return (sp&&sp.batch&&sp.total>1)?`（第${sp.seq}批/共${sp.total}批）`:''; }
+   單純用「產生驗收單」記一次出貨日）就回空字串，別讓沒真的拆分的單也被貼「第1批/共1批」。
+   2026-09-11：還沒出完的單，最新那一批多標「已出 46/126」（只出過一批也要標，不然跟整張出完分不出來）；
+   「尚餘 N 待出貨」的待辦點（sp.pending）另有一種標籤。 */
+function shpPointLabel(sp){
+  if(!sp||!sp.batch) return '';
+  if(sp.pending) return `（尚餘 ${sp.remain} 待出貨）`;
+  let s=(sp.total>1)?`第${sp.seq}批/共${sp.total}批`:'';
+  const p=(sp.seq===sp.total && sp.no && typeof ordShipProgress==='function')?ordShipProgress(sp.no):null;
+  if(p) s=(s||`第${sp.seq}批`)+`，已出 ${p.shipped}/${p.ordered}`;
+  return s?`（${s}）`:'';
+}
 /* ⚠ 出貨事件「出貨」後面要接的整串標示（批次＋Lot），月曆、今日焦點、今日待辦共用一份，別再各寫一份。
    例：「（第2批/共3批） Lot 3」／只有 Lot 時「 Lot 3」／兩者都沒有時回空字串。 */
 function shpPointSuffix(sp){
@@ -829,6 +856,15 @@ async function loadShipmentBadges(force){
     const m={}; arr.forEach(s=>{ if(s.quote_no) m[s.quote_no]=(m[s.quote_no]||0)+1; });
     SHP_SUM=m;
     renderOrders();
+    shpRerenderSide_();
+  }catch(_){}
+}
+/* 分批資料／驗收單進度是背景補進來的；人正停在月曆或今日待辦時要順手重畫，不然要換頁才看得到 */
+function shpRerenderSide_(){
+  try{
+    if(typeof currentPage==='undefined') return;
+    if(currentPage==='cal' && typeof renderCalendar==='function') renderCalendar();
+    if(currentPage==='today' && typeof renderToday==='function') renderToday();
   }catch(_){}
 }
 

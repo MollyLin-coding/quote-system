@@ -278,7 +278,9 @@ function tdShipDueRows(list){
   const out=arr.filter(o=>!nos[String(o.quote_no||'')]);          // 沒有分批的單原樣保留
   Object.keys(nos).forEach(no=>{
     const base=byNo[no]||null;
-    const pts=(typeof orderShipPoints==='function')?orderShipPoints({no, st:{}}):[];
+    // 2026-09-11：帶主線的預計出貨日進去，還沒出完的單才長得出「尚餘 N 待出貨」那一點
+    const ost=((ORDERS_CACHE||[]).find(x=>String(x.no)===String(no))||{}).st||{};
+    const pts=(typeof orderShipPoints==='function')?orderShipPoints({no, st:ost}):[];
     pts.forEach(sp=>{
       if(sp.done || !sp.est) return;                              // 已出貨的批次不再催
       const dd=daysBetween(sp.est);
