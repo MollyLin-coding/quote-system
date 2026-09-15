@@ -773,7 +773,9 @@ async function loadRecords(force){
 }
 /* 2026-09-10 Molly：「報價紀錄版面太亂，而且比起報價單號我更需要看 Lot 號」。
    Lot 的來源（跟訂單追蹤 ordCustLot 同一套優先序，再多一層廠務）：
-   ①訂單進度手動填的客戶批號 cust_lot → ②驗收單留底最新一張的 lot（ORDER_VSUM.lots）→ ③廠務連結的 factory_lot。
+   ①訂單進度手動填的客戶批號 cust_lot → ②驗收單留底最新一張的 lot（ORDER_VSUM.lots）→ ③廠務連結的 factory_lot
+   → ④（2026-09-15）報價單本身填的「批次標籤」tagLot：後端 v82 起 getQuotes 從品項表 taglabel 列帶回；
+     之前三來源都空的單（例：昭和浪漫冰室 Lot11，只在開單時填了批次標籤、還沒進編輯進度／驗收單）清單就完全不顯示。
    三份資料訂單追蹤頁本來就會抓，這裡走同樣的讀取快取，背景補進來後重畫一次（不擋清單）。 */
 let REC_OS=null;   // { quote_no: order_status 列 }
 async function recLoadLots(force){
@@ -787,12 +789,13 @@ async function recLoadLots(force){
     renderRecords();
   }catch(_){}
 }
-function recLotOf(no){
+function recLotOf(no, tagLot){
   const m=(REC_OS && REC_OS[no] && String(REC_OS[no].cust_lot||'').trim())||'';
   const v=(typeof ORDER_VSUM!=='undefined' && ORDER_VSUM && ORDER_VSUM.lots && ORDER_VSUM.lots[no])||'';
   const f=(typeof fxLinkOf==='function') ? fxLinkOf(no) : null;
   const fl=(f && String(f.factory_lot||'').trim())||'';
-  const raw=String(m||v||fl||'').trim();
+  const t=String(tagLot||'').trim();   // ④ 批次標籤（後端沒帶就是空字串，行為照舊）
+  const raw=String(m||v||fl||t||'').trim();
   if(!raw) return '';
   return (typeof shpLotText==='function') ? shpLotText(raw) : raw;
 }
@@ -814,7 +817,7 @@ function renderRecords(){
       quoteType:'custom', quoteDate:String(c.quote_date||'').slice(0,10),
       grandTotal:(parseJsonSafe(c.totals_json,{}).total)||0 }));
     let merged=(tf==='custom')?customs.slice():(tf?quotes.filter(q=>q.quoteType===tf):quotes.concat(customs));
-    merged.forEach(q=>{ q._lot=recLotOf(q.quoteNo); });
+    merged.forEach(q=>{ q._lot=recLotOf(q.quoteNo, q.tagLot); });
     // 搜尋：客戶／單號／Lot 都比對（打「15」就找得到 Lot 15）
     if(kw){ const k=kw.toLowerCase(); merged=merged.filter(q=> String(q.clientName||'').toLowerCase().includes(k) || String(q.quoteNo||'').toLowerCase().includes(k) || String(q._lot||'').toLowerCase().includes(k)); }
     // 單號皆為 YYYYMMDD-NN 格式，直接以單號新→舊排序（自訂單與標準單自然交錯）
