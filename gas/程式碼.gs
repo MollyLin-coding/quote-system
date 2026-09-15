@@ -953,7 +953,34 @@ function handleGetQuotes_(params) {
     }
   }
 
+  // v82（2026-09-15）：清單帶回報價單「批次標籤」的 Lot（品項表 itemType='taglabel' 特殊列的批次欄）。
+  // 報價紀錄清單的 Lot 原本只看 訂單進度 cust_lot／驗收單留底／廠務 factory_lot，開單時填的批次標籤
+  // 存在品項表、主表列拿不到 → 三來源都空的單（昭和浪漫冰室 Lot11）清單完全不顯示。只對本次回傳的單查一次品項表。
+  try {
+    if (quotes.length) {
+      const tagMap = getTagLotMap_(ss);
+      quotes.forEach(function (q) { q.tagLot = tagMap[q.quoteNo] || ''; });
+    }
+  } catch (eTag) { /* 品項表讀不到不影響清單，前端拿不到 tagLot 就照舊 */ }
+
   return { ok: true, quotes: quotes, total: total, page: page, pageSize: pageSize, hasMore: hasMore };
+}
+
+/* v82：品項表 taglabel 列 → { 報價單號: 批次標籤 Lot }。整表讀一次（跟 getQuoteById 同一種讀法）。 */
+function getTagLotMap_(ss) {
+  const map = {};
+  const itemSheet = ss.getSheetByName(SHEET_ITEMS);
+  if (!itemSheet) return map;
+  const last = itemSheet.getLastRow();
+  if (last < 2) return map;
+  const data = itemSheet.getRange(2, 1, last - 1, effW_(itemSheet, ITEM_HEADERS)).getValues();
+  data.forEach(function (row) {
+    if (row[ITEM_COLS.itemType - 1] !== 'taglabel') return;
+    const no = row[ITEM_COLS.quoteNo - 1];
+    const lot = String(row[ITEM_COLS.lot - 1] || '').trim();
+    if (no && lot) map[no] = lot;
+  });
+  return map;
 }
 
 /* v51：主表新增欄位時自動補表頭（只補「該位置目前是空的」，不動既有欄名）。
