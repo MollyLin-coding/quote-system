@@ -818,7 +818,8 @@ function shpVfTag(no, seq){ return '[VF:'+String(no||'').trim()+':'+String(seq||
 function shpLotText(v){
   const s=String(v==null?'':v).trim();
   if(!s) return '';
-  return /^lot\b/i.test(s) ? s.replace(/^lot\s*/i,'Lot ').trim() : ('Lot '+s);
+  // 2026-09-15：「Lot11」（Lot 跟數字之間沒空格）\b 不成立，原本會變成「Lot Lot11」，改成只認開頭 lot
+  return /^lot/i.test(s) ? s.replace(/^lot\s*/i,'Lot ').trim() : ('Lot '+s);
 }
 function shpLotOf(sp){
   const m=String((sp&&sp.note)||'').match(/\bLot\s*([^\s·，,、]+)/i);
