@@ -574,3 +574,17 @@ body.role-general [data-owner-only]{display:none!important}
 .login-select{width:100%;padding:12px 14px;border:1.5px solid #D9D5C8;border-radius:9px;
   font-size:15px;background:#F4F2EA;color:#22241F;font-family:inherit;box-sizing:border-box}
 .login-select:focus{outline:none;border-color:#A6824A;background:#EEF1F7}
+
+
+/* ===== 2026-09-15 合約產生（14_contract.js） ===== */
+.ct-sec-title{font-size:13px;font-weight:700;color:var(--gold);margin:18px 0 8px;padding-bottom:4px;border-bottom:1px dashed var(--bd)}
+.ct-sec-title:first-child{margin-top:0}
+.ct-warn{background:#FFF7E6;border:1px solid #E8D5A8;color:#7A5A16;border-radius:8px;padding:8px 12px;font-size:12.5px;line-height:1.5;margin-bottom:10px}
+.ct-prod{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:6px;align-items:center;margin-bottom:6px}
+.ct-prod .fi{margin:0;min-width:0}
+.ct-done{background:#F2F7EE;border:1px solid #BFD8B0;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.7;margin-top:12px}
+.ct-done a{color:var(--gold);font-weight:700;margin-right:12px}
+.ct-tpl{margin-top:18px;font-size:12.5px;color:#6B6B63}
+.ct-tpl summary{cursor:pointer;color:#22241F;font-weight:600}
+.ct-tpl .fi{max-width:420px}
+@media (max-width:640px){ .ct-prod{grid-template-columns:1fr 1fr;} }
