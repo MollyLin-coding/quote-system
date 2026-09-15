@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260915a">
-<script src="js/00_qrcode.js?v=20260915a"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260915b">
+<script src="js/00_qrcode.js?v=20260915b"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -71,6 +71,7 @@
     </div>
     <button class="nb" id="nav-verify" onclick="gotoPage('verify')"><i class="ti ti-clipboard-check"></i>出貨驗收</button>
     <button class="nb" id="nav-customer" data-owner-only onclick="gotoPage('customer')"><i class="ti ti-users"></i>客戶管理</button>
+    <button class="nb" id="nav-contract" data-owner-only onclick="gotoPage('contract')"><i class="ti ti-file-certificate"></i>合約</button>
   </div>
   <div class="sb-foot">
     <button class="nb" onclick="doLogout()" style="margin-bottom:12px"><i class="ti ti-logout"></i>登出</button>
@@ -805,6 +806,31 @@
     </div>
   </div>
 
+  <div class="page" id="page-contract">
+    <div class="rec-wrap">
+      <div class="cus-bar">
+        <input class="rec-search" id="ct-search" placeholder="搜尋合約編號／客戶／報價單號…" oninput="ctOnSearch()">
+        <button class="btn btn-gold" onclick="openContractForm('')"><i class="ti ti-plus"></i>新增合約</button>
+        <button class="rec-act-btn" onclick="loadContracts(true)"><i class="ti ti-refresh"></i> 重新整理</button>
+      </div>
+      <div class="tbl-scroll" style="margin-top:12px">
+      <table class="rec-table mcard">
+        <thead><tr><th>客戶 ／ 合約編號</th><th>類型</th><th>報價單</th><th>簽約日</th><th>合約期間</th><th>操作</th></tr></thead>
+        <tbody id="ct-body"></tbody>
+      </table>
+      </div>
+      <details class="ct-tpl" style="margin-top:14px">
+        <summary>範本設定（Google 文件 ID）</summary>
+        <div class="fg fg2" style="margin-top:8px">
+          <div class="fl"><label>代工範本（再製酒類委託生產契約書）</label><div style="display:flex;gap:6px"><input class="fi" id="ct-tpl-oem" placeholder="貼上 Google 文件網址 /d/ 後面那串 ID"><button class="rec-act-btn" onclick="ctSaveTemplate('oem')">設定</button></div></div>
+          <div class="fl"><label>寄售範本（自有品牌酒款寄售合作契約書・免保證金）</label><div style="display:flex;gap:6px"><input class="fi" id="ct-tpl-consign" placeholder="貼上 Google 文件網址 /d/ 後面那串 ID"><button class="rec-act-btn" onclick="ctSaveTemplate('consign')">設定</button></div></div>
+        </div>
+        <div style="font-size:11px;color:#A8A69C;margin-top:6px">※ 範本放在 Drive「報價系統_合約範本」資料夾；改條款直接改範本文件即可，不用動程式。佔位符寫法 {{甲方名稱}}。</div>
+      </details>
+      <div style="font-size:11px;color:#A8A69C;margin-top:8px">※ 產生的合約會存成 Google 文件（可再手改特殊條款）＋ PDF ＋ Word，放在 Drive「合約檔案」資料夾，並留底在 contracts 分頁。</div>
+    </div>
+  </div>
+
   <div class="page" id="page-today">
     <div class="rec-wrap">
       <div class="td-bar">
@@ -1089,6 +1115,87 @@
   </div>
 </div>
 
+<div class="v2ov" id="ct-overlay">
+  <div class="v2box" style="max-width:860px">
+    <div class="v2h"><span>產生合約</span><button class="v2x" onclick="closeContractForm()">✕</button></div>
+    <div id="ct-form-body">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <span id="ct-type-chips" style="display:inline-flex;gap:6px">
+          <button class="fchip on" data-t="oem" onclick="ctSetType('oem')">代工（委託生產）</button>
+          <button class="fchip" data-t="consign" onclick="ctSetType('consign')">寄售（免保證金）</button>
+        </span>
+        <span style="font-size:12px;color:#6B6B63">報價單號 <input class="fi" id="ct-quote-no" style="width:130px;display:inline-block" readonly></span>
+        <span style="font-size:12px;color:#6B6B63">簽約日期 <input class="fi" id="ct-sign" type="date" style="width:150px;display:inline-block"></span>
+      </div>
+      <div id="ct-tpl-warn" class="ct-warn" style="display:none"></div>
+      <div class="ct-sec-title" id="ct-party-label">甲方（委託廠商）</div>
+      <div class="fg fg2">
+        <div class="fl"><label>名稱 <span class="opt">必填</span></label><input class="fi" id="ct-cli-name"></div>
+        <div class="fl"><label>代表人（負責人）</label><input class="fi" id="ct-cli-rep"></div>
+        <div class="fl"><label>統一編號</label><input class="fi" id="ct-cli-tax"></div>
+        <div class="fl"><label>電話</label><input class="fi" id="ct-cli-phone"></div>
+        <div class="fl" style="grid-column:span 2"><label>登記地址</label><input class="fi" id="ct-cli-addr"></div>
+        <div class="fl"><label>Email</label><input class="fi" id="ct-cli-email"></div>
+        <div class="fl"><label>聯絡人</label><input class="fi" id="ct-cli-contact"></div>
+        <div class="fl" id="ct-inv-wrap" style="grid-column:span 2"><label>發票抬頭 <span class="opt">附件三用；空白＝同名稱</span></label><input class="fi" id="ct-cli-inv"></div>
+      </div>
+
+      <div id="ct-sec-oem">
+        <div class="ct-sec-title">委託製造產品 <span class="opt">從報價單品項帶入；酒精度請補填</span></div>
+        <div class="tbl-scroll"><table class="rec-table ct-prod">
+          <thead><tr><th>品名</th><th>標示酒精度</th><th>配方計算值</th><th>容量 ml</th><th>本批瓶數</th><th>單價</th><th></th></tr></thead>
+          <tbody id="ct-prod-body"></tbody>
+        </table></div>
+        <button class="rec-act-btn" onclick="ctAddProdRow()" style="margin-top:6px"><i class="ti ti-plus"></i> 加一款</button>
+
+        <div class="ct-sec-title">商業條件</div>
+        <div class="fg fg2">
+          <div class="fl"><label>單價稅別</label><select class="fi" id="ct-tax"><option value="inc">含稅（含菸酒稅＋營業稅）</option><option value="exc">未稅（營業稅另計）</option></select></div>
+          <div class="fl"><label>報價單有效期限</label><input class="fi" id="ct-quote-expiry" type="date"></div>
+          <div class="fl"><label>合約起日</label><input class="fi" id="ct-term-start" type="date"></div>
+          <div class="fl"><label>合約迄日</label><input class="fi" id="ct-term-end" type="date"></div>
+          <div class="fl"><label>首批最低批量（L／款）</label><input class="fi" id="ct-first-l" type="number" placeholder="如 125"></div>
+          <div class="fl"><label>後續每批最低批量（L／款）</label><input class="fi" id="ct-later-l" type="number" placeholder="如 50"></div>
+          <div class="fl"><label>訂金（元）<span class="opt">空白＝總額一半</span></label><input class="fi" id="ct-dep" type="number"></div>
+          <div class="fl"><label>尾款（元）</label><input class="fi" id="ct-bal" type="number"></div>
+          <div class="fl"><label>分批配送運費（元／次）<span class="opt">空白＝寫「另計」</span></label><input class="fi" id="ct-split-fee" type="number"></div>
+          <div class="fl"><label>保密違約金（元）</label><input class="fi" id="ct-penalty" type="number" placeholder="如 200000"></div>
+        </div>
+
+        <div class="ct-sec-title">代工約專屬</div>
+        <div class="fg fg2">
+          <div class="fl"><label>配方由誰研發</label><select class="fi" id="ct-owner"><option value="b">乙方（南坡萬）研發，權利歸乙方</option><option value="a">甲方提供，權利歸甲方</option><option value="both">雙方共同開發，另以書面約定</option></select></div>
+          <div class="fl"><label>年度最低下單量門檻（ml）<span class="opt">低於此量配方限制解除</span></label><input class="fi" id="ct-annual-ml" type="number" placeholder="如 100000"></div>
+          <div class="fl"><label><input type="checkbox" id="ct-supply"> 甲方提供原酒／原料</label><input class="fi" id="ct-supply-items" placeholder="品項（勾選才填）"></div>
+          <div class="fl"><label>原料交付日（投產前 N 日）</label><input class="fi" id="ct-supply-days" type="number" placeholder="如 15"></div>
+          <div class="fl"><label>GS1 商品條碼</label><select class="fi" id="ct-gs1"><option value="none">不特別約定（範本原文）</option><option value="b">乙方代辦，登記甲方名下</option><option value="a">甲方自備</option></select></div>
+          <div class="fl"><label>GS1 登記費（元／款，未稅）</label><input class="fi" id="ct-gs1-fee" type="number" placeholder="如 1500"></div>
+          <div class="fl"><label><input type="checkbox" id="ct-sgs"> 需 SGS 檢驗</label><input class="fi" id="ct-sgs-fee" type="number" placeholder="檢驗費（元／款，未稅）如 4000"></div>
+          <div class="fl"></div>
+          <div class="fl"><label>乙方聯絡人 <span class="opt">簽署欄；會記住</span></label><input class="fi" id="ct-our-contact"></div>
+          <div class="fl"><label>乙方 Email</label><input class="fi" id="ct-our-email"></div>
+        </div>
+      </div>
+
+      <div id="ct-sec-consign" style="display:none">
+        <div class="ct-sec-title">寄售條件</div>
+        <div class="fg fg2">
+          <div class="fl"><label>寄售結算折數 <span class="opt">從寄售客戶主檔帶入；0.75＝七五折</span></label><input class="fi" id="ct-discount" type="number" step="0.01" min="0.1" max="1"></div>
+          <div class="fl"><label>價目表</label><div style="font-size:12px;color:#6B6B63;padding-top:8px">自動帶入公版酒主檔（ownbrand_products）全部啟用中的酒款，按系列排列。</div></div>
+        </div>
+        <div style="font-size:11px;color:#A8A69C">※ 依 2026-09-15 決定，寄售合約一律免收保證金；合約期間 1 年（自簽約日起），期滿自動續約。</div>
+      </div>
+
+      <div class="fl" style="margin-top:8px"><label>備註 <span class="opt">只留底，不印在合約上</span></label><input class="fi" id="ct-note"></div>
+      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-gold" id="ct-gen-btn" onclick="ctGenerate()"><i class="ti ti-file-certificate"></i>產生合約</button>
+        <button class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63" onclick="closeContractForm()">關閉</button>
+      </div>
+      <div id="ct-result"></div>
+    </div>
+  </div>
+</div>
+
 <div class="v2ov" id="cus-edit-overlay">
   <div class="v2box" style="max-width:640px">
     <div class="v2h"><span id="cus-edit-title">新增客戶</span><button class="v2x" onclick="closeCusEdit()">✕</button></div>
@@ -1209,21 +1316,22 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260915a"></script>
-<script src="js/01_quote_form.js?v=20260915a"></script>
-<script src="js/01b_quote_preview.js?v=20260915a"></script>
-<script src="js/02_core_api.js?v=20260915a"></script>
-<script src="js/03_quote_custom.js?v=20260915a"></script>
-<script src="js/04_company.js?v=20260915a"></script>
-<script src="js/05_orders.js?v=20260915a"></script>
-<script src="js/06_verify_mgmt.js?v=20260915a"></script>
-<script src="js/07_calendar.js?v=20260915a"></script>
-<script src="js/08_ownbrand.js?v=20260915a"></script>
-<script src="js/09_verify_form.js?v=20260915a"></script>
-<script src="js/10_today.js?v=20260915a"></script>
-<script src="js/11_customers.js?v=20260915a"></script>
-<script src="js/12_storage.js?v=20260915a"></script>
-<script src="js/13_factory.js?v=20260915a"></script>
-<script src="js/99_boot.js?v=20260915a"></script>
+<script src="js/00_utils.js?v=20260915b"></script>
+<script src="js/01_quote_form.js?v=20260915b"></script>
+<script src="js/01b_quote_preview.js?v=20260915b"></script>
+<script src="js/02_core_api.js?v=20260915b"></script>
+<script src="js/03_quote_custom.js?v=20260915b"></script>
+<script src="js/04_company.js?v=20260915b"></script>
+<script src="js/05_orders.js?v=20260915b"></script>
+<script src="js/06_verify_mgmt.js?v=20260915b"></script>
+<script src="js/07_calendar.js?v=20260915b"></script>
+<script src="js/08_ownbrand.js?v=20260915b"></script>
+<script src="js/09_verify_form.js?v=20260915b"></script>
+<script src="js/10_today.js?v=20260915b"></script>
+<script src="js/11_customers.js?v=20260915b"></script>
+<script src="js/12_storage.js?v=20260915b"></script>
+<script src="js/13_factory.js?v=20260915b"></script>
+<script src="js/14_contract.js?v=20260915b"></script>
+<script src="js/99_boot.js?v=20260915b"></script>
 </body>
 </html>
