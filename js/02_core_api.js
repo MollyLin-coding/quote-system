@@ -871,7 +871,6 @@ function renderRecords(){
           </span>
           <span class="rec-act-grp rec-act-sec">
             <button class="rec-act-btn" onclick="recCopyQuote('${no}')" title="用這張單的內容開一張新單">複製</button>
-            ${(typeof isOwner==='function'&&isOwner())?`<button class="rec-act-btn" onclick="openContractForm('${no}')" title="用這張報價單的資料產生代工／寄售合約">合約</button>`:''}
             <button class="rec-act-btn del" onclick="deleteRecord('${no}','${escAttr((q.clientName||'').replace(/'/g,''))}')">刪除</button>
           </span>
         </td>
