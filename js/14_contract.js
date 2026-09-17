@@ -3,7 +3,9 @@
    從報價單／客戶主檔帶入必要資訊，後端 v6_contract.gs 套 Google Docs 範本產出
    代工（再製酒類委託生產契約書）或寄售（自有品牌酒款寄售合作契約書，免保證金）合約：
    Google Doc（可再手改）＋ PDF ＋ docx，並在 contracts 分頁留底。
-   入口：報價紀錄每列「合約」鈕、合約頁「新增合約」。老闆專用。
+   入口：合約頁「新增合約」（2026-09-16 起報價紀錄不再掛「合約」鈕）。老闆專用。
+   2026-09-16：附件二「產品配方及規格表」可從廠務APP 的酒譜書分頁／無訂單之獨立 Run Card 帶入
+   （後端 contractRecipeSources／contractRecipeFetch），帶入後仍可手改；圖片辨識（B）暫緩。
    ------------------------------------------------------------------ */
 let CT_LIST=null;            // contracts 分頁快取
 let CT_PREFILL=null;         // 目前表單帶入的來源（quote / customer / consignCustomer / pay）
@@ -76,7 +78,7 @@ async function openContractForm(quoteNo, type){
   const ov=ctG('ct-overlay'); ov.style.display='flex';
   ctG('ct-form-body').style.opacity='.5';
   ctResetForm();
-  CT_PREFILL=null;
+  CT_PREFILL=null; CT_RCP_SRC=null;
   ctSet('ct-quote-no', quoteNo||'');
   try{
     const d=await apiCall({ action:'contractPrefill', token:AUTH_TOKEN, quoteNo:quoteNo||'' });
@@ -136,14 +138,143 @@ function ctApplyPrefill(d, forceType){
 function ctAddProdRow(p){
   p=p||{};
   const tr=document.createElement('tr');
+  tr.className='ct-prod-row';
   tr.innerHTML=`<td><input class="fi" data-f="name" placeholder="品名（酒標品名）" value="${escAttr(p.name||'')}"></td>
     <td><input class="fi" data-f="abv" type="number" step="0.1" placeholder="標示度數" value="${escAttr(p.abv||'')}"></td>
     <td><input class="fi" data-f="abvCalc" type="number" step="0.01" placeholder="配方計算值" value="${escAttr(p.abvCalc||'')}"></td>
     <td><input class="fi" data-f="volume" type="number" placeholder="ml" value="${escAttr(p.volume||'')}"></td>
     <td><input class="fi" data-f="qty" type="number" placeholder="瓶" value="${escAttr(p.qty||'')}"></td>
     <td><input class="fi" data-f="unitPrice" type="number" placeholder="單價" value="${escAttr(p.unitPrice||'')}"></td>
-    <td><button class="rec-act-btn del" onclick="this.closest('tr').remove()" title="移除">✕</button></td>`;
+    <td class="ct-prod-act"><button class="rec-act-btn ct-rcp-btn" onclick="ctRcpToggle(this)" title="附件二 產品配方及規格表：從酒譜書／獨立 Run Card 帶入或手填">配方</button><button class="rec-act-btn del" onclick="ctRemoveProdRow(this)" title="移除">✕</button></td>`;
   ctG('ct-prod-body').appendChild(tr);
+  const d=document.createElement('tr');
+  d.className='ct-rcp-row'; d.style.display='none';
+  d.innerHTML=`<td colspan="7"><div class="ct-rcp">
+      <div class="ct-rcp-bar">
+        <span class="ct-rcp-lbl">附件二 配方來源</span>
+        <select class="fi ct-rcp-src"><option value="">（載入中…）</option></select>
+        <button class="rec-act-btn primary" onclick="ctRcpImport(this)">帶入</button>
+        <button class="rec-act-btn" onclick="ctRcpAddRow(this.closest('.ct-rcp').querySelector('tbody'))"><i class="ti ti-plus"></i> 加一列</button>
+        <span class="ct-rcp-note"></span>
+      </div>
+      <table class="rec-table ct-rcp-tbl"><thead><tr><th>#</th><th>原料名稱／品牌</th><th>占比 %</th><th>實際體積 ml</th><th>原料酒精度 %</th><th>提供方</th><th>備註</th><th></th></tr></thead><tbody></tbody></table>
+      <div class="ct-rcp-foot"><label>製程摘要／特殊條件 <input class="fi ct-rcp-proc" placeholder="空白＝合約上留手寫線"></label>
+        <span class="ct-rcp-sum"></span></div>
+    </div></td>`;
+  ctG('ct-prod-body').appendChild(d);
+  if(p.recipe){ ctRcpFill(d, p.recipe); }
+}
+function ctRemoveProdRow(btn){ const tr=btn.closest('tr'); const d=tr.nextElementSibling; if(d&&d.classList.contains('ct-rcp-row')) d.remove(); tr.remove(); }
+
+/* ---------- 附件二 配方帶入（2026-09-16） ---------- */
+let CT_RCP_SRC=null;   // contractRecipeSources 結果（每次開表單清空；後端另有 10 分鐘快取）
+function ctRcpToggle(btn){
+  const tr=btn.closest('tr'), d=tr.nextElementSibling;
+  if(!d||!d.classList.contains('ct-rcp-row')) return;
+  const open=d.style.display==='none';
+  d.style.display=open?'':'none'; btn.classList.toggle('on', open);
+  if(open) ctRcpEnsureSources(d.querySelector('.ct-rcp-src'));
+}
+function ctRcpSrcOptions(src){
+  const cli=ctVal('ct-cli-name');
+  const esc=escHtml, ea=escAttr;
+  let html='<option value="">— 選擇酒譜書分頁或獨立 Run Card —</option>';
+  const books=(src.books||[]).slice().sort((a,b)=>(b.matched?1:0)-(a.matched?1:0));
+  const rcs=(src.runcards||[]).slice().sort((a,b)=>(b.matched?1:0)-(a.matched?1:0));
+  const rcM=rcs.filter(r=>r.matched), rcO=rcs.filter(r=>!r.matched);
+  const rcOpt=r=>`<option value="${ea('runcard|'+r.id)}">${esc(r.id)}　${esc(r.product||'')}${r.client?'（'+esc(r.client)+'）':''}${r.status?'・'+esc(r.status):''}</option>`;
+  if(rcM.length) html+=`<optgroup label="🧪 獨立 Run Card（${esc(cli||'本客戶')}）">${rcM.map(rcOpt).join('')}</optgroup>`;
+  books.forEach(b=>{
+    if(!(b.recipes||[]).length) return;
+    html+=`<optgroup label="${b.matched?'★ ':''}酒譜書：${ea(b.key)}">${b.recipes.map(r=>`<option value="${ea('sheet|'+b.key+'|'+r.sheet)}">${esc(r.recipeName||r.sheet)}${r.recipeName&&r.recipeName!==r.sheet?'　<small>'+esc(r.sheet)+'</small>':''}</option>`).join('')}</optgroup>`;
+  });
+  if(rcO.length) html+=`<optgroup label="🧪 其他獨立 Run Card">${rcO.map(rcOpt).join('')}</optgroup>`;
+  return html;
+}
+async function ctRcpEnsureSources(sel, force){
+  if(CT_RCP_SRC && !force){ if(sel && sel.options.length<=1) sel.innerHTML=ctRcpSrcOptions(CT_RCP_SRC); return CT_RCP_SRC; }
+  try{
+    const d=await apiCall({ action:'contractRecipeSources', token:AUTH_TOKEN, clientName:ctVal('ct-cli-name'), force:!!force });
+    if(!d.ok) throw new Error(d.error||'載入配方來源失敗');
+    CT_RCP_SRC=d;
+    document.querySelectorAll('#ct-prod-body .ct-rcp-src').forEach(s=>{ const v=s.value; s.innerHTML=ctRcpSrcOptions(d); if(v) s.value=v; });
+  }catch(e){ if(sel) sel.innerHTML=`<option value="">（載入失敗：${escHtml(e.message||'')}）</option>`; toast(e.message||'載入配方來源失敗','err'); }
+  return CT_RCP_SRC;
+}
+function ctRcpAddRow(tbody, r){
+  r=r||{};
+  const tr=document.createElement('tr');
+  const by=r.by||'乙';
+  tr.innerHTML=`<td class="ct-rcp-idx"></td>
+    <td><input class="fi" data-r="name" value="${escAttr(r.name||'')}" placeholder="原料／品牌">${r.method?`<input class="fi ct-rcp-method" data-r="method" value="${escAttr(r.method)}" placeholder="製作方式">`:''}</td>
+    <td><input class="fi" data-r="pct" type="number" step="0.01" value="${escAttr(r.pct==null?'':r.pct)}" oninput="ctRcpRecalc(this)"></td>
+    <td><input class="fi" data-r="vol" type="number" step="0.1" value="${escAttr(r.vol==null?'':r.vol)}"></td>
+    <td><input class="fi" data-r="abv" type="number" step="0.01" value="${escAttr(r.abv==null?'':r.abv)}" oninput="ctRcpRecalc(this)"></td>
+    <td><select class="fi" data-r="by"><option value="乙"${by==='乙'?' selected':''}>乙方</option><option value="甲"${by==='甲'?' selected':''}>甲方</option><option value=""${by===''?' selected':''}>—</option></select></td>
+    <td><input class="fi" data-r="note" value="${escAttr(r.note||'')}" placeholder="備註"></td>
+    <td><button class="rec-act-btn del" onclick="const tb=this.closest('tbody');this.closest('tr').remove();ctRcpRenumber(tb)">✕</button></td>`;
+  tbody.appendChild(tr);
+  ctRcpRenumber(tbody);
+}
+function ctRcpRenumber(tbody){ [...tbody.querySelectorAll('tr')].forEach((tr,i)=>{ tr.querySelector('.ct-rcp-idx').textContent=i+1; }); ctRcpRecalc(tbody); }
+function ctRcpRecalc(el){
+  const panel=el.closest('.ct-rcp'); if(!panel) return;
+  const rows=[...panel.querySelectorAll('tbody > tr')];
+  let pct=0, abv=0;
+  rows.forEach(tr=>{ const p=Number(tr.querySelector('[data-r=pct]').value)||0, a=Number(tr.querySelector('[data-r=abv]').value)||0; pct+=p; abv+=p*a/100; });
+  const sum=panel.querySelector('.ct-rcp-sum');
+  sum.innerHTML=rows.length?`占比合計 <b${Math.abs(pct-100)>0.5?' class="ct-rcp-bad"':''}>${Math.round(pct*100)/100}%</b>　占比加權酒精度 <b>${Math.round(abv*100)/100}%</b>`:'';
+  panel.dataset.abvCalc=rows.length?String(Math.round(abv*100)/100):'';
+}
+function ctRcpProdRow(panel){ return panel.closest('tr').previousElementSibling; }
+function ctRcpGuessBy(name){
+  if(!ctG('ct-supply').checked) return '乙';
+  const items=ctVal('ct-supply-items'); if(!items) return '乙';
+  const n=String(name||'').replace(/[\s　]/g,'');
+  return items.split(/[、,，;；\/／\s]+/).some(x=>{ x=x.replace(/[\s　]/g,''); return x && (n.includes(x)||x.includes(n)); }) ? '甲' : '乙';
+}
+function ctRcpFill(detailTr, rcp){
+  const panel=detailTr.querySelector('.ct-rcp'), tbody=panel.querySelector('tbody');
+  tbody.innerHTML='';
+  const prod=ctRcpProdRow(panel);
+  const bottle=Number(prod.querySelector('[data-f=volume]').value)||0;
+  (rcp.rows||[]).forEach(r=>{
+    const pct=Number(r.pct)||0;
+    const vol=(pct>0&&bottle>0) ? Math.round(bottle*pct/100*10)/10 : (r.vol===''||r.vol==null?'':r.vol);
+    ctRcpAddRow(tbody,{ name:r.name, method:r.method||'', pct:(r.pct===''||r.pct==null)?'':pct, vol, abv:(r.abv===''||r.abv==null)?'':r.abv, by:r.by||ctRcpGuessBy(r.name), note:r.note||'' });
+  });
+  panel.querySelector('.ct-rcp-proc').value=rcp.processNote||'';
+  panel.dataset.source=rcp.source||''; panel.dataset.totalVol=rcp.totalVol||'';
+  panel.querySelector('.ct-rcp-note').textContent=rcp.source?('來源：'+rcp.source+(rcp.totalVol?'（配方總體積 '+rcp.totalVol+' ml，體積已按單瓶容量換算）':'')):'';
+  ctRcpRecalc(tbody);
+  const ac=prod.querySelector('[data-f=abvCalc]');
+  if(panel.dataset.abvCalc && (!ac.value || rcp.abv)) ac.value=rcp.abv||panel.dataset.abvCalc;
+  const btn=prod.querySelector('.ct-rcp-btn'); if(btn) btn.textContent='配方 '+tbody.querySelectorAll('tr').length;
+}
+async function ctRcpImport(btn){
+  const panel=btn.closest('.ct-rcp'), sel=panel.querySelector('.ct-rcp-src');
+  const v=sel.value; if(!v){ toast('請先選一個配方來源','err'); return; }
+  const [src,a,b]=v.split('|');
+  if(panel.querySelector('tbody > tr') && !confirm('會覆蓋目前這款的配方表，確定帶入？')) return;
+  btn.disabled=true;
+  try{
+    const q=src==='sheet' ? { action:'contractRecipeFetch', token:AUTH_TOKEN, src, key:a, sheet:b } : { action:'contractRecipeFetch', token:AUTH_TOKEN, src, id:a };
+    const d=await apiCall(q);
+    if(!d.ok) throw new Error(d.error||'帶入失敗');
+    ctRcpFill(panel.closest('tr'), d);
+    const prod=ctRcpProdRow(panel), nm=prod.querySelector('[data-f=name]');
+    if(!nm.value && d.recipeName) nm.value=d.recipeName;
+    toast('已帶入 '+(d.rows||[]).length+' 項原料，請核對後再產合約','ok');
+  }catch(e){ toast(e.message||'帶入失敗','err'); }
+  finally{ btn.disabled=false; }
+}
+function ctRcpCollect(detailTr){
+  if(!detailTr||!detailTr.classList.contains('ct-rcp-row')) return null;
+  const panel=detailTr.querySelector('.ct-rcp');
+  const rows=[...panel.querySelectorAll('tbody > tr')].map(tr=>{ const o={}; tr.querySelectorAll('[data-r]').forEach(i=>{ o[i.dataset.r]=String(i.value||'').trim(); }); return o; }).filter(o=>o.name);
+  const proc=panel.querySelector('.ct-rcp-proc').value.trim();
+  if(!rows.length && !proc) return null;
+  return { source:panel.dataset.source||'', totalVol:Number(panel.dataset.totalVol)||0, abvCalc:panel.dataset.abvCalc||'', processNote:proc, rows };
 }
 function ctCollect(){
   const type=ctType();
@@ -164,8 +295,10 @@ function ctCollect(){
       sgs:ctG('ct-sgs').checked, sgsFee:Number(ctVal('ct-sgs-fee'))||0, secrecyPenalty:Number(ctVal('ct-penalty'))||0,
       depositAmt:Number(ctVal('ct-dep'))||0, balanceAmt:Number(ctVal('ct-bal'))||0,
       ourContact:ctVal('ct-our-contact'), ourEmail:ctVal('ct-our-email'),
-      products:[...ctG('ct-prod-body').querySelectorAll('tr')].map(tr=>{
-        const o={}; tr.querySelectorAll('[data-f]').forEach(i=>{ o[i.dataset.f]=String(i.value||'').trim(); }); return o;
+      products:[...ctG('ct-prod-body').querySelectorAll('tr.ct-prod-row')].map(tr=>{
+        const o={}; tr.querySelectorAll('[data-f]').forEach(i=>{ o[i.dataset.f]=String(i.value||'').trim(); });
+        const rcp=ctRcpCollect(tr.nextElementSibling); if(rcp) o.recipe=rcp;   // 2026-09-16 附件二配方表
+        return o;
       }).filter(o=>o.name)
     });
   } else {
@@ -189,7 +322,7 @@ async function ctGenerate(){
       <a class="rec-act-btn primary" href="${escAttr(d.docUrl)}" target="_blank" rel="noopener">開啟 Google 文件（可手改）</a>
       <a class="rec-act-btn" href="${escAttr(d.pdfUrl)}" target="_blank" rel="noopener">PDF</a>
       ${d.docxUrl?`<a class="rec-act-btn" href="${escAttr(d.docxUrl)}" target="_blank" rel="noopener">Word</a>`:''}
-      <div style="font-size:11px;color:#6B6B63;margin-top:6px">※ 附件二配方表、附件四驗收欄位仍需手填；特殊條款請直接在 Google 文件上改，改完用「檔案 → 下載」重出 PDF。</div></div>`;
+      <div style="font-size:11px;color:#6B6B63;margin-top:6px">※ 附件二配方表沒帶入的款會留空白表格供手寫；特殊條款請直接在 Google 文件上改，改完用「檔案 → 下載」重出 PDF。</div></div>`;
     toast('合約已產生並開始下載 PDF','ok');
     rcClear(); CT_LIST=null;
     if(currentPage==='contract') loadContracts(true);
