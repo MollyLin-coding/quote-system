@@ -142,7 +142,7 @@ function ctAddProdRow(p){
   tr.innerHTML=`<td><input class="fi" data-f="name" placeholder="品名（酒標品名）" value="${escAttr(p.name||'')}"></td>
     <td><input class="fi" data-f="abv" type="number" step="0.1" placeholder="標示度數" value="${escAttr(p.abv||'')}"></td>
     <td><input class="fi" data-f="abvCalc" type="number" step="0.01" placeholder="配方計算值" value="${escAttr(p.abvCalc||'')}"></td>
-    <td><input class="fi" data-f="volume" type="number" placeholder="ml" value="${escAttr(p.volume||'')}"></td>
+    <td><input class="fi" data-f="volume" type="number" placeholder="ml" value="${escAttr(p.volume||'')}" oninput="ctRcpOnVolume(this)"></td>
     <td><input class="fi" data-f="qty" type="number" placeholder="瓶" value="${escAttr(p.qty||'')}"></td>
     <td><input class="fi" data-f="unitPrice" type="number" placeholder="單價" value="${escAttr(p.unitPrice||'')}"></td>
     <td class="ct-prod-act"><button class="rec-act-btn ct-rcp-btn" onclick="ctRcpToggle(this)" title="附件二 產品配方及規格表：從酒譜書／獨立 Run Card 帶入或手填">配方</button><button class="rec-act-btn del" onclick="ctRemoveProdRow(this)" title="移除">✕</button></td>`;
@@ -154,6 +154,7 @@ function ctAddProdRow(p){
         <span class="ct-rcp-lbl">附件二 配方來源</span>
         <select class="fi ct-rcp-src"><option value="">（載入中…）</option></select>
         <button class="rec-act-btn primary" onclick="ctRcpImport(this)">帶入</button>
+        <button class="rec-act-btn" onclick="ctRcpEnsureSources(this.closest('.ct-rcp').querySelector('.ct-rcp-src'),true)" title="剛在廠務APP新增的酒譜分頁／Run Card 要按這裡才會出現（後端清單快取 10 分鐘）"><i class="ti ti-refresh"></i></button>
         <button class="rec-act-btn" onclick="ctRcpAddRow(this.closest('.ct-rcp').querySelector('tbody'))"><i class="ti ti-plus"></i> 加一列</button>
         <span class="ct-rcp-note"></span>
       </div>
@@ -175,12 +176,19 @@ function ctRcpToggle(btn){
   d.style.display=open?'':'none'; btn.classList.toggle('on', open);
   if(open) ctRcpEnsureSources(d.querySelector('.ct-rcp-src'));
 }
+/* 客戶名稱比對在前端做（與後端 recipeClientMatch_ 同規則）：來源清單載入後改客戶名稱，★ 分組也會跟著變 */
+function ctRcpClientKey(s){ return String(s==null?'':s).replace(/^(全客製|OEM)[-－_]/i,'').replace(/[\s　]+/g,'').toLowerCase(); }
+function ctRcpClientMatch(a,b){ const x=ctRcpClientKey(a), y=ctRcpClientKey(b); if(!x||!y) return false; return x===y||x.includes(y)||y.includes(x); }
+function ctRcpRefreshOptions(){   // 客戶名稱改了 → 重排所有面板的下拉（保留已選值）
+  if(!CT_RCP_SRC) return;
+  document.querySelectorAll('#ct-prod-body .ct-rcp-src').forEach(s=>{ const v=s.value; s.innerHTML=ctRcpSrcOptions(CT_RCP_SRC); if(v) s.value=v; });
+}
 function ctRcpSrcOptions(src){
   const cli=ctVal('ct-cli-name');
   const esc=escHtml, ea=escAttr;
   let html='<option value="">— 選擇酒譜書分頁或獨立 Run Card —</option>';
-  const books=(src.books||[]).slice().sort((a,b)=>(b.matched?1:0)-(a.matched?1:0));
-  const rcs=(src.runcards||[]).slice().sort((a,b)=>(b.matched?1:0)-(a.matched?1:0));
+  const books=(src.books||[]).map(b=>Object.assign({},b,{matched:ctRcpClientMatch(b.key,cli)})).sort((a,b)=>(b.matched?1:0)-(a.matched?1:0));
+  const rcs=(src.runcards||[]).map(r=>Object.assign({},r,{matched:ctRcpClientMatch(r.client,cli)})).sort((a,b)=>(b.matched?1:0)-(a.matched?1:0));
   const rcM=rcs.filter(r=>r.matched), rcO=rcs.filter(r=>!r.matched);
   const rcOpt=r=>`<option value="${ea('runcard|'+r.id)}">${esc(r.id)}　${esc(r.product||'')}${r.client?'（'+esc(r.client)+'）':''}${r.status?'・'+esc(r.status):''}</option>`;
   if(rcM.length) html+=`<optgroup label="🧪 獨立 Run Card（${esc(cli||'本客戶')}）">${rcM.map(rcOpt).join('')}</optgroup>`;
@@ -193,13 +201,28 @@ function ctRcpSrcOptions(src){
 }
 async function ctRcpEnsureSources(sel, force){
   if(CT_RCP_SRC && !force){ if(sel && sel.options.length<=1) sel.innerHTML=ctRcpSrcOptions(CT_RCP_SRC); return CT_RCP_SRC; }
+  const keep=sel?sel.value:'';
+  if(force && sel) sel.innerHTML='<option value="">（重新載入中…約 10–20 秒）</option>';
   try{
     const d=await apiCall({ action:'contractRecipeSources', token:AUTH_TOKEN, clientName:ctVal('ct-cli-name'), force:!!force });
     if(!d.ok) throw new Error(d.error||'載入配方來源失敗');
     CT_RCP_SRC=d;
-    document.querySelectorAll('#ct-prod-body .ct-rcp-src').forEach(s=>{ const v=s.value; s.innerHTML=ctRcpSrcOptions(d); if(v) s.value=v; });
+    ctRcpRefreshOptions();
+    if(sel && keep) sel.value=keep;
+    if(force){ const n=(d.books||[]).reduce((s,b)=>s+(b.recipes||[]).length,0); toast('來源已重新整理：'+n+' 個酒譜分頁、'+(d.runcards||[]).length+' 張獨立 Run Card','ok'); }
   }catch(e){ if(sel) sel.innerHTML=`<option value="">（載入失敗：${escHtml(e.message||'')}）</option>`; toast(e.message||'載入配方來源失敗','err'); }
   return CT_RCP_SRC;
+}
+function ctRcpUpdateBtn(tbody){   // 主列「配方 N」鈕跟著列數
+  const panel=tbody.closest('.ct-rcp'); if(!panel) return;
+  const prod=ctRcpProdRow(panel), btn=prod&&prod.querySelector('.ct-rcp-btn'); if(!btn) return;
+  const n=tbody.querySelectorAll('tr').length; btn.textContent=n?('配方 '+n):'配方';
+}
+function ctRcpOnVolume(input){   // 改單瓶容量 → 該款配方列體積按占比重算（沒占比的列不動）
+  const prod=input.closest('tr'), d=prod&&prod.nextElementSibling;
+  if(!d||!d.classList.contains('ct-rcp-row')) return;
+  const bottle=Number(input.value)||0; if(!(bottle>0)) return;
+  d.querySelectorAll('tbody > tr').forEach(tr=>{ const p=Number(tr.querySelector('[data-r=pct]').value)||0; if(p>0) tr.querySelector('[data-r=vol]').value=Math.round(bottle*p/100*10)/10; });
 }
 function ctRcpAddRow(tbody, r){
   r=r||{};
@@ -216,7 +239,7 @@ function ctRcpAddRow(tbody, r){
   tbody.appendChild(tr);
   ctRcpRenumber(tbody);
 }
-function ctRcpRenumber(tbody){ [...tbody.querySelectorAll('tr')].forEach((tr,i)=>{ tr.querySelector('.ct-rcp-idx').textContent=i+1; }); ctRcpRecalc(tbody); }
+function ctRcpRenumber(tbody){ [...tbody.querySelectorAll('tr')].forEach((tr,i)=>{ tr.querySelector('.ct-rcp-idx').textContent=i+1; }); ctRcpRecalc(tbody); ctRcpUpdateBtn(tbody); }
 function ctRcpRecalc(el){
   const panel=el.closest('.ct-rcp'); if(!panel) return;
   const rows=[...panel.querySelectorAll('tbody > tr')];
@@ -249,7 +272,7 @@ function ctRcpFill(detailTr, rcp){
   ctRcpRecalc(tbody);
   const ac=prod.querySelector('[data-f=abvCalc]');
   if(panel.dataset.abvCalc && (!ac.value || rcp.abv)) ac.value=rcp.abv||panel.dataset.abvCalc;
-  const btn=prod.querySelector('.ct-rcp-btn'); if(btn) btn.textContent='配方 '+tbody.querySelectorAll('tr').length;
+  ctRcpUpdateBtn(tbody);
 }
 async function ctRcpImport(btn){
   const panel=btn.closest('.ct-rcp'), sel=panel.querySelector('.ct-rcp-src');
