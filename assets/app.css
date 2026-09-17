@@ -580,11 +580,32 @@ body.role-general [data-owner-only]{display:none!important}
 .ct-sec-title{font-size:13px;font-weight:700;color:var(--gold);margin:18px 0 8px;padding-bottom:4px;border-bottom:1px dashed var(--bd)}
 .ct-sec-title:first-child{margin-top:0}
 .ct-warn{background:#FFF7E6;border:1px solid #E8D5A8;color:#7A5A16;border-radius:8px;padding:8px 12px;font-size:12.5px;line-height:1.5;margin-bottom:10px}
-.ct-prod{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:6px;align-items:center;margin-bottom:6px}
-.ct-prod .fi{margin:0;min-width:0}
+.ct-prod{margin-bottom:6px}   /* 2026-09-16：原本對 <table> 下 display:grid 會把 thead/tbody 當格子排，改回一般表格 */
+.ct-prod th,.ct-prod td{padding:6px 6px}
+.ct-prod .fi{margin:0;min-width:0;width:100%}
+.ct-prod .ct-prod-act{white-space:nowrap}
+.ct-prod .ct-prod-act .rec-act-btn{margin-right:4px}
+.ct-prod .ct-rcp-btn.on{background:var(--gold);color:#fff;border-color:var(--gold)}
+/* 2026-09-16 附件二配方帶入面板（14_contract.js ctRcp*） */
+.ct-rcp-row>td{background:#FBFAF6;padding:8px 10px 12px}
+.ct-rcp{border:1px dashed var(--bd);border-radius:8px;padding:8px 10px;background:#fff}
+.ct-rcp-bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
+.ct-rcp-bar .ct-rcp-src{flex:1 1 320px;margin:0}
+.ct-rcp-lbl{font-size:12px;font-weight:700;color:var(--gold);white-space:nowrap}
+.ct-rcp-note{font-size:11.5px;color:#6B6B63;flex-basis:100%}
+.ct-rcp-tbl th,.ct-rcp-tbl td{padding:4px 5px;font-size:12px}
+.ct-rcp-tbl .fi{margin:0;min-width:0;width:100%;font-size:12px;padding:4px 6px}
+.ct-rcp-tbl select.fi{min-width:72px}
+.ct-rcp-tbl .ct-rcp-method{margin-top:3px;font-size:11px;color:#6B6B63}
+.ct-rcp-idx{color:#6B6B63;width:24px;text-align:center}
+.ct-rcp-foot{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:8px;font-size:12px;color:#6B6B63}
+.ct-rcp-foot label{display:flex;gap:6px;align-items:center;flex:1 1 320px}
+.ct-rcp-foot label .fi{margin:0;flex:1}
+.ct-rcp-sum b{color:#22241F}
+.ct-rcp-sum b.ct-rcp-bad{color:#B3261E}
 .ct-done{background:#F2F7EE;border:1px solid #BFD8B0;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.7;margin-top:12px}
 .ct-done a{color:var(--gold);font-weight:700;margin-right:12px}
 .ct-tpl{margin-top:18px;font-size:12.5px;color:#6B6B63}
 .ct-tpl summary{cursor:pointer;color:#22241F;font-weight:600}
 .ct-tpl .fi{max-width:420px}
-@media (max-width:640px){ .ct-prod{grid-template-columns:1fr 1fr;} }
+@media (max-width:640px){ .ct-prod th,.ct-prod td{padding:4px 3px} }
