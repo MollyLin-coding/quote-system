@@ -387,6 +387,12 @@ function oemExpandAnnex2_(body, products) {
     };
     elems.forEach(function (e) {
       Object.keys(vals).forEach(function (key) { try { e.replaceText(escRe_('{{' + key + '}}'), String(vals[key]).replace(/\$/g, '$$$$')); } catch (err) {} });
+      // 2026-09-16：附件二配方表（酒譜書／獨立 Run Card 帶入的 products[k].recipe）
+      try {
+        if (e.getType() === DocumentApp.ElementType.TABLE) oemFillRecipeTable_(e.asTable(), x);
+        else if (e.getType() === DocumentApp.ElementType.PARAGRAPH && x.recipe && x.recipe.processNote &&
+                 e.asParagraph().getText().indexOf('製程摘要') === 0) e.asParagraph().setText('製程摘要／特殊條件：' + x.recipe.processNote);
+      } catch (err2) {}
     });
   };
   if (startIdx < 0 || endIdx < 0) {   // 範本沒有標記：整份當單一產品填
@@ -433,7 +439,8 @@ function setRowTexts_(row, vals) {
     var cell = row.getCell(c), v = vals[c] == null ? '' : String(vals[c]);
     var ps = cell.getNumChildren() ? cell.getChild(0) : null;
     if (ps && ps.getType() === DocumentApp.ElementType.PARAGRAPH) {
-      ps.asParagraph().setText(v);
+      // 2026-09-16：setText('') 會丟 "Cannot insert an empty text element"，空值改用 clear()
+      if (v === '') ps.asParagraph().clear(); else ps.asParagraph().setText(v);
       for (var k = cell.getNumChildren() - 1; k >= 1; k--) { try { cell.removeChild(cell.getChild(k)); } catch (e) {} }
     } else cell.setText(v);
   }
@@ -541,4 +548,200 @@ function contractInsertImages_(doc) {
       }
     });
   });
+}
+
+// ===================================================================
+// 附件二「產品配方及規格表」帶入（2026-09-16 Molly：A 酒譜書＋無訂單之獨立 Run Card；B 圖片辨識暫緩）
+//   資料來源都在廠務／酒譜 APP（MollyLin-coding/recipe）的試算表：
+//   ① 各客戶酒譜書（RECIPE_BOOKS_，與 APP 後端 CLIENTS 同一份 ID／前綴設定；新客戶轉正式時要同步加）
+//      分頁版面：Row2 E=酒款名、I=ABV；Row4 起 A=原料 B=占比(小數) C=體積 D=原料ABV E=製作方式；「總體積」列 C=總體積 D=ABV
+//   ② 主表 RunCard 分頁（B 訂單編號空白＝獨立卡）：K 欄資料JSON liquids[{name,pct,abv,vol,method,subs}] / solids[{name,ratio}]
+//   actions：contractRecipeSources（清單）、contractRecipeFetch（單筆明細）。只讀，不寫回任何試算表。
+//   產合約時 products[k].recipe = { source, totalVol, abvCalc, rows:[{name,pct,vol,abv,by,note}] } 由 oemFillRecipeTable_ 填進附件二表格。
+// ===================================================================
+var RECIPE_APP_MAIN_SHEET_ID_ = '1rXmA0ACRwy4jo3XEkXHZzNjJw8uZzX1jzVle-6k0V40';
+var RECIPE_BOOKS_ = [
+  { key: 'Feeling Bar',        id: '1WwCsC2SvLqWmGFPrwzM8pYLx3DpF3VM_3srfksWfza4', prefix: /^(0?FB_)/i,   strip: /^0?FB_/i },
+  { key: '南坡萬公版',          id: '1X6euYjrRz72Fms8B3lvWjAhcJ81AlLp9BgnB_7zW1pU', prefix: /^NO1_/i,      strip: /^NO1_/i },
+  { key: 'Feeling Bar Cafe',   id: '14vso62AkYRubqKVsgWBMpHS79KkEgbXFkdnPdrodckE', prefix: /^FBC_/i,      strip: /^FBC_/i },
+  { key: '南坡萬v.2',           id: '1816K_4KJ-YTX3102TMw58po5QVrUFzy3tGhQPFjQLdE', prefix: /^NO1\.V2_/i,  strip: /^NO1\.V2_/i },
+  { key: 'OEM-Babyface',       id: '1BLZREU_iCSij55jLApYZgPawISYF3reF2rsilqz3K6s', prefix: /^BF_/i,       strip: /^BF_/i },
+  { key: '全客製-酒肉朋友',      id: '1GguVGe67xnq1GlMVqUSb1GUQrT-tzXTLXAl2yVpvh1Q', prefix: /調酒$/,       strip: /調酒$/ },
+  { key: '全客製-昭和浪漫冰室',   id: '1OhqlXI7kDOH_SvwXblnx8ltzEXsGuFud2ZTNWQk39NA', prefix: /^SH_/i,       strip: /^SH_/i },
+  { key: 'OEM-好野吧',          id: '1v8WSv-L5Ox-AOcqMBgXyj-HyXwYyIp4FRDVqhwodF1M', prefix: /^好野吧-/,     strip: /^好野吧-/ },
+  { key: '全客製-日富一日',      id: '1hsava4Cq-Pu3ywS6ixlRQcQJDFRrD63leGJoeJ6pJKI', prefix: /^FUJI-/i,     strip: /^FUJI-/i },
+  { key: '全客製-雋荖&拾山',     id: '1U-glkwgsCyYzzCbUdrHrxaYpsybe1ww5WD9dLr3nGqc', prefix: /^JL_/i,       strip: /^JL_/i },
+  { key: 'OEM-Lane72',         id: '14efyPLxCCYolDfsTqcehUPU8JdxZoB9aB8RLjJB_7r8', prefix: /^L72_/i,      strip: /^L72_/i }
+];
+var RECIPE_SRC_CACHE_KEY_ = 'contractRecipeSources_v1';
+
+function recipeClientKey_(s) {   // 客戶名稱正規化：去 全客製-/OEM- 前綴、去空白、小寫
+  return String(s == null ? '' : s).replace(/^(全客製|OEM)[-－_]/i, '').replace(/[\s　]+/g, '').toLowerCase();
+}
+function recipeClientMatch_(a, b) {
+  var x = recipeClientKey_(a), y = recipeClientKey_(b);
+  if (!x || !y) return false;
+  return x === y || x.indexOf(y) >= 0 || y.indexOf(x) >= 0;
+}
+function recipeNormAbv_(v) {
+  var n = parseFloat(String(v == null ? '' : v).replace('%', '').trim());
+  if (!(n > 0)) return 0;
+  return n <= 1 ? Math.round(n * 10000) / 100 : n;
+}
+function recipeNum_(v, d) { var n = Number(v); if (!isFinite(n)) return 0; var m = Math.pow(10, d == null ? 2 : d); return Math.round(n * m) / m; }
+
+/* 清單：所有酒譜書的酒款分頁 ＋ 主表 RunCard 的獨立卡。整份快取 10 分鐘（冷路徑要開 12 本試算表）。 */
+function handleContractRecipeSources_(params) {
+  var clientName = String(params.clientName || '');
+  var cache = null;
+  try { cache = CacheService.getScriptCache(); } catch (e) {}
+  var data = null;
+  if (cache && !params.force) { try { var c = cache.get(RECIPE_SRC_CACHE_KEY_); if (c) data = JSON.parse(c); } catch (e) {} }
+  if (!data) {
+    data = { books: [], runcards: [], builtAt: tpeNow_() };
+    RECIPE_BOOKS_.forEach(function (bk) {
+      var entry = { key: bk.key, recipes: [] };
+      try {
+        var ss = SpreadsheetApp.openById(bk.id);
+        ss.getSheets().forEach(function (ws) {
+          var name = ws.getName();
+          if (name.indexOf('毛利') >= 0 || name.indexOf('報價') >= 0 || !bk.prefix.test(name)) return;
+          var recipeName = '';
+          try { var r2 = ws.getRange(2, 1, 1, 9).getValues()[0]; recipeName = String(r2[4] || r2[3] || '').trim(); } catch (e) {}
+          if (!recipeName) recipeName = name.replace(bk.strip, '');
+          entry.recipes.push({ sheet: name, recipeName: recipeName });
+        });
+      } catch (e) { entry.error = String(e).slice(0, 120); }
+      data.books.push(entry);
+    });
+    try {
+      var rc = SpreadsheetApp.openById(RECIPE_APP_MAIN_SHEET_ID_).getSheetByName('RunCard');
+      var v = rc ? rc.getDataRange().getValues() : [];
+      for (var i = 1; i < v.length; i++) {
+        var id = String(v[i][0] || '').trim();
+        if (!id || String(v[i][1] || '').trim()) continue;   // 有訂單編號的不算獨立卡
+        data.runcards.push({ id: id, client: String(v[i][2] || ''), product: String(v[i][3] || ''), sheet: String(v[i][4] || ''),
+          bottle: String(v[i][5] || ''), date: v[i][6] ? Utilities.formatDate(new Date(v[i][6]), 'Asia/Taipei', 'yyyy-MM-dd') : '',
+          status: String(v[i][11] || ''), updatedAt: v[i][15] ? String(v[i][15]) : '' });
+      }
+      data.runcards.reverse();   // 新的在前
+    } catch (e) { data.runcardError = String(e).slice(0, 120); }
+    if (cache) { try { cache.put(RECIPE_SRC_CACHE_KEY_, JSON.stringify(data), 600); } catch (e) {} }
+  }
+  data.books.forEach(function (b) { b.matched = recipeClientMatch_(b.key, clientName); });
+  data.runcards.forEach(function (r) { r.matched = recipeClientMatch_(r.client, clientName); });
+  return { ok: true, books: data.books, runcards: data.runcards, builtAt: data.builtAt };
+}
+
+/* 明細：src='sheet'（key＋sheet）或 src='runcard'（id）。回傳統一格式，不含任何成本欄位。 */
+function handleContractRecipeFetch_(params) {
+  var src = String(params.src || '');
+  if (src === 'sheet') return recipeFromSheet_(String(params.key || ''), String(params.sheet || ''));
+  if (src === 'runcard') return recipeFromRunCard_(String(params.id || ''));
+  throw new Error('src 只能是 sheet 或 runcard');
+}
+function recipeFromSheet_(key, sheet) {
+  var bk = null;
+  RECIPE_BOOKS_.forEach(function (b) { if (b.key === key) bk = b; });
+  if (!bk) throw new Error('沒有這本酒譜書：' + key);
+  var ws = SpreadsheetApp.openById(bk.id).getSheetByName(sheet);
+  if (!ws) throw new Error('酒譜書「' + key + '」找不到分頁 ' + sheet);
+  var data = ws.getDataRange().getValues();
+  var recipeName = '', abv = 0, totalVol = 0, processNote = '';
+  if (data.length > 1) {
+    recipeName = String(data[1][4] || '').trim();
+    abv = recipeNormAbv_(data[1][8]);
+    if (!abv) { var h = recipeNormAbv_(data[1][7]); if (h > 0 && h <= 100) abv = h; }
+  }
+  var totalVolRow = -1, subEndRow = -1;
+  for (var i = 3; i < data.length; i++) {
+    var a = String(data[i][0] || '').trim();
+    if (totalVolRow < 0 && a === '總體積') { totalVolRow = i; continue; }
+    if (totalVolRow >= 0 && (/ml版總食材成本/.test(a) || a === '製程備註')) { subEndRow = i; break; }
+  }
+  var ingEnd = totalVolRow >= 0 ? totalVolRow : data.length;
+  var rows = [];
+  for (var r = 3; r < ingEnd; r++) {
+    var row = data[r], name = String(row[0] || '').trim();
+    if (!name || name === '基礎原料') continue;
+    var rawPct = parseFloat(row[1]) || 0;
+    var pct = rawPct <= 1 ? rawPct * 100 : rawPct;
+    var vol = parseFloat(row[2]) || 0;
+    if (!(pct > 0 || vol > 0)) continue;
+    var method = String(row[4] == null ? '' : row[4]).trim();
+    rows.push({ name: name, pct: recipeNum_(pct, 2), vol: recipeNum_(vol, 1), abv: recipeNum_(parseFloat(row[3]) || 0, 2), method: method });
+  }
+  if (totalVolRow >= 0) { totalVol = parseFloat(data[totalVolRow][2]) || 0; abv = parseFloat(data[totalVolRow][3]) || abv; }
+  for (var k = (subEndRow >= 0 ? subEndRow : ingEnd); k < data.length; k++) {
+    if (String(data[k][0] || '').trim() === '製程備註') { if (k + 1 < data.length) processNote = String(data[k + 1][0] || data[k + 1][1] || '').trim(); break; }
+  }
+  return { ok: true, src: 'sheet', source: key + '／' + sheet, recipeName: recipeName || sheet.replace(bk.strip, ''),
+    abv: recipeNum_(abv, 2), totalVol: totalVol, processNote: processNote, rows: rows };
+}
+function recipeFromRunCard_(id) {
+  if (!id) throw new Error('缺少 Run Card 卡號');
+  var rc = SpreadsheetApp.openById(RECIPE_APP_MAIN_SHEET_ID_).getSheetByName('RunCard');
+  if (!rc) throw new Error('主表沒有 RunCard 分頁');
+  var v = rc.getDataRange().getValues(), hit = null;
+  for (var i = 1; i < v.length; i++) if (String(v[i][0] || '').trim() === id) { hit = v[i]; break; }
+  if (!hit) throw new Error('找不到 Run Card ' + id);
+  var d = {};
+  try { d = JSON.parse(String(hit[10] || '{}')) || {}; } catch (e) { throw new Error('Run Card ' + id + ' 的資料 JSON 解析失敗'); }
+  var rows = [], sumAbv = 0, sumPct = 0;
+  (d.liquids || []).forEach(function (l) {
+    var pct = Number(l.pct) || 0, abv = Number(l.abv) || 0;
+    var note = (l.subs && l.subs.length) ? ('子料：' + l.subs.map(function (s) { return s.name + (s.ratio != null && s.ratio !== '' ? '×' + s.ratio : ''); }).join('、')) : '';
+    rows.push({ name: String(l.name || ''), pct: recipeNum_(pct, 2), vol: recipeNum_(Number(l.vol) || 0, 1), abv: recipeNum_(abv, 2),
+      method: String(l.method || ''), note: [note, String(l.note || '')].filter(Boolean).join('；') });
+    sumAbv += pct * abv / 100; sumPct += pct;
+  });
+  (d.solids || []).forEach(function (s) {
+    rows.push({ name: String(s.name || ''), pct: '', vol: '', abv: '', method: '', note: '固體原料' + (s.ratio != null && s.ratio !== '' ? '，比例 ' + s.ratio : '') + (s.note ? '；' + s.note : '') });
+  });
+  return { ok: true, src: 'runcard', source: 'Run Card ' + id + (hit[3] ? '／' + hit[3] : ''), recipeName: String(hit[3] || ''),
+    client: String(hit[2] || ''), abv: recipeNum_(sumAbv, 2), pctSum: recipeNum_(sumPct, 2), totalVol: Number(d.totalVol) || 0,
+    processNote: String(d.processNote || ''), rows: rows };
+}
+
+/* 附件二表格：表頭「項次」；1～10 為空白列（不夠會複製最後一列往下加）；末列「總體積／計算酒精度」。
+   體積以「單瓶容量 × 占比」換算（表頭已寫容量），沒有單瓶容量才退回配方原體積。 */
+function oemFillRecipeTable_(table, product) {
+  var rcp = product && product.recipe;
+  if (!rcp || !(rcp.rows || []).length) return;
+  var rows = rcp.rows.filter(function (r) { return String(r.name || '').trim(); });
+  var nRows = table.getNumRows();
+  var totalIdx = -1;
+  for (var r = 1; r < nRows; r++) { if (table.getRow(r).getCell(1).getText().indexOf('總體積') >= 0) { totalIdx = r; break; } }
+  var dataStart = 1, dataEnd = (totalIdx > 0 ? totalIdx : nRows) - 1;   // inclusive
+  var avail = dataEnd - dataStart + 1;
+  var bottleVol = Number(product.volume) || 0;
+  // 不夠列就在總體積列前面複製一列
+  while (avail < rows.length) {
+    var tplRow = table.getRow(dataEnd).copy();
+    table.insertTableRow(dataEnd + 1, tplRow);
+    dataEnd++; avail++; if (totalIdx > 0) totalIdx++;
+  }
+  for (var i = 0; i < avail; i++) {
+    var row = table.getRow(dataStart + i);
+    if (i < rows.length) {
+      var x = rows[i];
+      var pct = Number(x.pct), vol = Number(x.vol);
+      var volTxt = '';
+      if (pct > 0 && bottleVol > 0) volTxt = String(recipeNum_(bottleVol * pct / 100, 1));
+      else if (vol > 0) volTxt = String(recipeNum_(vol, 1));
+      var nameTxt = String(x.name || '') + (x.method ? '\n' + x.method : '') + (x.note ? '\n' + x.note : '');
+      setRowTexts_(row, [String(i + 1), nameTxt, pct > 0 ? recipeNum_(pct, 2) + '%' : '', volTxt,
+        (x.abv !== '' && x.abv != null && Number(x.abv) >= 0 && String(x.abv) !== '') ? (recipeNum_(x.abv, 2) + '%') : '',
+        x.by === '甲' ? '甲方' : (x.by === '乙' ? '乙方' : '')]);
+    } else {
+      setRowTexts_(row, [String(i + 1), '', '', '', '', '']);   // 多餘的空白列保留（原本就是留給手寫）
+    }
+  }
+  if (totalIdx > 0) {
+    var tr = table.getRow(totalIdx);
+    var sumPct = 0; rows.forEach(function (x) { sumPct += Number(x.pct) || 0; });
+    setRowTexts_(tr, ['', '總體積／計算酒精度', (sumPct ? recipeNum_(sumPct, 1) : 100) + '%',
+      bottleVol ? String(bottleVol) : (rcp.totalVol ? String(rcp.totalVol) : ''),
+      (rcp.abvCalc !== '' && rcp.abvCalc != null) ? (recipeNum_(rcp.abvCalc, 2) + '%') : (product.abvCalc ? recipeNum_(product.abvCalc, 2) + '%' : ''), '']);
+  }
 }
