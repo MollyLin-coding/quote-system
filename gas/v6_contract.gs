@@ -168,7 +168,8 @@ function handleGenerateContract_(params) {
   try { if (doc.getFooter()) targets.push(doc.getFooter()); } catch (e) {}
   Object.keys(map.text).forEach(function (k) {
     var v = map.text[k] == null ? '' : String(map.text[k]);
-    targets.forEach(function (t) { t.replaceText(escRe_('{{' + k + '}}'), v.replace(/\$/g, '$$$$')); });
+    // 2026-09-20：replaceText 的取代字串是字面值，原本的 $ 轉義會讓 NT$1,500 印成 NT$$1,500
+    targets.forEach(function (t) { t.replaceText(escRe_('{{' + k + '}}'), v); });
   });
   contractInsertImages_(doc);                         // {{附件一圖1}} 等（若範本用文字佔位＋Script Properties 有圖檔 ID）
   // 殘留佔位符一律清空，不讓 {{…}} 印在正式文件上
@@ -386,7 +387,7 @@ function oemExpandAnnex2_(body, products) {
       '產品名稱': x.name, '酒精成分': abvText_(x), '容量': String(x.volume || '＿＿＿'), '本批數量': qtyText_(x)
     };
     elems.forEach(function (e) {
-      Object.keys(vals).forEach(function (key) { try { e.replaceText(escRe_('{{' + key + '}}'), String(vals[key]).replace(/\$/g, '$$$$')); } catch (err) {} });
+      Object.keys(vals).forEach(function (key) { try { e.replaceText(escRe_('{{' + key + '}}'), String(vals[key])); } catch (err) {} });
       // 2026-09-16：附件二配方表（酒譜書／獨立 Run Card 帶入的 products[k].recipe）
       try {
         if (e.getType() === DocumentApp.ElementType.TABLE) oemFillRecipeTable_(e.asTable(), x);
@@ -449,6 +450,16 @@ function setRowTexts_(row, vals) {
 function oemFillQuoteTable_(body, map) {
   var t = findTable_(body, '品名／項目') || findTable_(body, '品名/項目');
   if (!t) return;
+  // 2026-09-20：表頭「單價」依報價單稅別自動切換（範本原本寫死「單價（含稅）」，未稅報價時會與內文矛盾）
+  try {
+    var hd = t.getRow(0);
+    for (var hc = 0; hc < hd.getNumCells(); hc++) {
+      if (hd.getCell(hc).getText().replace(/\s/g, '').indexOf('單價') === 0) {
+        hd.getCell(hc).setText(map.taxInc ? '單價（含稅）' : '單價（未稅）');
+        break;
+      }
+    }
+  } catch (e) {}
   var rows = t.getNumRows(), tplRow = null, firstBlank = -1, blanks = [];
   for (var r = 1; r < rows; r++) {
     var c0 = t.getRow(r).getCell(0).getText().trim();
