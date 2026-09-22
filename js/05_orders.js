@@ -413,6 +413,8 @@ function ordPayFromQuote(o, gt){
   return {dep, bal};
 }
 /* 訂金比例（%）：預設 50；客戶主檔「付款習慣」寫「訂金30%」之類就用那個數字。
+   2026-09-22：也看得懂「無訂金／不收訂金／免訂金／訂金 0%」＝回 0（尾款 100%），
+   例如 Babyface 的「無訂金；驗收後 7 天內付尾款 100%」。
    用客戶名稱（或發票抬頭）比對客戶主檔；主檔還沒載入就從讀取快取拿。 */
 function ordDepositPct(clientName){
   const nm=String(clientName||'').split('｜')[0].trim();
@@ -428,7 +430,9 @@ function ordDepositPct(clientName){
   const key=s=>String(s||'').replace(/\s+/g,'').toLowerCase();
   const m=list.find(c=>key(c.name)===key(nm))||list.find(c=>c.invoice_title&&key(c.invoice_title)===key(nm));
   if(!m) return 50;
-  const mt=String(m.pay_habit||'').match(/訂金\s*(\d{1,3})\s*%/);
+  const hb=String(m.pay_habit||'');
+  if(/(無|免|不收|不付|不需)\s*訂金/.test(hb) || /訂金\s*0+\s*%/.test(hb)) return 0;
+  const mt=hb.match(/訂金\s*(\d{1,3})\s*%/);
   const p=mt?parseInt(mt[1],10):50;
   return (p>0&&p<100)?p:50;
 }
@@ -448,7 +452,7 @@ function fillHalf(){
   const dep=Math.round(gt*pct/100);
   document.getElementById('oe-deposit_amt').value=dep;
   document.getElementById('oe-final_amt').value=gt-dep;
-  toast(`已依付款規則帶入（訂金 ${pct}%）：訂金 ${money(dep)}／尾款 ${money(gt-dep)}`,'ok');
+  toast(pct===0 ? `已依付款規則帶入（無訂金）：尾款 ${money(gt-dep)}` : `已依付款規則帶入（訂金 ${pct}%）：訂金 ${money(dep)}／尾款 ${money(gt-dep)}`,'ok');
 }
 /* 2026-09-01 複檢 #25：這是欄位最多的視窗（發票四段、訂金、尾款、七個日期），
    原本按「取消」或 ✕ 會靜默把剛填的全部丟掉。關閉前先比對有沒有改過。 */
