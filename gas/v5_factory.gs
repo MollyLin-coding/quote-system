@@ -7,7 +7,7 @@
 //   • 同步：factorySync（每小時觸發＋開訂單追蹤頁時）→ 廠務製作狀態／Lot／實際出貨日／出貨紀錄→order_shipments／
 //           金流比對（只提示不覆蓋）／廠務同仁新建的「有金流」訂單 → 自動建草稿報價單＋訂單追蹤（反向匯入）。
 //   • 出貨以廠務為主；驗收單可從廠務出貨紀錄一鍵帶入（前端讀 factory_links.ship_json）。
-//   • 寄售先不碰。
+//   • 寄售：2026-09-23 起以廠務「經銷商寄售」為主，consign_ledger 自動跟（見檔尾「寄售 × 廠務」一節）。
 // Script Properties：FACTORY_API_URL（廠務 /exec）、FACTORY_KEY（＝廠務 QS_LINK_KEY）。
 // 資料表（本檔自建）：factory_links、factory_map。不動既有表的欄位定義。
 // ===================================================================
@@ -548,6 +548,8 @@ function handleFactorySync_(params) {
 function runFactorySync() {
   if (!fxConfigured_()) return;
   try { var r = handleFactorySync_({}); Logger.log(JSON.stringify(r).slice(0, 500)); } catch (e) { Logger.log('runFactorySync error: ' + e); }
+  // 2026-09-23：寄售帳也跟著每小時同步（以廠務為主）；失敗不影響上面訂單同步
+  try { var c = handleFactoryConsignSync_({}); Logger.log('consign: ' + JSON.stringify(c).slice(0, 500)); } catch (e) { Logger.log('runFactorySync consign error: ' + e); }
 }
 function setupFactorySyncTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'runFactorySync') ScriptApp.deleteTrigger(t); });
@@ -675,4 +677,160 @@ function handleResyncOrderStatusFromQuotes_(params) {
     } catch (e) { errors.push(no + '：' + (e && e.message || e)); }
   });
   return { ok: true, dry: dry, updated: out, errors: errors };
+}
+
+// ===================================================================
+// 寄售 × 廠務（2026-09-23，Molly 決議「以廠務為主，報價系統自動跟」）
+//   廠務 v3.71 起提供 extConsignLedger（QS_LINK_KEY、唯讀）：經銷商設定＋門市在庫異動＋牌價＋對帳單摘要。
+//   這裡每小時（runFactorySync 內）＋寄售頁「⟳ 同步廠務」把廠務的
+//     進貨→in／進貨取消→adjust(負)／售出→out／退貨→return／損耗→adjust(負)／盤點修正→adjust(±)
+//   寫進 consign_ledger；note 開頭帶 [FXC:<廠務異動ID>|<廠務訂單#批次>] 當冪等識別（同 ID 永不重寫）。
+//   起點＝Script Property FACTORY_CONSIGN_SINCE（yyyy-MM-dd HH:mm:ss，預設 2026-09-16 00:00:00）：
+//   之前廠務那 17 筆島羽 Molly 已手動登過，不重複匯入（她 2026-09-23 拍板）。
+//   過渡期「兩邊都登」的保險：同客戶＋同酒款＋同類型＋同數量、日期差 7 天內、還沒帶 [FXC:] 的手動列
+//   → 只在那列 note 補標記、不新增（例：廠務之後補登特規單，不會跟她已登的那筆重複）。
+//   客戶對照：factory_map kind='consign_client'（qs_name＝consign_customers.customer_id、factory_name＝經銷商鍵）；
+//   沒設定的用名字自動配（去「經銷商－」前綴、去空白、參／叁同視、前綴包含），唯一配到才算、並自動寫進 factory_map。
+//   酒款對照：廠務系統名去尾巴 V2 → 「<酒名>|<規格>」＝ownbrand_products.sku_id；也可 factory_map kind='product' 手動指定。
+//   ⚠ 只會「新增／補標記」consign_ledger，不刪不改數量；廠務端刪出貨會自己寫「進貨取消」負數列，這邊照樣同步進來。
+// ===================================================================
+var FXC_TAG_RE = /\[FXC:([^\]|\s]+)(?:\|([^\]]*))?\]/;
+var FXC_TYPE_MAP = { '進貨': 'in', '進貨取消': 'adjust', '售出': 'out', '退貨': 'return', '損耗': 'adjust', '盤點修正': 'adjust' };
+var FXC_SINCE_DEFAULT = '2026-09-16 00:00:00';
+function fxcSince_() { try { return String(PropertiesService.getScriptProperties().getProperty('FACTORY_CONSIGN_SINCE') || '').trim() || FXC_SINCE_DEFAULT; } catch (e) { return FXC_SINCE_DEFAULT; } }
+function fxcLastSync_() { try { return String(PropertiesService.getScriptProperties().getProperty('FACTORY_CONSIGN_LAST_SYNC') || ''); } catch (e) { return ''; } }
+function fxcTagOf_(note) { var m = String(note || '').match(FXC_TAG_RE); return m ? m[1] : ''; }
+// 名字比對用的鍵：去經銷商前綴、去空白、小寫、參→叁、只留中英數
+function fxcNameKey_(s) { return fxKey_(String(s || '').replace(FX_CLIENT_PREFIX_RE, '')).replace(/參/g, '叁').replace(/[^0-9a-z一-鿿]/g, ''); }
+function fxcDays_(a, b) { var ta = Date.parse(String(a).slice(0, 10) + 'T00:00:00Z'), tb = Date.parse(String(b).slice(0, 10) + 'T00:00:00Z'); if (isNaN(ta) || isNaN(tb)) return 9999; return Math.round((tb - ta) / 86400000); }
+// 廠務「建立時間」（yyyy-MM-dd HH:mm:ss，台北）→ consign_ledger.created_at 的格式（yyyy-MM-ddTHH:mm:ss+08:00）
+function fxcIso_(s) {
+  var m = String(s || '').match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) { var t = fxParseTw_(s); m = t ? t.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/) : null; }
+  if (!m) return tpeNow_();
+  return m[1] + '-' + m[2] + '-' + m[3] + 'T' + m[4] + ':' + m[5] + ':' + (m[6] || '00') + '+08:00';
+}
+// 經銷商鍵 → consign customer_id（factory_map 優先；沒設定就用名字自動配、配到寫回 factory_map）。回 { map:{鍵:id}, auto:[…], ambiguous:{鍵:原因} }
+function fxcDealerMap_(map, dealers, customers) {
+  var out = {}, auto = [], ambiguous = {}, usedId = {};
+  var idCount = {}; (customers || []).forEach(function (c) { var id = String(c.customer_id); idCount[id] = (idCount[id] || 0) + 1; });
+  (map || []).forEach(function (r) { if (String(r.kind) === 'consign_client' && r.factory_name && r.qs_name) { out[String(r.factory_name).trim()] = String(r.qs_name).trim(); usedId[String(r.qs_name).trim()] = String(r.factory_name).trim(); } });
+  (dealers || []).forEach(function (d) {
+    var key = String(d.key || '').trim(); if (!key || out[key]) return;
+    var k1 = fxcNameKey_(key), k2 = fxcNameKey_(d.label);
+    var hits = (customers || []).filter(function (c) {
+      var ck = fxcNameKey_(c.name); if (!ck) return false;
+      if (ck === k1 || ck === k2) return true;
+      return ck.length >= 2 && (k1.indexOf(ck) === 0 || k2.indexOf(ck) === 0 || ck.indexOf(k1) === 0 || ck.indexOf(k2) === 0);
+    });
+    var ids = {}; hits.forEach(function (c) { ids[String(c.customer_id)] = String(c.name); });
+    var idList = Object.keys(ids);
+    if (idList.length !== 1) { if (idList.length > 1) ambiguous[key] = '名字同時像 ' + idList.map(function (i) { return ids[i]; }).join('／') + '，請到客戶設定手動指定'; return; }
+    var id = idList[0];
+    if (idCount[id] > 1) { ambiguous[key] = '客戶代碼 ' + id + ' 在 consign_customers 重複了（' + ids[id] + '），先把代碼改成不重複再同步'; return; }
+    if (usedId[id]) { ambiguous[key] = '客戶「' + ids[id] + '」已對到廠務「' + usedId[id] + '」'; return; }
+    out[key] = id; usedId[id] = key;
+    auto.push({ kind: 'consign_client', qs_name: id, factory_name: key, note: '自動配對：' + ids[id] });
+  });
+  if (auto.length) { try { handleSaveFactoryMap_({ rows: auto }); } catch (e) {} }
+  return { map: out, auto: auto, ambiguous: ambiguous };
+}
+// 廠務酒款（系統名，可能帶 V2 尾巴）＋規格 → ownbrand_products.sku_id；找不到回 ''
+function fxcSkuOf_(map, products, product, volume) {
+  var m = fxMapLookup_(map, 'product', 'factory_name', 'qs_name', product);   // 手動對照：qs_name 可填 sku_id 或酒名
+  var name = (m || String(product || '')).replace(/\s*V\d+$/i, '').trim();
+  var vol = String(volume || '').trim();
+  if (products[name]) return name;                     // 對照表直接填了 sku_id
+  var sku = name + '|' + vol;
+  if (products[sku]) return sku;
+  var nk = fxKey_(name) + '|' + fxKey_(vol);
+  var keys = Object.keys(products);
+  for (var i = 0; i < keys.length; i++) { var p = products[keys[i]]; if (fxKey_(p.name) + '|' + fxKey_(p.volume) === nk) return keys[i]; }
+  return '';
+}
+function fxcMaxSerial_(ledger, date) {
+  var prefix = 'CM-' + String(date).replace(/-/g, '') + '-', mx = 0;
+  ledger.forEach(function (l) { var id = String(l.movement_id || ''); if (id.indexOf(prefix) === 0) { var n = parseInt(id.slice(prefix.length), 10); if (n > mx) mx = n; } });
+  return mx;
+}
+// action: factoryConsignSync {} → 把廠務寄售帳同步進 consign_ledger（新增／補標記），回摘要
+function handleFactoryConsignSync_(params) {
+  if (!fxConfigured_()) return { ok: false, error: '廠務連結尚未設定' };
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return { ok: false, error: '另一個同步正在進行，稍後再試' };
+  try {
+    var since = fxcSince_();
+    var r = fxCall_('extConsignLedger', { since: since });
+    if (!r || !r.ok) return { ok: false, error: '讀取廠務寄售帳失敗：' + ((r && r.error) || '無回應') };
+    var dealers = r.dealers || [], rows = (r.rows || []).slice();
+    var customers = v2ReadAll_(SHEET_CONSIGN_CUSTOMERS, CONSIGN_CUSTOMERS_HEADERS);
+    var dm = fxcDealerMap_(fxMapAll_(), dealers, customers);
+    var map = fxMapAll_();   // 自動配對可能剛寫了新列，重讀
+    var products = {}; v2ReadAll_(SHEET_OWNBRAND_PRODUCTS, OWNBRAND_PRODUCTS_HEADERS).forEach(function (p) { products[String(p.sku_id)] = p; });
+    var sh = v2Sheet_(SHEET_CONSIGN_LEDGER, CONSIGN_LEDGER_HEADERS);
+    var ledger = v2ReadAll_(SHEET_CONSIGN_LEDGER, CONSIGN_LEDGER_HEADERS);   // 陣列位置＝表列順序（列號＝i+2）
+    var noteCol = CONSIGN_LEDGER_HEADERS.indexOf('note') + 1;
+    var have = {}; ledger.forEach(function (l) { var t = fxcTagOf_(l.note); if (t) have[t] = 1; });
+    var inserted = [], linked = [], skipped = [], unmappedDealers = {}, unmappedProducts = {}, serialByDate = {}, toAppend = [];
+    rows.sort(function (a, b) { return String(a.createdAt || '').localeCompare(String(b.createdAt || '')) || String(a.id || '').localeCompare(String(b.id || '')); });
+    rows.forEach(function (fr) {
+      var id = String(fr.id || '').trim(); if (!id || have[id]) return;
+      var type = FXC_TYPE_MAP[String(fr.type || '').trim()];
+      if (!type) { skipped.push(id + '：不認得的類型「' + fr.type + '」'); return; }
+      var dealerKey = String(fr.dealer || '').trim();
+      var cid = dm.map[dealerKey];
+      if (!cid) { unmappedDealers[dealerKey] = (unmappedDealers[dealerKey] || 0) + 1; return; }
+      var sku = fxcSkuOf_(map, products, fr.product, fr.volume);
+      if (!sku) { var pk = String(fr.product || '') + '|' + String(fr.volume || ''); unmappedProducts[pk] = (unmappedProducts[pk] || 0) + 1; return; }
+      var q = Math.round(Number(fr.qty) || 0);
+      if (!q) { skipped.push(id + '：數量 0'); return; }
+      var qty = (type === 'adjust') ? q : Math.abs(q);
+      var date = String(fr.date || '').slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { skipped.push(id + '：日期格式不對「' + fr.date + '」'); return; }
+      var tag = '[FXC:' + id + (fr.orderNo ? '|' + String(fr.orderNo) + '#' + String(fr.seq || '') : '') + ']';
+      var noteBody = '廠務' + (fr.orderNo ? ' ' + fr.orderNo + (fr.seq ? ' 第' + fr.seq + '次' : '') : '') + (fr.operator ? '／' + fr.operator : '') + (fr.note ? '：' + fr.note : '');
+      // 過渡期保險：對得上的舊手動列只補標記
+      var hit = -1;
+      for (var i = 0; i < ledger.length; i++) {
+        var l = ledger[i];
+        if (fxcTagOf_(l.note)) continue;
+        if (String(l.customer_id) !== String(cid) || String(l.sku_id) !== sku || String(l.type) !== type) continue;
+        if (Math.round(Number(l.qty) || 0) !== qty) continue;
+        if (Math.abs(fxcDays_(l.date, date)) > 7) continue;
+        hit = i; break;
+      }
+      if (hit >= 0) {
+        var newNote = (tag + ' ' + String(ledger[hit].note || '')).trim();
+        sh.getRange(hit + 2, noteCol).setValue(newNote);
+        ledger[hit].note = newNote; have[id] = 1;
+        linked.push({ fx: id, movement_id: String(ledger[hit].movement_id), customer_id: String(cid), sku_id: sku, type: type, qty: qty });
+        return;
+      }
+      if (serialByDate[date] === undefined) serialByDate[date] = fxcMaxSerial_(ledger, date);
+      serialByDate[date]++;
+      var mid = 'CM-' + date.replace(/-/g, '') + '-' + ('0000' + serialByDate[date]).slice(-4);
+      var unit = (type === 'out' && fr.price !== '' && fr.price != null && !isNaN(Number(fr.price))) ? Number(fr.price) : '';
+      var cidCell = /^\d+$/.test(String(cid)) ? Number(cid) : String(cid);
+      var vals = [mid, date, cidCell, sku, type, qty, unit, (tag + ' ' + noteBody).trim(), fxcIso_(fr.createdAt)];
+      toAppend.push(vals);
+      var obj = {}; CONSIGN_LEDGER_HEADERS.forEach(function (h, k) { obj[h] = vals[k]; }); ledger.push(obj); have[id] = 1;
+      inserted.push({ fx: id, movement_id: mid, customer_id: String(cid), sku_id: sku, type: type, qty: qty, date: date });
+    });
+    if (toAppend.length) sh.getRange(sh.getLastRow() + 1, 1, toAppend.length, CONSIGN_LEDGER_HEADERS.length).setValues(toAppend);
+    var now = tpeNow_();
+    try { PropertiesService.getScriptProperties().setProperty('FACTORY_CONSIGN_LAST_SYNC', now); } catch (e) {}
+    if (inserted.length || linked.length) {
+      try { logChange_('factoryConsignSync', inserted.length + '+' + linked.length, { inserted: inserted.map(function (x) { return x.movement_id + '=' + x.fx; }), linked: linked.map(function (x) { return x.movement_id + '=' + x.fx; }) }); } catch (e) {}
+    }
+    return { ok: true, inserted: inserted, linked: linked, skipped: skipped, unmappedDealers: unmappedDealers, unmappedProducts: unmappedProducts,
+      ambiguous: dm.ambiguous, autoMapped: dm.auto, dealerMap: dm.map, dealers: dealers, since: since, at: now, factoryRows: rows.length };
+  } finally { lock.releaseLock(); }
+}
+// action: getFactoryConsignDealers {} → 廠務經銷商清單＋目前對照（給寄售頁客戶設定的下拉；只讀，不同步）
+function handleGetFactoryConsignDealers_() {
+  if (!fxConfigured_()) return { ok: true, configured: false, dealers: [], map: [], lastSync: '', since: fxcSince_() };
+  var r = fxCall_('extConsignLedger', { since: '9999-12-31 00:00:00' });   // 只要經銷商設定，異動列一筆都不要
+  if (!r || !r.ok) return { ok: false, error: '讀取廠務失敗：' + ((r && r.error) || '無回應') };
+  var map = fxMapAll_().filter(function (x) { return String(x.kind) === 'consign_client'; });
+  return { ok: true, configured: true, dealers: r.dealers || [], map: map, lastSync: fxcLastSync_(), since: fxcSince_() };
 }
