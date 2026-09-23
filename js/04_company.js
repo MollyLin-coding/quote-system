@@ -167,8 +167,6 @@ function onSelectCompany(quiet){
     } else if(sc){ sc.checked=true; }
     toggleShipSame('f');
   }
-  // 2026-09-23：公司檔沒填的聯絡人／電話／地址，從客戶主檔補上（主檔優先，見 11_customers.js cusFillFromCompany）
-  if(typeof cusFillFromCompany==='function') cusFillFromCompany(c);
   if(c.default_tax_mode==='inc'||c.default_tax_mode==='exc') setTaxMode(c.default_tax_mode);
   /* 付款條款（2026-09-01 複檢修正）：原本只在「欄位是空的」時才填，所以從 A 公司換到 B 公司時
      畫面上留的還是 A 的條款，會把甲客戶談好的付款條件印在乙客戶的報價單上。
@@ -186,6 +184,9 @@ function onSelectCompany(quiet){
       setPay(0);
     }
   }
+  /* 2026-09-23：公司檔沒填的聯絡人／電話／地址，從客戶主檔補上（主檔優先，見 11_customers.js cusFillFromCompany）。
+     要放在付款條款之後：主檔的「付款習慣」要能蓋掉上面自動帶的公司預設條款，換公司時的清空也要先做完。 */
+  if(typeof cusFillFromCompany==='function') cusFillFromCompany(c);
   // preset_note
   rulesOf(c.company_id).filter(r=>r.rule_type==='preset_note').forEach(r=>{
     const note=parseJsonSafe(r.params_json,{}).note||'';

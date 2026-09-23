@@ -538,6 +538,22 @@ function cusApplyMasterToForm(m, onlyEmpty){
     set('f-shipcon', m.ship_contact); set('f-shipph', m.ship_phone); set('f-shipad', m.ship_address);
   }
 }
+/* 2026-09-23 Molly 定：客戶主檔的「付款習慣」帶進報價單付款條件的「自訂」那格。
+   只在自訂欄還空著、或裡面是系統上一次自動帶的字時才填；自己打過的字不蓋。
+   編輯舊單（有存檔的付款條件）不動；使用者已經切到其他付款方式（Tab1/2/4）也不動。 */
+function cusApplyPayHabit(habit){
+  const h=String(habit||'').trim(); if(!h) return false;
+  const t=document.getElementById('p3-txt'); if(!t) return false;
+  if(typeof LOADED_PAY_DETAIL!=='undefined' && LOADED_PAY_DETAIL!=null) return false;
+  if(typeof payTab!=='undefined' && payTab!==0 && payTab!==3) return false;
+  const auto=(typeof PAY_TXT_AUTOFILL!=='undefined')?PAY_TXT_AUTOFILL:'';
+  const cur=t.value.trim();
+  if(cur && cur!==auto) return false;
+  t.value=h; try{ PAY_TXT_AUTOFILL=h; }catch(_){}
+  if(typeof setPay==='function') setPay(3);
+  if(typeof calc==='function') calc();
+  return true;
+}
 function cusFillFromCompany(c){
   if(!c) return;
   const cid=String(c.company_id);
@@ -545,6 +561,7 @@ function cusFillFromCompany(c){
     if(!SELECTED_COMPANY || String(SELECTED_COMPANY.company_id)!==cid) return;   // 等主檔的時候已經換了別家
     const m=cusMatchMasterForCompany(c); if(!m) return;
     cusApplyMasterToForm(m, onlyEmpty);
+    cusApplyPayHabit(m.pay_habit);
   };
   if(Array.isArray(CUS_MASTER) && CUS_MASTER.length) go(false);
   else if(typeof cusEnsureMaster==='function') Promise.resolve(cusEnsureMaster()).then(()=>go(true)).catch(()=>{});
@@ -569,6 +586,7 @@ function pickQuoteCustomer(){
     if(same){ same.checked=false; if(typeof toggleShipSame==='function') toggleShipSame('f'); }
     set('f-shipcon', m.ship_contact); set('f-shipph', m.ship_phone); set('f-shipad', m.ship_address);
   }
+  cusApplyPayHabit(m.pay_habit);   // 2026-09-23：付款習慣帶進付款條件（自訂）
   if(typeof upNo==='function') upNo();
   if(typeof FORM_DIRTY!=='undefined') FORM_DIRTY=true;
   let msg='已帶入「'+m.name+'」';
