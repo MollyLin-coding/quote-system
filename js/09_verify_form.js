@@ -607,6 +607,11 @@ ${isPreview?'':'<script>window.onload=function(){setTimeout(function(){try{windo
    =================================================================== */
 let CONSIGN_VF_DATA=null;
 let CONSIGN_VF_EDIT_ID=null;   // 編輯模式：正在取代的舊留底紀錄ID（null＝一般新開）
+/* 複檢 2026-09-11 B7：試飲瓶「只」記在驗收單留底裡（不寫 consign_ledger）。登記異動存完跳出這張單時，
+   若上面有試飲瓶而使用者按 ✕／「跳過」關掉，那幾支試飲瓶就等於從來沒登記過——
+   先前登記異動那邊還 toast「已登記試飲瓶」，兩邊合起來就是「以為登了、其實沒有」。
+   這旗標＝「這張單上有還沒留底的試飲瓶」：關視窗前先確認，產生（留底）後才清掉。 */
+let CONSIGN_VF_PENDING_TASTER=false;
 
 function ensureConsignVerifyOverlay(){
   if(document.getElementById('cs-vf-overlay')) return;
@@ -616,20 +621,30 @@ function ensureConsignVerifyOverlay(){
     <div class="v2h"><span>寄售鋪貨・出貨驗收單</span><button class="v2x" onclick="closeConsignVerifyForm()">✕</button></div>
     <div id="cs-vf-body"></div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:16px">
-      <button class="btn btn-g" onclick="closeConsignVerifyForm()">跳過，不產生</button>
+      <button class="btn btn-g" id="cs-vf-skip" onclick="closeConsignVerifyForm()">跳過，不產生</button>
       <button class="btn btn-g" onclick="previewConsignVerifyPdf()"><i class="ti ti-eye"></i>預覽</button>
       <button class="btn btn-gold" onclick="generateConsignVerifyPdf()"><i class="ti ti-file-download"></i>產生驗收單</button>
     </div>
   </div>`;
   document.body.appendChild(ov);
 }
-function closeConsignVerifyForm(){ CONSIGN_VF_EDIT_ID=null; const o=document.getElementById('cs-vf-overlay'); if(o) o.style.display='none'; }
+/* force=true＝程式自己關（產生完留底之後），不再問；使用者按 ✕／跳過 → 有還沒留底的試飲瓶就先確認 */
+function closeConsignVerifyForm(force){
+  if(!force && CONSIGN_VF_PENDING_TASTER){
+    const n=((CONSIGN_VF_DATA&&CONSIGN_VF_DATA.rows)||[]).filter(r=>r.taster).length;
+    if(!confirm('這張單上有 '+n+' 款試飲瓶，試飲瓶只記在驗收單留底裡——現在關掉，這些試飲瓶就「沒有」登記到任何地方（試飲瓶記錄查不到）。\n\n確定要關掉不產生嗎？')) return;
+  }
+  CONSIGN_VF_PENDING_TASTER=false;
+  CONSIGN_VF_EDIT_ID=null; const o=document.getElementById('cs-vf-overlay'); if(o) o.style.display='none';
+}
 
 /* data={no, client, shipDate, handler, note, rows:[{name,vol,qty}]}；editId 有值＝編輯既有留底（產生後取代舊筆） */
 function openConsignVerifyForm(data, editId){
   vfKeyFor(data&&data.no);   // 複檢 #2-1：先把 QR 驗證碼抓回來
   CONSIGN_VF_DATA={ ...data, rows:(data.rows||[]).map(r=>({...r})) };
   CONSIGN_VF_EDIT_ID=editId||null;
+  // 新開（不是從留底重開）且有試飲瓶列 → 關窗前要確認（B7）
+  CONSIGN_VF_PENDING_TASTER=!editId && CONSIGN_VF_DATA.rows.some(r=>!!r.taster);
   ensureConsignVerifyOverlay();
   buildConsignVerifyModal();
   document.getElementById('cs-vf-overlay').style.display='flex';
@@ -638,6 +653,8 @@ function buildConsignVerifyModal(){
   const d=CONSIGN_VF_DATA; if(!d) return;
   const ttl=document.querySelector('#cs-vf-overlay .v2h span');
   if(ttl) ttl.textContent = CONSIGN_VF_EDIT_ID ? '編輯驗收單（產生後取代舊留底）' : '寄售鋪貨・出貨驗收單';
+  const skip=document.getElementById('cs-vf-skip');
+  if(skip) skip.textContent = CONSIGN_VF_PENDING_TASTER ? '跳過，不產生（試飲瓶不會登記）' : '跳過，不產生';
   const inS='border:1px solid var(--bd);border-radius:5px;padding:5px 7px;font-size:12px;font-family:inherit;width:100%';
   const rowsH=d.rows.map((r,i)=>`<tr${r.taster?' style="background:#FBF8F1"':''}>
     <td><input style="${inS}" data-i="${i}" data-k="name" class="cvfi" value="${escAttr(r.name||'')}">${r.taster?'<div style="font-size:10.5px;color:#7A5A1E;margin-top:3px">試飲瓶（免費贈送，不計價／不進庫存）</div>':''}</td>
@@ -756,9 +773,11 @@ function previewConsignVerifyPdf(){
 function generateConsignVerifyPdf(){
   const d=csVfCollect(); if(!d||!d.rows.length){ toast('請至少填一項酒款與數量','err'); return; }
   if(!vfKeyReady(d.no)) return;   // 複檢 #2-1：沒有 QR 驗證碼就先別印
+  // 沒登入＝留不了底：只提示（saveConsignVerifyFormRecord 內會 toast），視窗留著讓人重新登入再按（B7）
+  if(!AUTH_TOKEN){ saveConsignVerifyFormRecord(d); return; }
   // 複檢 2026-08-13 #1-3：留底先存（試飲瓶只有留底查得到，彈窗被擋不能讓它整批消失）
   saveConsignVerifyFormRecord(d);
-  closeConsignVerifyForm();
+  closeConsignVerifyForm(true);
   const w=window.open('','_blank');
   if(!w){ toast('留底已存好了，但列印視窗被瀏覽器擋掉。請允許彈出視窗後，到「驗收單留底」重印這一筆','err'); return; }
   w.document.open(); w.document.write(buildConsignVerifyDocHtml(d)); w.document.close();
@@ -773,6 +792,7 @@ function saveConsignVerifyFormRecord(d){
       toast('⚠ 目前沒有登入（可能是登入過期了），這張寄售驗收單「沒有」留底：試飲瓶紀錄、驗收管理都不會記到。請重新登入後再產生一次','err');
       return;
     }
+    CONSIGN_VF_PENDING_TASTER=false;   // 留底要送出了，關窗不必再問（B7）
     const editId=CONSIGN_VF_EDIT_ID; CONSIGN_VF_EDIT_ID=null;
     const record={ no:d.no, lot:'', shipDate:d.shipDate, pm:d.handler||'', boxes:'', client:d.client,
       // taster 一起存進 items_json，之後從留底編輯這張單時「試飲」標示不會掉

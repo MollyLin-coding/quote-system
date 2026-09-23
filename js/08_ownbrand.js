@@ -185,9 +185,101 @@ async function initConsignPage(force){
   // 公版酒資料與寄售客戶同時要（以前是一個等一個，等於兩倍時間）
   await Promise.all([
     loadOwnbrandData(force).catch(()=>{}),
-    loadConsignCustomers(force)   // 2026-08-28 下午：客戶寄倉已獨立成頁，改由 gotoPage('storage') 自己載
+    loadConsignCustomers(force),   // 2026-08-28 下午：客戶寄倉已獨立成頁，改由 gotoPage('storage') 自己載
+    csFxLoad(force).catch(()=>{})  // 2026-09-23：廠務經銷商對照（走讀取快取；廠務沒設定就靜靜略過）
   ]);
+  csFxRenderStatus();
 }
+/* ============================================================
+   2026-09-23 寄售 × 廠務（Molly 決議「以廠務為主，報價系統自動跟」）
+   廠務 APP「經銷商寄售」的進貨／售出／退貨／盤點由後端 factoryConsignSync 每小時同步進 consign_ledger
+   （note 開頭帶 [FXC:<廠務異動ID>|<廠務訂單#批次>]）。這裡只做：
+     ・「同步廠務」鈕（手動立刻同步＋摘要）與狀態列（最近同步時間、沒對到的經銷商／酒款提醒）
+     ・客戶設定多一格「對應廠務經銷商」（存進 factory_map kind=consign_client；後端也會用名字自動配）
+     ・登記異動視窗：已連結的客戶提醒「進貨／售出／退貨不用在這裡登」（提醒不硬擋）
+     ・明細：廠務同步進來的列標「廠務」、藏掉標記本文；同一張廠務訂單的鋪貨當一批（一顆驗收單鈕）
+   ============================================================ */
+let CS_FX={ configured:false, loaded:false, dealers:[], map:{}, lastSync:'', since:'', lastResult:null };
+const CS_FX_TAG_RE=/^\s*\[FXC:([^\]|\s]+)(?:\|([^\]#]*)#?([^\]]*))?\]\s*/;
+function csFxTag(note){ const m=String(note||'').match(CS_FX_TAG_RE); return m?{id:m[1], orderNo:m[2]||'', seq:m[3]||''}:null; }
+function csFxNoteBody(note){ return String(note||'').replace(CS_FX_TAG_RE,''); }
+async function csFxLoad(force){
+  if(!AUTH_TOKEN) return;
+  const d=await readCall({action:'getFactoryConsignDealers', token:AUTH_TOKEN}, force);
+  if(!d||!d.ok) throw new Error((d&&d.error)||'讀取廠務失敗');
+  CS_FX.configured=!!d.configured; CS_FX.loaded=true;
+  CS_FX.dealers=d.dealers||[]; CS_FX.since=d.since||'';
+  if(String(d.lastSync||'')>String(CS_FX.lastSync||'')) CS_FX.lastSync=d.lastSync;   // 手動同步剛回來的時間比讀取快取新時保留
+  CS_FX.map={}; (d.map||[]).forEach(m=>{ if(m.qs_name&&m.factory_name) CS_FX.map[String(m.qs_name).trim()]=String(m.factory_name).trim(); });
+}
+function csFxDealerOf(cid){ return CS_FX.map[String(cid||'').trim()]||''; }
+function csFxDealerLabel(key){ const d=CS_FX.dealers.find(x=>String(x.key)===String(key)); return d?(d.label||d.key):String(key||'').replace(/^經銷商[－-]/,''); }
+function csFxRenderStatus(){
+  const el=document.getElementById('cs-fxstatus'); if(!el) return;
+  const btn=document.getElementById('cs-fxsync-btn');
+  if(!CS_FX.loaded||!CS_FX.configured){ el.innerHTML=''; if(btn) btn.style.display=CS_FX.loaded?'none':''; return; }
+  if(btn) btn.style.display='';
+  const parts=['🔗 廠務寄售帳每小時自動同步'+(CS_FX.lastSync?'，最近一次 '+escHtml(String(CS_FX.lastSync).replace('T',' ').slice(0,16)):'（還沒同步過）')];
+  const linked=Object.keys(CS_FX.map).length;
+  const unlinked=CS_FX.dealers.filter(d=>d.enabled!==false && !Object.keys(CS_FX.map).some(k=>CS_FX.map[k]===String(d.key)));
+  if(unlinked.length) parts.push('⚠ 廠務有 '+unlinked.length+' 家經銷商還沒對到這裡的客戶：'+escHtml(unlinked.map(d=>d.label||d.key).join('、'))+'（到「客戶設定」指定，或按「同步廠務」讓系統用名字自動配）');
+  else if(linked) parts.push('已對應 '+linked+' 家經銷商');
+  const r=CS_FX.lastResult;
+  if(r){
+    const ud=Object.keys(r.unmappedDealers||{}), up=Object.keys(r.unmappedProducts||{}), amb=r.ambiguous||{};
+    if(up.length) parts.push('⚠ 廠務有酒款對不到公版酒，這些異動先沒進帳：'+escHtml(up.join('、'))+'（公版酒主檔要有同名同容量的酒）');
+    Object.keys(amb).forEach(k=>parts.push('⚠ '+escHtml(csFxDealerLabel(k))+'：'+escHtml(amb[k])));
+    if(ud.length&&!Object.keys(amb).length) parts.push('⚠ 這幾家的異動先沒進帳：'+escHtml(ud.join('、')));
+  }
+  el.innerHTML=parts.join('<br>');
+}
+async function csFxSyncNow(btn){
+  if(!AUTH_TOKEN){ toast('請先登入','err'); return; }
+  try{
+    if(btn) btnBusy(btn, true, '同步中…');
+    const r=await apiCall({action:'factoryConsignSync', token:AUTH_TOKEN});
+    if(!r||!r.ok) throw new Error((r&&r.error)||'同步失敗');
+    CS_FX.lastResult=r; CS_FX.lastSync=r.at||CS_FX.lastSync;
+    const parts=[];
+    if(r.inserted&&r.inserted.length) parts.push('新增 '+r.inserted.length+' 筆廠務異動');
+    if(r.linked&&r.linked.length) parts.push('有 '+r.linked.length+' 筆跟妳手動登過的對上了（只補標記、沒重複）');
+    if(r.autoMapped&&r.autoMapped.length) parts.push('自動對應了 '+r.autoMapped.length+' 家經銷商');
+    const ud=Object.keys(r.unmappedDealers||{}), up=Object.keys(r.unmappedProducts||{}), amb=Object.keys(r.ambiguous||{});
+    if(amb.length) parts.push('⚠ '+amb.length+' 家經銷商沒辦法自動對應（看下方說明）');
+    else if(ud.length) parts.push('⚠ '+ud.length+' 家經銷商還沒對到客戶，先沒進帳');
+    if(up.length) parts.push('⚠ '+up.length+' 款酒對不到公版酒，先沒進帳');
+    if(r.skipped&&r.skipped.length) parts.push('略過 '+r.skipped.length+' 筆：'+r.skipped.slice(0,2).join('；'));
+    toast(parts.length?parts.join('，'):'已跟廠務同步，沒有新異動', (amb.length||up.length||ud.length)?'err':'ok');
+    await csFxLoad(true).catch(()=>{});   // 自動配對可能寫了新對照
+    csFxRenderStatus();
+    if(CS_CUR){ csClearMonthly(); loadConsignInventory(); loadConsignLedger(); }
+  }catch(e){ toast(e.message||'同步失敗','err'); }
+  finally{ if(btn) btnBusy(btn, false); }
+}
+/* 客戶設定裡的「對應廠務經銷商」下拉 */
+async function csFxFillDealerSelect(cid){
+  const sel=document.getElementById('cs-f-fxdealer'), hint=document.getElementById('cs-f-fxdealer-hint'); if(!sel) return;
+  if(!CS_FX.loaded){ try{ await csFxLoad(false); }catch(_){} }
+  if(!CS_FX.configured){ sel.closest('.fl').style.display='none'; return; }
+  sel.closest('.fl').style.display='';
+  const cur=csFxDealerOf(cid);
+  sel.innerHTML='<option value="">（不連結廠務）</option>'+CS_FX.dealers.map(d=>{
+    const takenBy=Object.keys(CS_FX.map).find(k=>CS_FX.map[k]===String(d.key)&&k!==String(cid||''));
+    const tc=takenBy?(CS_CUSTOMERS.find(c=>String(c.customer_id)===takenBy)||{}).name||takenBy:'';
+    return `<option value="${escAttr(d.key)}"${String(d.key)===cur?' selected':''}${takenBy?' disabled':''}>${escHtml(d.label||d.key)}${d.enabled===false?'（廠務已停用）':''}${takenBy?'（已對到 '+escHtml(tc)+'）':''}</option>`;
+  }).join('');
+  if(hint) hint.textContent=cur?'廠務的進貨／售出／退貨會自動進這位客戶的寄售帳；換成「不連結」就停止同步（已同步的紀錄留著）。':'留白＝不連結（系統也會用名字自動配，配得到就自動填上）';
+}
+async function csFxSaveDealerMap(cid){
+  const sel=document.getElementById('cs-f-fxdealer'); if(!sel||!CS_FX.configured||sel.closest('.fl').style.display==='none') return;
+  const val=String(sel.value||'').trim(), cur=csFxDealerOf(cid);
+  if(val===cur) return;
+  const d=await apiCall({action:'saveFactoryMap', token:AUTH_TOKEN, rows:[{kind:'consign_client', qs_name:String(cid), factory_name:val, note:val?'寄售頁客戶設定指定':''}]});
+  if(!d||!d.ok) throw new Error((d&&d.error)||'儲存廠務對應失敗');
+  if(val) CS_FX.map[String(cid)]=val; else delete CS_FX.map[String(cid)];
+  csFxRenderStatus();
+}
+
 async function loadConsignCustomers(force){
   const sel=document.getElementById('cs-customer'); if(!sel) return;
   try{
@@ -216,7 +308,9 @@ function onSelectConsignCustomer(){
   const c=curConsignCustomer();
   if(info&&c){
     const disc=(parseFloat(c.default_discount)||0);
-    info.innerHTML='ℹ️ 預設折數 '+(disc?((disc*10).toFixed(disc*10%1?1:0)+'折'):'—')+'　·　每月請款日 '+(c.billing_day||'—')+'　·　'+(String(c.active||'Y').toUpperCase()==='N'?'已停用':'啟用中');
+    const fxk=csFxDealerOf(CS_CUR);
+    info.innerHTML='ℹ️ 預設折數 '+(disc?((disc*10).toFixed(disc*10%1?1:0)+'折'):'—')+'　·　每月請款日 '+(c.billing_day||'—')+'　·　'+(String(c.active||'Y').toUpperCase()==='N'?'已停用':'啟用中')
+      +(fxk?'　·　🔗 已連結廠務「'+escHtml(csFxDealerLabel(fxk))+'」（進貨／售出／退貨自動同步）':'');
   }
   box.style.display='block';
   if(!document.getElementById('cs-month').value){ const n=new Date(); document.getElementById('cs-month').value=n.getFullYear()+'-'+s2(n.getMonth()+1); }
@@ -262,7 +356,31 @@ async function loadConsignInventory(){
    單號從「那批異動的建檔時間」推回去（CS-<客戶>-<YYYYMMDDHHMMSS>），所以同一批不管補開幾次
    都是同一個單號；已經有留底的那批會顯示「查看驗收單」，開起來走取代模式，不會多長一筆。 */
 let CS_LED_BATCHES=[];      // 這位客戶的每一批鋪貨：{no, date, note, rows:[{name,vol,qty}]}
-let CS_LED_VF={};           // CS- 單號 -> 已存在的驗收單留底 id
+let CS_LED_VF={};           // 批次單號(csLedBatchNo) -> {no:留底實際單號, id:留底id}
+/* 複檢 2026-09-11 B6：2026-09-23 之前產生的留底，單號是前端當下時間（比帳上 created_at 晚幾秒），
+   跟 csLedBatchNo 推出來的對不上。這裡多一層「同客戶、同一天、時間差 15 分鐘內、最接近」的配對，
+   舊留底才認得回來；單號完全相同的一律優先，一張留底只配一批。
+   csLedAssignVf(records, nos) → { 批次單號: {no, id} }（沒配到的批次不會有 key）。 */
+function csVfStamp(no){ const m=String(no||'').match(/^CS-([A-Za-z0-9]*)-(\d{14})$/); return m?{cid:m[1],ts:m[2]}:null; }
+function csVfStampSec(ts){ return Date.UTC(+ts.slice(0,4),+ts.slice(4,6)-1,+ts.slice(6,8),+ts.slice(8,10),+ts.slice(10,12),+ts.slice(12,14))/1000; }
+function csLedAssignVf(records, nos){
+  const list=(records||[]).filter(f=>String(f.no||'').indexOf('CS-')===0)
+    .map(f=>({no:String(f.no||'').trim(), id:String(f.id), st:csVfStamp(String(f.no||'').trim())}));
+  const out={}, used={};
+  (nos||[]).forEach(no=>{ if(out[no]) return; const e=list.find(f=>f.no===no&&!used[f.no]); if(e){ out[no]={no:e.no,id:e.id}; used[e.no]=1; } });
+  const pend=(nos||[]).filter(no=>!out[no]).map(no=>({no, st:csVfStamp(no)})).filter(x=>x.st);
+  list.forEach(f=>{
+    if(used[f.no]||!f.st) return;
+    let best=null, bestDiff=Infinity;
+    pend.forEach(x=>{
+      if(out[x.no]||x.st.cid!==f.st.cid||x.st.ts.slice(0,8)!==f.st.ts.slice(0,8)) return;
+      const diff=Math.abs(csVfStampSec(x.st.ts)-csVfStampSec(f.st.ts));
+      if(diff<=15*60 && diff<bestDiff){ best=x; bestDiff=diff; }
+    });
+    if(best){ out[best.no]={no:f.no,id:f.id}; used[f.no]=1; }
+  });
+  return out;
+}
 function csLedBatchNo(cid, r){
   const ts=String(r.created_at||'').replace(/[^0-9]/g,'').slice(0,14)
         || (String(r.date||'').replace(/[^0-9]/g,'').slice(0,8)+'000000');
@@ -278,9 +396,10 @@ function csLedRowItem(r){
 function csLedMarkVerified(){
   if(!AUTH_TOKEN) return;
   readCall({action:'listVerifyForms', token:AUTH_TOKEN, filters:{}}).then(d=>{
-    CS_LED_VF={};
-    ((d&&d.records)||[]).forEach(f=>{ const n=String(f.no||'').trim(); if(n.indexOf('CS-')===0) CS_LED_VF[n]=String(f.id); });
-    document.querySelectorAll('#cs-ledger-body .cs-vfbtn').forEach(b=>{
+    // 每一批（每顆鈕）找自己的留底：單號相同優先，找不到才退回「同一天最接近」的舊留底；一張留底只配一批
+    const btns=Array.from(document.querySelectorAll('#cs-ledger-body .cs-vfbtn'));
+    CS_LED_VF=csLedAssignVf((d&&d.records)||[], btns.map(b=>b.dataset.no));
+    btns.forEach(b=>{
       const has=!!CS_LED_VF[b.dataset.no];
       b.textContent=has?'查看驗收單':'補開驗收單';
       b.classList.toggle('primary', !has);
@@ -292,10 +411,13 @@ async function csReopenVerify(i){
   const b=CS_LED_BATCHES[+i];
   if(!b||!b.rows||!b.rows.length){ toast('這筆明細已經重新載入過，請重選一次客戶再試','err'); return; }
   const c=curConsignCustomer();
-  let editId=null, rows=b.rows, shipDate=b.date, handler='', note=b.note;
+  let editId=null, rows=b.rows, shipDate=b.date, handler='', note=b.note, hit=null;
   try{
     const d=await readCall({action:'listVerifyForms', token:AUTH_TOKEN, filters:{}});
-    const f=((d&&d.records)||[]).find(x=>String(x.no||'').trim()===b.no);
+    // 用「最新的留底清單」對全部批次重新配對一次（跟明細鈕同一套算法、同樣的輸入＝同樣的結果；
+    // 不能只算這一批，會把別批的舊留底搶過來）
+    hit=csLedAssignVf((d&&d.records)||[], CS_LED_BATCHES.map(x=>x.no))[b.no]||null;
+    const f=hit?((d&&d.records)||[]).find(x=>String(x.id)===hit.id):null;
     if(f){
       editId=String(f.id);
       const items=Array.isArray(f.items)?f.items:parseJsonSafe(f.items_json,[]);
@@ -309,7 +431,9 @@ async function csReopenVerify(i){
       toast('這批已經有驗收單留底，已帶回舊的那一張；只要列印按「預覽」就好，按「產生驗收單」會用新版取代舊留底','ok');
     }
   }catch(_){}
-  openConsignVerifyForm({ no:b.no, client:(c&&c.name)||CS_CUR, shipDate, handler, note, rows }, editId);
+  // 舊留底單號跟推算單號不同時，沿用舊留底的單號（紙本 QR 印的是那個號，換號會掃不到）
+  const useNo=(editId&&hit&&hit.no)?hit.no:b.no;
+  openConsignVerifyForm({ no:useNo, client:(c&&c.name)||CS_CUR, shipDate, handler, note, rows }, editId);
 }
 async function loadConsignLedger(){
   const body=document.getElementById('cs-ledger-body');
@@ -322,30 +446,39 @@ async function loadConsignLedger(){
     let rows=(d.rows||[]).filter(r=>(!r.customer_id||String(r.customer_id)===String(CS_CUR)) && String(r.type||'')!=='deposit_refund');
     rows.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
     if(!rows.length){ body.innerHTML='<tr><td colspan="7" class="rec-empty">尚無異動明細</td></tr>'; CS_LED_BATCHES=[]; return; }
-    // 先把「鋪貨/補貨」照建檔時間分批（一次登記多款＝同一批＝同一張驗收單）
-    CS_LED_BATCHES=[]; const bidx={};
+    // 先把「鋪貨/補貨」分批（一次登記多款＝同一批＝同一張驗收單）：
+    //   手動登的＝同 created_at；廠務同步進來的（[FXC:…|訂單#批次]）＝同一張廠務訂單一批（2026-09-23），
+    //   單號一律用該批「最早」的 created_at 推（csLedBatchNo），同一批不管重算幾次都一樣。
+    CS_LED_BATCHES=[]; const bidx={}; const gkeyOf={};
     rows.forEach(r=>{
       if(String(r.type||'')!=='in') return;
-      const no=csLedBatchNo(CS_CUR, r);
-      if(bidx[no]==null){ bidx[no]=CS_LED_BATCHES.length;
-        CS_LED_BATCHES.push({ no, date:String(r.date||'').slice(0,10), note:r.note||'', rows:[] }); }
-      CS_LED_BATCHES[bidx[no]].rows.push(csLedRowItem(r));
+      const fx=csFxTag(r.note);
+      const gkey=(fx&&fx.orderNo)?('FXO|'+fx.orderNo):('TS|'+String(r.created_at||r.date||''));
+      if(bidx[gkey]==null){ bidx[gkey]=CS_LED_BATCHES.length;
+        CS_LED_BATCHES.push({ no:csLedBatchNo(CS_CUR, r), date:String(r.date||'').slice(0,10), note:csFxNoteBody(r.note), rows:[], _ca:String(r.created_at||''), fxOrder:fx?fx.orderNo:'' }); }
+      const b=CS_LED_BATCHES[bidx[gkey]];
+      if(String(r.created_at||'')<b._ca||!b._ca){ b._ca=String(r.created_at||''); b.no=csLedBatchNo(CS_CUR, r); if(String(r.date||'').slice(0,10)<b.date) b.date=String(r.date||'').slice(0,10); }
+      b.rows.push(csLedRowItem(r));
+      gkeyOf[String(r.movement_id||'')+'|'+String(r.sku_id||'')+'|'+String(r.created_at||'')]=gkey;
     });
     const shown={};
     body.innerHTML=rows.map(r=>{
       const p=ownbrandBySku(r.sku_id);
       const nm=p?`${p.name}（${p.volume}）`:r.sku_id;
       const up=(r.unit_price!=null&&r.unit_price!=='')?money(r.unit_price):'—';
+      const fx=csFxTag(r.note);
       let act='';
       if(String(r.type||'')==='in'){
-        const no=csLedBatchNo(CS_CUR, r);
+        const gkey=gkeyOf[String(r.movement_id||'')+'|'+String(r.sku_id||'')+'|'+String(r.created_at||'')];
+        const b=CS_LED_BATCHES[bidx[gkey]];
         // 一批只在第一列給一顆鈕（同一批多款共用同一張驗收單）
-        if(!shown[no]){ shown[no]=1;
-          act=`<button class="rec-act-btn cs-vfbtn" data-b="${escAttr(String(bidx[no]))}" data-no="${escAttr(no)}" onclick="csReopenVerify(this.dataset.b)">驗收單</button>`; }
+        if(b&&!shown[gkey]){ shown[gkey]=1;
+          act=`<button class="rec-act-btn cs-vfbtn" data-b="${escAttr(String(bidx[gkey]))}" data-no="${escAttr(b.no)}" onclick="csReopenVerify(this.dataset.b)">驗收單</button>`; }
       }
+      const noteH=(fx?`<span class="cs-fxtag" title="由廠務 APP 同步（${escAttr(fx.id)}）" style="display:inline-block;font-size:10.5px;font-weight:700;color:#7A5A1E;background:#F3ECDD;border-radius:4px;padding:1px 6px;margin-right:4px">廠務${fx.orderNo?' '+escHtml(fx.orderNo):''}</span>`:'')+escHtml(csFxNoteBody(r.note));
       return `<tr><td class="mc-main">${escHtml(r.date||'')}</td><td data-l="類型">${escHtml(CS_TYPE_LABEL[r.type]||r.type||'')}</td>
         <td data-l="公版酒">${escHtml(nm)}</td><td data-l="數量" style="text-align:right">${(parseFloat(r.qty)||0).toLocaleString()}</td>
-        <td data-l="折後單價" style="text-align:right">${up}</td><td data-l="備註">${escHtml(r.note||'')}</td>
+        <td data-l="折後單價" style="text-align:right">${up}</td><td data-l="備註">${noteH}</td>
         <td class="rec-actions" data-l="操作">${act}</td></tr>`;
     }).join('');
     csLedMarkVerified();
@@ -386,6 +519,7 @@ function openConsignCustomerEdit(id){
   const w=g('cs-exc-wrap');
   if(editing){ w.style.display='block'; populateConsignSkuSelect('cs-exc-sku'); renderConsignExceptions(id); }
   else { w.style.display='none'; }
+  csFxFillDealerSelect(editing?id:'');   // 2026-09-23 對應廠務經銷商（背景載，載好再填）
   g('cs-cus-overlay').style.display='flex';
 }
 function closeConsignCustomerEdit(){ document.getElementById('cs-cus-overlay').style.display='none'; }
@@ -454,6 +588,8 @@ async function saveConsignCustomerForm(){
   try{
     const d=await apiCall({action:'saveConsignCustomer', token:AUTH_TOKEN, customer, ...customer});
     if(!d.ok) throw new Error(d.error||'儲存失敗');
+    // 2026-09-23：對應廠務經銷商存進 factory_map（失敗只提示，客戶本身已存好）
+    try{ await csFxSaveDealerMap(id); }catch(e){ toast('客戶已存，但廠務對應沒存成功：'+(e.message||''),'err'); }
     toast('已儲存客戶','ok');
     await loadConsignCustomers(true);
     document.getElementById('cs-customer').value=id; CS_CUR=id;
@@ -478,6 +614,9 @@ function openConsignMove(){
   { const h=document.getElementById('cs-m-genvf-hint'); if(h) h.style.display='none'; }
   CS_MOVE_ROWID=0; csMoveItems=[]; csAddMoveRow(); csAddMoveRow();   // 預留兩列，方便直接一次填多款
   if(!OWNBRAND_PRODUCTS || !OWNBRAND_PRODUCTS.length){ loadOwnbrandData().then(renderCsMoveItems).catch(()=>{}); }
+  // 2026-09-23：已連結廠務的客戶，進貨／售出／退貨都由廠務同步，這裡提醒不硬擋（試飲瓶、盤點調整還是要在這登）
+  { const b=document.getElementById('cs-m-fxbanner'); const fxk=csFxDealerOf(CS_CUR);
+    if(b){ if(fxk){ b.innerHTML='🔗 這位客戶已連結廠務「'+escHtml(csFxDealerLabel(fxk))+'」：鋪貨／銷售／退貨會從廠務自動同步進來，<b>不用在這裡再登一次</b>（會重複計庫存）。這裡只登「試飲瓶」或廠務沒有的「盤點調整」。'; b.style.display='block'; } else b.style.display='none'; } }
   onConsignMoveType();
   document.getElementById('cs-move-overlay').style.display='flex';
 }
@@ -615,15 +754,19 @@ async function saveConsignMove(){
     if(partial.length){ toast('有列只填了一半（公版酒或數量缺一個），請補齊或用 ✕ 刪掉該列','err'); _csMoveSaving=false; btnBusy('cs-mv-save',false); return; }
     if(!valid.length && !tasterOnly.length){ toast('請至少填一款酒的公版酒與數量，或勾選「附試飲瓶」單獨贈送','err'); _csMoveSaving=false; btnBusy('cs-mv-save',false); return; }
     const movements=valid.map(r=>({ date, customer_id:CS_CUR, sku_id:r.sku, type:'in', qty:r.qty, note }));
+    let savedMv=[];   // 後端寫進帳的列（含 created_at），驗收單單號要從這裡推
     try{
       if(movements.length){
         const d=await apiCall({action:'addConsignMovements', token:AUTH_TOKEN, movements});
         if(!d.ok) throw new Error(d.error||'儲存失敗');
+        savedMv=Array.isArray(d.movements)?d.movements:[];
       }
       const tasterExtra=valid.filter(r=>r.taster).length + tasterOnly.length;
+      /* 複檢 2026-09-11 B7：試飲瓶只記在驗收單留底裡——帳還沒登、要按「產生驗收單」才算完成，
+         這裡不能說「已登記」讓人以為關掉視窗也沒關係。 */
       toast(valid.length
-        ? ('已登記鋪貨（共 '+valid.length+' 款）'+(tasterExtra?'，另加 '+tasterExtra+' 款試飲瓶':''))
-        : ('已登記試飲瓶（共 '+tasterOnly.length+' 款，不影響庫存）'), 'ok');
+        ? ('已登記鋪貨（共 '+valid.length+' 款）'+(tasterExtra?'，另加 '+tasterExtra+' 款試飲瓶（要按「產生驗收單」才會留底）':''))
+        : ('試飲瓶（共 '+tasterOnly.length+' 款）不進庫存帳，請在跳出的驗收單按「產生驗收單」才算登記完成'), tasterExtra&&!valid.length?'err':'ok');
       const genvf=document.getElementById('cs-m-genvf');
       // 只要有任何試飲瓶（鋪貨列附加或單獨列），驗收單留底是唯一查得到「送了幾支、何時送」的地方，
       // 不管使用者有沒有勾，一律強制產生（畫面上的勾選已經被 csMoveGenvfLock 鎖住，這裡是後端保險）。
@@ -646,8 +789,11 @@ async function saveConsignMove(){
           const p=ownbrandBySku(r.sku);
           rowsForVf.push({ name:p?p.name:r.sku, vol:r.tasterVol, qty:r.tasterQty, taster:true });
         });
+        /* 複檢 2026-09-11 B6：單號改從「後端寫進帳的建檔時間」推（csLedBatchNo），
+           跟進出貨明細那顆「查看／補開驗收單」算出來的一模一樣；原本用前端當下時間（csGenVerifyNo）
+           永遠差幾秒，明細那邊認不出已有留底 → 再補開一次就多一張。純試飲瓶沒有寫帳才退回當下時間。 */
         openConsignVerifyForm({
-          no: csGenVerifyNo(CS_CUR),
+          no: (savedMv.length&&savedMv[0].created_at) ? csLedBatchNo(CS_CUR, savedMv[0]) : csGenVerifyNo(CS_CUR),
           client: (c&&c.name)||CS_CUR,
           shipDate: date,
           handler: handler,
