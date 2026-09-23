@@ -301,15 +301,25 @@ function tdShipDueRows(list){
   out.sort((a,b)=>(b.overdue_days||0)-(a.overdue_days||0));
   return out;
 }
+/* 只留訂單追蹤裡找得到的單號（2026-09-23）。ORDERS_CACHE 還沒載好時不過濾，免得整片空白。 */
+function tdKnownOrderFilter(){
+  if(!Array.isArray(ORDERS_CACHE) || !ORDERS_CACHE.length) return ()=>true;
+  const ok={}; ORDERS_CACHE.forEach(o=>{ ok[String(o.no)]=1; });
+  return r=>!!ok[String((r&&r.quote_no)||'')];
+}
 function renderToday(){
   const wrap = document.getElementById('td-body'); if(!wrap) return;
   const d = TD_DATA;
   if(!d){ wrap.innerHTML = tdSkeletonHtml(); return; }
 
-  const shipDue   = tdShipDueRows(d.ship_due || []);
-  const finalDue  = d.final_due  || [];
-  const noScan    = d.no_scan    || [];
-  const noInvoice = d.no_invoice || [];
+  /* 2026-09-23 Molly：「今天／逾期要出貨」出現點進去找不到的單（20260728-04 報價單已刪除、20260817-01 報價單已不存在），
+     是 order_status 還留著那張單的進度列、digest 沒對報價單主表。訂單清單（ORDERS_CACHE）本來就排除已刪除／純報價，
+     有它就拿來過濾——只留訂單追蹤看得到的單；還沒載好就原樣顯示（載好後 shpRerenderSide_ 會重畫一次）。 */
+  const known = tdKnownOrderFilter();
+  const shipDue   = tdShipDueRows(d.ship_due || []).filter(known);
+  const finalDue  = (d.final_due  || []).filter(known);
+  const noScan    = (d.no_scan    || []).filter(known);
+  const noInvoice = (d.no_invoice || []).filter(known);
   // 「出貨：XXX」備忘（item_id 為 ship-單號）是舊版存單自動寫進行事曆的，
   // 跟上面的 🚚 出貨卡片重複，這裡不再列一次
   /* 複檢 2026-08-13 #2-5：行事曆設計上不開放給一般使用者（後端 listCalendarItems 是 owner-only），

@@ -624,7 +624,10 @@ function orderShipPoints(o){
        出完（ordSyncShippedFromVerify 填了主線實際日）就自動消失。 */
     const prog=(typeof ordShipProgress==='function')?ordShipProgress(no):null;
     const mEst=ymd(st.ship_date_est), mAct=ymd(st.ship_date_actual);
-    if(prog && mEst && !mAct && pts.every(x=>x.done)){
+    /* 2026-09-23：已結案／已取消（或填了結案日）的單不再長「尚餘 N 待出貨」——
+       20260701-01 Babyface 8/18 就結案了，但出貨紀錄沒補齊，今日待辦一直掛著「逾期 58 天」。 */
+    const ended=['closed','cancelled'].indexOf(String(st.status||''))>=0 || !!ymd(st.closed_at);
+    if(prog && mEst && !mAct && !ended && pts.every(x=>x.done)){
       const last=pts[pts.length-1];
       const lot=(last&&typeof shpLotOf==='function')?shpLotOf(last):'';
       pts.push({ date:mEst, est:mEst, act:'', done:false, batch:true, pending:true, no,
