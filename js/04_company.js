@@ -167,6 +167,8 @@ function onSelectCompany(quiet){
     } else if(sc){ sc.checked=true; }
     toggleShipSame('f');
   }
+  // 2026-09-23：公司檔沒填的聯絡人／電話／地址，從客戶主檔補上（主檔優先，見 11_customers.js cusFillFromCompany）
+  if(typeof cusFillFromCompany==='function') cusFillFromCompany(c);
   if(c.default_tax_mode==='inc'||c.default_tax_mode==='exc') setTaxMode(c.default_tax_mode);
   /* 付款條款（2026-09-01 複檢修正）：原本只在「欄位是空的」時才填，所以從 A 公司換到 B 公司時
      畫面上留的還是 A 的條款，會把甲客戶談好的付款條件印在乙客戶的報價單上。

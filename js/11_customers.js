@@ -509,6 +509,46 @@ function cusMatchCompany(m){
       || (inv && cs.find(c=>key(c.name)===inv))
       || null;
 }
+/* 2026-09-23 Molly：「從公司報價檔帶入，聯絡人沒有正確顯示」——公司檔（companies 分頁）沒填聯絡人，
+   聯絡人記在客戶主檔。選公司時也去找對應的客戶主檔補上（主檔優先，跟「選既有客戶」同一套規則）。
+   對應順序：品牌＝主檔名稱 → 公司名＝主檔名稱 → 發票抬頭 → 統編。
+   發票抬頭／統編只在主檔裡剛好一家時才算——雋荖廚房、Babyface、拾山共用同一家公司與統編，不能亂配。 */
+function cusMatchMasterForCompany(c){
+  if(!c || !Array.isArray(CUS_MASTER) || !CUS_MASTER.length) return null;
+  const key=s=>String(s||'').replace(/[\s　]+/g,'').toLowerCase();
+  const act=CUS_MASTER.filter(m=>String(m.active||'').toUpperCase()!=='N');
+  const uniq=a=>a.length===1?a[0]:null;
+  const br=key(c.brand), nm=key(c.name), tax=String(c.tax_id||'').trim();
+  return (br  && act.find(m=>key(m.name)===br))
+      || (nm  && act.find(m=>key(m.name)===nm))
+      || (nm  && uniq(act.filter(m=>key(m.invoice_title)===nm)))
+      || (tax && uniq(act.filter(m=>String(m.tax_id||'').trim()===tax)))
+      || null;
+}
+function cusApplyMasterToForm(m, onlyEmpty){
+  const set=(id,v)=>{ const e=document.getElementById(id);
+    if(!e || v==null || String(v).trim()==='') return;          // 主檔沒填的不動（保留公司檔帶進來的值）
+    if(onlyEmpty && String(e.value||'').trim()) return;          // 晚到的主檔資料不蓋掉已經有字的格子
+    e.value=String(v); };
+  set('f-con', m.contact); set('f-tax', m.tax_id); set('f-inv', m.invoice_title);
+  set('f-ph', m.phone); set('f-ad', m.address);
+  if(String(m.ship_contact||'').trim()||String(m.ship_phone||'').trim()||String(m.ship_address||'').trim()){
+    const same=document.getElementById('f-shipsame');
+    if(same && same.checked){ same.checked=false; if(typeof toggleShipSame==='function') toggleShipSame('f'); }
+    set('f-shipcon', m.ship_contact); set('f-shipph', m.ship_phone); set('f-shipad', m.ship_address);
+  }
+}
+function cusFillFromCompany(c){
+  if(!c) return;
+  const cid=String(c.company_id);
+  const go=onlyEmpty=>{
+    if(!SELECTED_COMPANY || String(SELECTED_COMPANY.company_id)!==cid) return;   // 等主檔的時候已經換了別家
+    const m=cusMatchMasterForCompany(c); if(!m) return;
+    cusApplyMasterToForm(m, onlyEmpty);
+  };
+  if(Array.isArray(CUS_MASTER) && CUS_MASTER.length) go(false);
+  else if(typeof cusEnsureMaster==='function') Promise.resolve(cusEnsureMaster()).then(()=>go(true)).catch(()=>{});
+}
 function pickQuoteCustomer(){
   const sel=document.getElementById('f-cuspick'); if(!sel) return;
   const m=cusMasterById(sel.value); if(!m) return;
