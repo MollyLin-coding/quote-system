@@ -77,6 +77,9 @@ function dgClientMap_() {
     data.forEach(function (r) {
       var no = String(r[MAIN_COLS.quoteNo - 1] || '').trim();
       if (!no) return;
+      // 2026-09-23：已刪除／純報價的單不算訂單（跟前端訂單追蹤同一條線），不放進對照表 → 下面會被濾掉
+      var qst = String(r[MAIN_COLS.status - 1] || '').trim();
+      if (qst === '已刪除' || qst === '純報價') return;
       map[no] = {
         client: dgClientShort_(r[MAIN_COLS.clientName - 1]),
         grand_total: dgNum_(r[MAIN_COLS.grandTotal - 1])
@@ -131,8 +134,13 @@ function buildTodayDigest_(opts) {
   catch (e) { clients = {}; warnings.push('客戶名稱對照讀取失敗：' + e.message); }
   var nameOf = function (no) { return (clients[String(no)] || {}).client || ''; };
 
+  /* 2026-09-23：order_status 殘留的單（報價單已刪除、或單號已不存在）不列。
+     對照表讀失敗／是空的就不過濾，免得整份待辦變空白。 */
+  var hasMap = Object.keys(clients).length > 0;
+  var alive = function (no) { return !hasMap || Object.prototype.hasOwnProperty.call(clients, String(no || '').trim()); };
+
   var orders = [];
-  try { orders = v2ReadAll_(SHEET_ORDER_STATUS, ORDER_STATUS_HEADERS) || []; }
+  try { orders = (v2ReadAll_(SHEET_ORDER_STATUS, ORDER_STATUS_HEADERS) || []).filter(function (o) { return alive(o.quote_no); }); }
   catch (e) { orders = []; warnings.push('訂單進度讀取失敗：' + e.message); }
 
   /* A. 逾期／今日該出貨：預計出貨日 ≦ 今天且尚未出貨 */
@@ -221,6 +229,7 @@ function buildTodayDigest_(opts) {
 
     Object.keys(shipped).forEach(function (no) {
       if (reported[no]) return;
+      if (!alive(no)) return;
       var base = dgYmd_(shipped[no].base);
       var days = base ? dgDiffDays_(base, today) : null;
       if (days === null || days >= DIGEST_NOREPORT_DAYS_) {
