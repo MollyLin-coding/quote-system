@@ -198,8 +198,15 @@ async function initConsignPage(force){
      ・客戶設定多一格「對應廠務經銷商」（存進 factory_map kind=consign_client；後端也會用名字自動配）
      ・登記異動視窗：已連結的客戶提醒「進貨／售出／退貨不用在這裡登」（提醒不硬擋）
      ・明細：廠務同步進來的列標「廠務」、藏掉標記本文；同一張廠務訂單的鋪貨當一批（一顆驗收單鈕）
+   2026-09-23 晚 複檢：
+     ・客戶設定可以選「不連結廠務」（存 '-'）：原本選不連結＝刪掉對照，下一輪同步又被名字自動配回去
+     ・客戶代碼重複（例：誠品生活跟島羽都是 4）→ 不給指定廠務經銷商（兩家的帳會混在一起），講明要先改代碼
+     ・同一張廠務訂單分兩趟出貨＝兩批（各一張驗收單）；廠務同步那批的驗收單備註不帶廠務內部摘要
+     ・廠務那邊已停用的經銷商：登記視窗不再說「不用在這裡登」
+     ・同步摘要多講「可能重複」「售出單價用報價系統補」兩種要她看一眼的狀況
    ============================================================ */
-let CS_FX={ configured:false, loaded:false, dealers:[], map:{}, lastSync:'', since:'', lastResult:null };
+let CS_FX={ configured:false, loaded:false, dealers:[], map:{}, blocked:{}, lastSync:'', since:'', lastResult:null };
+const CS_FX_NO_LINK='-';   // factory_map consign_client 的 factory_name＝'-'：Molly 選了「不連結廠務」（後端自動配對也會跳過）
 const CS_FX_TAG_RE=/^\s*\[FXC:([^\]|\s]+)(?:\|([^\]#]*)#?([^\]]*))?\]\s*/;
 function csFxTag(note){ const m=String(note||'').match(CS_FX_TAG_RE); return m?{id:m[1], orderNo:m[2]||'', seq:m[3]||''}:null; }
 function csFxNoteBody(note){ return String(note||'').replace(CS_FX_TAG_RE,''); }
@@ -210,8 +217,25 @@ async function csFxLoad(force){
   CS_FX.configured=!!d.configured; CS_FX.loaded=true;
   CS_FX.dealers=d.dealers||[]; CS_FX.since=d.since||'';
   if(String(d.lastSync||'')>String(CS_FX.lastSync||'')) CS_FX.lastSync=d.lastSync;   // 手動同步剛回來的時間比讀取快取新時保留
-  CS_FX.map={}; (d.map||[]).forEach(m=>{ if(m.qs_name&&m.factory_name) CS_FX.map[String(m.qs_name).trim()]=String(m.factory_name).trim(); });
+  if(d.lastResult && (!CS_FX.lastResult || String(d.lastResult.at||'')>=String(CS_FX.lastResult.at||''))) CS_FX.lastResult=d.lastResult;   // 每小時排程那次的摘要也看得到
+  CS_FX.map={}; CS_FX.blocked={};
+  (d.map||[]).forEach(m=>{
+    if(!m.qs_name||!m.factory_name) return;
+    const q=String(m.qs_name).trim(), f=String(m.factory_name).trim();
+    if(f===CS_FX_NO_LINK) CS_FX.blocked[q]=true; else CS_FX.map[q]=f;
+  });
 }
+// 名字比對鍵（跟後端 fxcNameKey_ 同一套：去經銷商前綴、去空白、小寫、參→叁、只留中英數）
+function csFxNameKey(s){ return String(s||'').replace(/^(OEM-|全客製-|換前標-|經銷商[－-]|經銷商)/,'').replace(/[\s　]+/g,'').toLowerCase().replace(/參/g,'叁').replace(/[^0-9a-z\u4e00-\u9fff]/g,''); }
+// 這家廠務經銷商是不是「對到 Molly 選了不連結的客戶」→ 不算沒對到、不提醒
+function csFxDealerBlocked(d){
+  const k1=csFxNameKey(d&&d.key), k2=csFxNameKey(d&&d.label);
+  return Object.keys(CS_FX.blocked).some(cid=>{
+    const c=(CS_CUSTOMERS||[]).find(x=>String(x.customer_id)===String(cid)); const ck=csFxNameKey(c&&c.name); if(!ck) return false;
+    return ck===k1||ck===k2||(ck.length>=2&&(k1.indexOf(ck)===0||k2.indexOf(ck)===0||ck.indexOf(k1)===0||ck.indexOf(k2)===0));
+  });
+}
+function csFxDupNames(cid){ return (CS_CUSTOMERS||[]).filter(c=>String(c.customer_id)===String(cid)).map(c=>c.name||c.customer_id); }
 function csFxDealerOf(cid){ return CS_FX.map[String(cid||'').trim()]||''; }
 function csFxDealerLabel(key){ const d=CS_FX.dealers.find(x=>String(x.key)===String(key)); return d?(d.label||d.key):String(key||'').replace(/^經銷商[－-]/,''); }
 function csFxRenderStatus(){
@@ -221,7 +245,7 @@ function csFxRenderStatus(){
   if(btn) btn.style.display='';
   const parts=['🔗 廠務寄售帳每小時自動同步'+(CS_FX.lastSync?'，最近一次 '+escHtml(String(CS_FX.lastSync).replace('T',' ').slice(0,16)):'（還沒同步過）')];
   const linked=Object.keys(CS_FX.map).length;
-  const unlinked=CS_FX.dealers.filter(d=>d.enabled!==false && !Object.keys(CS_FX.map).some(k=>CS_FX.map[k]===String(d.key)));
+  const unlinked=CS_FX.dealers.filter(d=>d.enabled!==false && !Object.keys(CS_FX.map).some(k=>CS_FX.map[k]===String(d.key)) && !csFxDealerBlocked(d));
   if(unlinked.length) parts.push('⚠ 廠務有 '+unlinked.length+' 家經銷商還沒對到這裡的客戶：'+escHtml(unlinked.map(d=>d.label||d.key).join('、'))+'（到「客戶設定」指定，或按「同步廠務」讓系統用名字自動配）');
   else if(linked) parts.push('已對應 '+linked+' 家經銷商');
   const r=CS_FX.lastResult;
@@ -230,6 +254,9 @@ function csFxRenderStatus(){
     if(up.length) parts.push('⚠ 廠務有酒款對不到公版酒，這些異動先沒進帳：'+escHtml(up.join('、'))+'（公版酒主檔要有同名同容量的酒）');
     Object.keys(amb).forEach(k=>parts.push('⚠ '+escHtml(csFxDealerLabel(k))+'：'+escHtml(amb[k])));
     if(ud.length&&!Object.keys(amb).length) parts.push('⚠ 這幾家的異動先沒進帳：'+escHtml(ud.join('、')));
+    const pd=r.possibleDup||[], pf=r.priceFallback||[];
+    if(pd.length) parts.push('⚠ 有 '+pd.length+' 筆廠務異動跟妳手動登過的很像、但分不出是哪一筆，所以照樣新增了：'+escHtml(pd.slice(0,3).join('、'))+'——請到明細看有沒有重複');
+    if(pf.length) parts.push('⚠ 有 '+pf.length+' 筆售出廠務沒填單價，已改用這裡的牌價×折數：'+escHtml(pf.slice(0,3).join('、')));
   }
   el.innerHTML=parts.join('<br>');
 }
@@ -238,6 +265,7 @@ async function csFxSyncNow(btn){
   try{
     if(btn) btnBusy(btn, true, '同步中…');
     const r=await apiCall({action:'factoryConsignSync', token:AUTH_TOKEN});
+    if(r&&r.busy){ toast('寄售同步正在進行中（每小時排程剛好在跑），等一下再按一次','ok'); await loadOwnbrandData(true).catch(()=>{}); return; }
     if(!r||!r.ok) throw new Error((r&&r.error)||'同步失敗');
     CS_FX.lastResult=r; CS_FX.lastSync=r.at||CS_FX.lastSync;
     const parts=[];
@@ -248,10 +276,15 @@ async function csFxSyncNow(btn){
     if(amb.length) parts.push('⚠ '+amb.length+' 家經銷商沒辦法自動對應（看下方說明）');
     else if(ud.length) parts.push('⚠ '+ud.length+' 家經銷商還沒對到客戶，先沒進帳');
     if(up.length) parts.push('⚠ '+up.length+' 款酒對不到公版酒，先沒進帳');
+    if(r.possibleDup&&r.possibleDup.length) parts.push('⚠ '+r.possibleDup.length+' 筆可能跟手動登的重複（看下方說明）');
+    if(r.priceFallback&&r.priceFallback.length) parts.push(r.priceFallback.length+' 筆售出單價改用牌價×折數');
     if(r.skipped&&r.skipped.length) parts.push('略過 '+r.skipped.length+' 筆：'+r.skipped.slice(0,2).join('；'));
-    toast(parts.length?parts.join('，'):'已跟廠務同步，沒有新異動', (amb.length||up.length||ud.length)?'err':'ok');
+    toast(parts.length?parts.join('，'):'已跟廠務同步，沒有新異動', (amb.length||up.length||ud.length||(r.possibleDup&&r.possibleDup.length))?'err':'ok');
     await csFxLoad(true).catch(()=>{});   // 自動配對可能寫了新對照
+    CS_FX.lastResult=r;
     csFxRenderStatus();
+    /* 寫入 API 會清掉讀取快取（公版酒清單也被清成 null）→ 先把公版酒抓回來再重畫，不然明細的酒名會變成 sku 代碼 */
+    await loadOwnbrandData(true).catch(()=>{});
     if(CS_CUR){ csClearMonthly(); loadConsignInventory(); loadConsignLedger(); }
   }catch(e){ toast(e.message||'同步失敗','err'); }
   finally{ if(btn) btnBusy(btn, false); }
@@ -262,21 +295,34 @@ async function csFxFillDealerSelect(cid){
   if(!CS_FX.loaded){ try{ await csFxLoad(false); }catch(_){} }
   if(!CS_FX.configured){ sel.closest('.fl').style.display='none'; return; }
   sel.closest('.fl').style.display='';
-  const cur=csFxDealerOf(cid);
-  sel.innerHTML='<option value="">（不連結廠務）</option>'+CS_FX.dealers.map(d=>{
+  sel.disabled=false;
+  const dups=cid?csFxDupNames(cid):[];
+  if(dups.length>1){
+    // 客戶代碼重複：指定下去兩家的帳會混在一起（後端也會擋）→ 先改代碼
+    sel.innerHTML='<option value="">（客戶代碼重複，先改代碼）</option>'; sel.disabled=true;
+    if(hint) hint.textContent='⚠ 客戶代碼 '+cid+' 同時是「'+dups.join('」「')+'」，先把其中一家的代碼改成不重複，才能連結廠務。';
+    return;
+  }
+  const cur=CS_FX.blocked[String(cid||'')]?CS_FX_NO_LINK:csFxDealerOf(cid);
+  sel.innerHTML='<option value="">（未指定：同步時用名字自動配）</option><option value="'+CS_FX_NO_LINK+'"'+(cur===CS_FX_NO_LINK?' selected':'')+'>（不連結廠務：這位客戶都在這裡手動登）</option>'+CS_FX.dealers.map(d=>{
     const takenBy=Object.keys(CS_FX.map).find(k=>CS_FX.map[k]===String(d.key)&&k!==String(cid||''));
     const tc=takenBy?(CS_CUSTOMERS.find(c=>String(c.customer_id)===takenBy)||{}).name||takenBy:'';
     return `<option value="${escAttr(d.key)}"${String(d.key)===cur?' selected':''}${takenBy?' disabled':''}>${escHtml(d.label||d.key)}${d.enabled===false?'（廠務已停用）':''}${takenBy?'（已對到 '+escHtml(tc)+'）':''}</option>`;
   }).join('');
-  if(hint) hint.textContent=cur?'廠務的進貨／售出／退貨會自動進這位客戶的寄售帳；換成「不連結」就停止同步（已同步的紀錄留著）。':'留白＝不連結（系統也會用名字自動配，配得到就自動填上）';
+  if(hint) hint.textContent=(cur===CS_FX_NO_LINK)?'不連結：廠務的異動不會進這位客戶的帳，系統也不會再用名字自動配。'
+    :cur?'廠務的進貨／售出／退貨會自動進這位客戶的寄售帳；換成「不連結」就停止同步（已同步的紀錄留著）。'
+    :'未指定＝同步時用名字自動配（配得到就自動填上）；這位客戶不走廠務的話請選「不連結廠務」。';
 }
 async function csFxSaveDealerMap(cid){
-  const sel=document.getElementById('cs-f-fxdealer'); if(!sel||!CS_FX.configured||sel.closest('.fl').style.display==='none') return;
-  const val=String(sel.value||'').trim(), cur=csFxDealerOf(cid);
+  const sel=document.getElementById('cs-f-fxdealer'); if(!sel||!CS_FX.configured||sel.closest('.fl').style.display==='none'||sel.disabled) return;
+  const val=String(sel.value||'').trim(), cur=CS_FX.blocked[String(cid)]?CS_FX_NO_LINK:csFxDealerOf(cid);
   if(val===cur) return;
-  const d=await apiCall({action:'saveFactoryMap', token:AUTH_TOKEN, rows:[{kind:'consign_client', qs_name:String(cid), factory_name:val, note:val?'寄售頁客戶設定指定':''}]});
+  if(val && val!==CS_FX_NO_LINK && csFxDupNames(cid).length>1) throw new Error('客戶代碼 '+cid+' 重複，先改代碼再連結廠務');
+  const d=await apiCall({action:'saveFactoryMap', token:AUTH_TOKEN, rows:[{kind:'consign_client', qs_name:String(cid), factory_name:val,
+    note:val===CS_FX_NO_LINK?'寄售頁客戶設定：不連結廠務':(val?'寄售頁客戶設定指定':'')}]});
   if(!d||!d.ok) throw new Error((d&&d.error)||'儲存廠務對應失敗');
-  if(val) CS_FX.map[String(cid)]=val; else delete CS_FX.map[String(cid)];
+  delete CS_FX.map[String(cid)]; delete CS_FX.blocked[String(cid)];
+  if(val===CS_FX_NO_LINK) CS_FX.blocked[String(cid)]=true; else if(val) CS_FX.map[String(cid)]=val;
   csFxRenderStatus();
 }
 
@@ -453,9 +499,11 @@ async function loadConsignLedger(){
     rows.forEach(r=>{
       if(String(r.type||'')!=='in') return;
       const fx=csFxTag(r.note);
-      const gkey=(fx&&fx.orderNo)?('FXO|'+fx.orderNo):('TS|'+String(r.created_at||r.date||''));
+      // 複檢 0923：同一張廠務訂單分兩趟出貨＝兩批（原本併成一批、一張驗收單）；標記沒有第幾次就用日期分
+      const gkey=(fx&&fx.orderNo)?('FXO|'+fx.orderNo+'|'+(fx.seq||String(r.date||'').slice(0,10))):('TS|'+String(r.created_at||r.date||''));
       if(bidx[gkey]==null){ bidx[gkey]=CS_LED_BATCHES.length;
-        CS_LED_BATCHES.push({ no:csLedBatchNo(CS_CUR, r), date:String(r.date||'').slice(0,10), note:csFxNoteBody(r.note), rows:[], _ca:String(r.created_at||''), fxOrder:fx?fx.orderNo:'' }); }
+        // 廠務那批的備註是廠務內部摘要（單號／經手人），不印到給客戶的驗收單上
+        CS_LED_BATCHES.push({ no:csLedBatchNo(CS_CUR, r), date:String(r.date||'').slice(0,10), note:fx?'':csFxNoteBody(r.note), rows:[], _ca:String(r.created_at||''), fxOrder:fx?fx.orderNo:'' }); }
       const b=CS_LED_BATCHES[bidx[gkey]];
       if(String(r.created_at||'')<b._ca||!b._ca){ b._ca=String(r.created_at||''); b.no=csLedBatchNo(CS_CUR, r); if(String(r.date||'').slice(0,10)<b.date) b.date=String(r.date||'').slice(0,10); }
       b.rows.push(csLedRowItem(r));
@@ -616,7 +664,12 @@ function openConsignMove(){
   if(!OWNBRAND_PRODUCTS || !OWNBRAND_PRODUCTS.length){ loadOwnbrandData().then(renderCsMoveItems).catch(()=>{}); }
   // 2026-09-23：已連結廠務的客戶，進貨／售出／退貨都由廠務同步，這裡提醒不硬擋（試飲瓶、盤點調整還是要在這登）
   { const b=document.getElementById('cs-m-fxbanner'); const fxk=csFxDealerOf(CS_CUR);
-    if(b){ if(fxk){ b.innerHTML='🔗 這位客戶已連結廠務「'+escHtml(csFxDealerLabel(fxk))+'」：鋪貨／銷售／退貨會從廠務自動同步進來，<b>不用在這裡再登一次</b>（會重複計庫存）。這裡只登「試飲瓶」或廠務沒有的「盤點調整」。'; b.style.display='block'; } else b.style.display='none'; } }
+    const dl=fxk?CS_FX.dealers.find(x=>String(x.key)===String(fxk)):null;
+    if(b){
+      if(fxk && !(dl && dl.enabled===false)){ b.innerHTML='🔗 這位客戶已連結廠務「'+escHtml(csFxDealerLabel(fxk))+'」：鋪貨／銷售／退貨會從廠務自動同步進來，<b>不用在這裡再登一次</b>（會重複計庫存）。這裡只登「試飲瓶」或廠務沒有的「盤點調整」。'; b.style.display='block'; }
+      else if(fxk){ b.innerHTML='🔗 這位客戶連結的廠務經銷商「'+escHtml(csFxDealerLabel(fxk))+'」在廠務那邊已停用：這裡照常登記（廠務若又有這家的異動，還是會同步進來）。'; b.style.display='block'; }
+      else b.style.display='none';
+    } }
   onConsignMoveType();
   document.getElementById('cs-move-overlay').style.display='flex';
 }

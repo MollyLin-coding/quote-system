@@ -340,6 +340,9 @@ function ordPreviewQuote(no, src, backPage){
 /* ---- 單筆進度編輯 ---- */
 let ORD_EDITING=null;
 function openOrdEdit(no){
+  /* 2026-09-23 複檢：任何寫入 API 都會清掉讀取快取、ORDERS_CACHE 變 null（畫面上的清單還是舊的）→ 這時按「編輯進度」
+     原本直接 TypeError 沒反應。改成提示＋背景重抓。 */
+  if(!ORDERS_CACHE){ toast('訂單資料重新整理中，請再按一次','err'); if(typeof loadOrders==='function') loadOrders(true).catch(()=>{}); return; }
   const o=ORDERS_CACHE.find(x=>x.no===no); if(!o) return;
   ORD_EDITING=no;
   const st=o.st||{};
@@ -843,11 +846,25 @@ async function shpSyncFromVerify(d){
       const fresh=await apiCall({ action:'listShipments', token:AUTH_TOKEN, quote_no:d.no }).catch(()=>null);
       if(fresh && fresh.ok){ const arr=fresh.shipments||fresh.list; if(Array.isArray(arr)) list=arr; }
     }
-    const hit=list.find(s=>String(s.note||'').indexOf(tag)>=0);
+    let hit=list.find(s=>String(s.note||'').indexOf(tag)>=0);
+    /* 2026-09-23 複檢：廠務同步已經先寫了這一趟（note 開頭 [FX:廠務單號:第幾次]）→ 接在那筆後面，不另長一筆
+       （原本要看先後：驗收單先印→同步會接管；同步先寫→再印驗收單就變成同一趟兩筆、行事曆重複）。
+       對法：驗收單是從「帶入廠務第 N 次出貨」來的就認那一趟；不然找同一天、還沒接過驗收單的那筆。 */
+    const isFx=s=>String((s&&s.note)||'').indexOf('[FX:')===0;
+    if(!hit){
+      const fxRows=list.filter(s=>isFx(s) && String(s.note||'').indexOf(' [VF:')<0);
+      if(d.fxShipSeq && d.fxOrderNo) hit=fxRows.find(s=>String(s.note||'').indexOf('[FX:'+d.fxOrderNo+':'+d.fxShipSeq+']')===0)||null;
+      if(!hit) hit=fxRows.find(s=>String(s.ship_date_actual||'').slice(0,10)===String(d.shipDate).slice(0,10))||null;
+    }
     const lot=shpLotText(d.lot);   // 2026-09-07：Lot 要寫進 note，行事曆才顯示得出來（見 shpLotOf）
     const note=tag+(lot?(' '+lot):'')+(d.boxes?(' · 配送 '+d.boxes+' 箱'):'')+(d.shipper?('，PM '+d.shipper):'');
     const fields={ ship_date_actual:d.shipDate, note };
-    if(hit) await apiCall({ action:'updateShipment', token:AUTH_TOKEN, id:hit.id, fields });
+    if(hit && isFx(hit)){
+      // 同步寫的那筆：日期以廠務為主（不改）、FX 段留在最前面（同步靠它認），驗收單那段接在後面
+      const cur=String(hit.note||''), p=cur.indexOf(' [VF:');
+      await apiCall({ action:'updateShipment', token:AUTH_TOKEN, id:hit.id, fields:{ note:(p>0?cur.slice(0,p):cur)+' '+note } });
+    }
+    else if(hit) await apiCall({ action:'updateShipment', token:AUTH_TOKEN, id:hit.id, fields });
     else await apiCall(Object.assign({ action:'addShipment', token:AUTH_TOKEN, quote_no:d.no, fields }, fields));
     SHP_ALL=null;   // apiCall 的 rcClear() 只洗 RC_STORE，SHP_ALL 是另存的本地快照，要自己清掉才會重抓
     if(typeof loadShipmentBadges==='function') loadShipmentBadges(true);

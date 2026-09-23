@@ -50,7 +50,10 @@ const RC_READ_ACTIONS = ['getFactoryLinks','getFactoryMap','getFactoryConsignDea
   /* 2026-09-11 複檢：factorySync 每 10 分鐘在背景自動打一次；原本被當成寫入 → 每次都把全站快取
      連同 CAL_ITEMS 清光，人正停在行事曆時備忘整批消失、接著每一頁都變回冷的。改成由 fxSyncNow
      自己判斷「這次真的有變化」才 rcClear()＋重抓（見 13_factory.js）。 */
-  'factorySync'];
+  'factorySync',
+  /* 2026-09-23 複檢：廠務連線測試（開「廠務對照」）與「未連結的廠務訂單」清單（開「轉廠務訂單」）都是純讀取，
+     原本漏列 → 打開那兩個視窗就把整站快取（連訂單清單）清光，接著按「編輯進度」會壞。 */
+  'factoryPing','factoryUnlinkedOrders'];
 const RC_STORE = {};      // key -> {at, data}
 const RC_INFLIGHT = {};   // key -> Promise（同一份資料同時被要時共用）
 const RC_RESETS = [];     // 各模組登記「快取被清掉時，我的衍生資料也要歸零」

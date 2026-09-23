@@ -47,7 +47,10 @@ const OWNER_ONLY_FNS = [
   // 今日焦點的打勾（等同於改訂單追蹤的實際出貨日／完成狀態，訂單對員工是唯讀）
   'calFocusShip','calFocusDone',
   // 刪除類
-  'deleteRecord','deleteCustomRecord','vmDelForm','vmDelReport'
+  'deleteRecord','deleteCustomRecord','vmDelForm','vmDelReport',
+  /* 2026-09-23 複檢：廠務連結的寫入動作（轉單／同步／對照表／連結既有單）與寄售「同步廠務」——
+     後端 OWNER_ONLY_ACTIONS_ 同步加擋；一般使用者看到按鈕按了只會吃 FORBIDDEN，不如藏起來 */
+  'fxPushOrder','fxPushOrderDo','fxOpenMap','fxSaveMap','fxOpenLinkDialog','fxLinkExisting','fxLinkCreateNew','fxSyncNow','csFxSyncNow'
 ];
 const OWNER_FN_RE = new RegExp('\\b(' + OWNER_ONLY_FNS.join('|') + ')\\s*\\(');
 
@@ -113,9 +116,12 @@ let editingQuoteNo = null;    // 若非 null 表示正在編輯既有報價單
 
 /* ---- API 呼叫核心（GAS Web App 用 text/plain 避開 CORS preflight）---- */
 const _busy={};   // 各儲存動作的「進行中」旗標，避免連點重複送出
+/* 2026-09-23 複檢：廠務連結的動作要等廠務那台回應（整包訂單＋出貨紀錄實測 15～20 秒），25 秒常常不夠
+   → 這幾支放寬到 70 秒（按鈕照樣顯示處理中）；逾時的話後端其實多半已經做完，同步／推單都是冪等、再按一次沒關係 */
+const API_SLOW_ACTIONS=['factorySync','factoryPushOrder','factoryUnlinkedOrders','factoryLinkExisting','factoryConsignSync','getFactoryConsignDealers','factoryPing'];
 async function apiCall(payload){
   const ctrl = new AbortController();
-  const timer = setTimeout(()=>ctrl.abort(), 25000);   // 25 秒逾時，避免按鈕永久卡住
+  const timer = setTimeout(()=>ctrl.abort(), (payload && API_SLOW_ACTIONS.indexOf(payload.action)>=0) ? 70000 : 25000);   // 25 秒逾時，避免按鈕永久卡住
   let res;
   try {
     res = await fetch(API_URL, {
