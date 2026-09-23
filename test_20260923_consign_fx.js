@@ -27,7 +27,8 @@ const DEALERS = [
 const MAP = [{ kind: 'consign_client', qs_name: '4', factory_name: '經銷商－島羽', note: '' }];
 const LEDGER = [
   { movement_id:'CM-20260918-0001', date:'2026-09-18', customer_id:4, sku_id:'蜜香紅茶荔枝琴酒|100ml', type:'in', qty:10, note:'[FXC:CI-A1|260917-001#1] 廠務 260917-001 第1次／Kevin：訂單出貨 第 1 次', created_at:'2026-09-18T10:00:00+08:00' },
-  { movement_id:'CM-20260918-0002', date:'2026-09-18', customer_id:4, sku_id:'茉莉香片脆梅琴酒|100ml', type:'in', qty:10, note:'[FXC:CI-A2|260917-001#2] 廠務 260917-001 第2次／Kevin：訂單出貨 第 2 次', created_at:'2026-09-18T11:30:00+08:00' },
+  // 2026-09-23 晚：同一趟出貨（#1）的兩款＝一批；不同趟（#2…）另成一批（見 test_20260923e_factory_fe.js）
+  { movement_id:'CM-20260918-0002', date:'2026-09-18', customer_id:4, sku_id:'茉莉香片脆梅琴酒|100ml', type:'in', qty:10, note:'[FXC:CI-A2|260917-001#1] 廠務 260917-001 第1次／Kevin：訂單出貨 第 1 次', created_at:'2026-09-18T11:30:00+08:00' },
   { movement_id:'CM-20260919-0001', date:'2026-09-19', customer_id:4, sku_id:'蜜香紅茶荔枝琴酒|100ml', type:'out', qty:2, unit_price:140, note:'[FXC:CI-A3] 廠務／島羽', created_at:'2026-09-19T20:00:00+08:00' },
   { movement_id:'CM-20260911-0007', date:'2026-09-11', customer_id:4, sku_id:'蜜香紅茶荔枝琴酒|100ml', type:'in', qty:5, note:'手動登的特規單', created_at:'2026-09-11T15:32:49+08:00' },
 ];
@@ -107,8 +108,8 @@ const LEDGER = [
   check('6a 4 列都畫出來', led.n === 4);
   check('6b 廠務列有「廠務 260917-001」標籤、手動列沒有', led.tags.filter(Boolean).length === 3 && led.tags[3] === false && led.notes.filter(t => /廠務\s*260917-001/.test(t)).length === 2 && /^廠務廠務／島羽$/.test(led.notes[0].replace(/\s+/g, '')));
   check('6c 備註本文不顯示 [FXC:…] 標記', led.notes.every(t => t.indexOf('[FXC:') < 0) && led.notes.some(t => /訂單出貨 第 1 次/.test(t)) && led.notes[3] === '手動登的特規單');
-  check('6d 同一張廠務訂單 2 款＝1 批 1 顆鈕；手動那批另 1 顆 → 共 2 顆', led.btns.length === 2);
-  check('6e 廠務批單號用最早的 created_at（10:00）推', led.btns.includes('CS-4-20260918100000') && led.batches.some(b => b.fxOrder === '260917-001' && b.n === 2 && b.no === 'CS-4-20260918100000' && b.note.indexOf('[FXC:') < 0));
+  check('6d 同一張廠務訂單同一趟出貨 2 款＝1 批 1 顆鈕；手動那批另 1 顆 → 共 2 顆', led.btns.length === 2);
+  check('6e 廠務批單號用最早的 created_at（10:00）推；驗收單備註不帶廠務內部摘要', led.btns.includes('CS-4-20260918100000') && led.batches.some(b => b.fxOrder === '260917-001' && b.n === 2 && b.no === 'CS-4-20260918100000' && b.note === ''));
   check('6f 手動那批單號照舊', led.btns.includes('CS-4-20260911153249'));
 
   // 4) 登記異動橫幅
@@ -148,7 +149,7 @@ const LEDGER = [
     const sel = document.getElementById('cs-f-fxdealer');
     return { shown: sel.closest('.fl').style.display !== 'none', opts: [...sel.options].map(o => o.value + '|' + o.textContent + '|' + (o.disabled ? 'D' : '')), val: sel.value };
   });
-  check('5a 下拉列出 3 家經銷商＋不連結；downstairs 目前沒對應', f5.shown && f5.opts.length === 4 && f5.val === '');
+  check('5a 下拉列出 3 家經銷商＋未指定＋不連結；downstairs 目前沒對應（未指定）', f5.shown && f5.opts.length === 5 && f5.val === '' && f5.opts[1].indexOf('-|') === 0);
   check('5b 島羽那家已被客戶 4 對走 → disabled＋標示', f5.opts.some(o => /經銷商－島羽\|.*已對到 島羽Wing Islands.*\|D$/.test(o)));
   // 存檔：選 downstair → saveConsignCustomer 之後打 saveFactoryMap
   await page.evaluate(async () => {
@@ -178,7 +179,7 @@ const LEDGER = [
   await page.evaluate(async () => { window.CALLS = []; document.getElementById('cs-f-fxdealer').value = ''; await saveConsignCustomerForm(); });
   await page.waitForTimeout(300);
   const s5f = await page.evaluate(() => ({ row: (window.CALLS.find(c => c.action === 'saveFactoryMap') || {}).rows, map: CS_FX.map['2'] }));
-  check('5f 改回不連結 → factory_name 空字串（後端刪對照）、前端對照移除', s5f.row && s5f.row[0].factory_name === '' && s5f.map === undefined);
+  check('5f 改回未指定 → factory_name 空字串（後端刪對照）、前端對照移除', s5f.row && s5f.row[0].factory_name === '' && s5f.map === undefined);
 
   // 7) 廠務沒設定
   await page.evaluate(async () => { window.FX_CONFIGURED = false; rcClear(); await csFxLoad(true); csFxRenderStatus(); });
