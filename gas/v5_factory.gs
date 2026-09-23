@@ -425,7 +425,10 @@ function fxImportOrder_(o, map, customers, priceCtx) {
     shipAddress: o.recvAddr || (cust && cust.ship_address) || '',
     quoteDate: today, expiryDate: '', handler: o.pm || '',
     itemsSubtotal: sub, taxAmount: 0, extrasTotal: 0, grandTotal: grand,
-    priceMode: 'inc', taxRate: 5, paymentType: '', paymentDetail: '',
+    // 2026-09-23 Molly：客戶主檔的付款習慣帶進付款條件（自訂 Tab3）
+    priceMode: 'inc', taxRate: 5,
+    paymentType: (cust && String(cust.pay_habit || '').trim()) ? '3' : '',
+    paymentDetail: (cust && String(cust.pay_habit || '').trim()) || '',
     remark: '由廠務訂單 ' + o.orderNo + ' 自動帶入（' + (o.orderCreator || '') + '）' + (o.orderNote ? '｜' + o.orderNote : '') + '；單價為系統自動帶牌價，請確認',
     status: '草稿', expectedShipDate: o.deliveryDate || '', showShipDate: (o.deliveryDate ? 'Y' : 'N'),
     items: items
