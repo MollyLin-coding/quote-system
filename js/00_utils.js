@@ -35,7 +35,7 @@ const RC_TTL_MS = 90000;
 /* 白名單：只有這些 action 算「純讀取」。沒列到的一律當成寫入（寧可多清一次快取）。 */
 const RC_READ_ACTIONS = ['getFactoryLinks','getFactoryMap','getFactoryConsignDealers',   // 2026-09-08 廠務連結（13_factory.js）；2026-09-23 寄售×廠務（08_ownbrand.js）
   'getQuotes','getQuoteById','getCompanyData','getOrderStatusList',
-  'listQuotePdfs','listShipments','listCustomQuotes','listCalendarItems','getChangeLog',
+  'listQuotePdfs','listShipments','listInvoices','listCustomQuotes','listCalendarItems','getChangeLog',
   'getOwnbrandProducts','getOwnbrandTiers','getConsignCustomers','getConsignInventory',
   'getConsignLedger','getConsignMonthly','getVerifications','listVerifyForms',
   'getTodayDigest','getCustomers','verifyHeaders','batch','getStorageData',

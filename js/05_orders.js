@@ -383,6 +383,8 @@ function openOrdEdit(no){
   document.getElementById('oe-invphoto-hint').textContent='';
   // v31 分批出貨：每次開單重置為收合、未載入
   shpReset();
+  // 2026-09-24 其他發票（第②張起）：每次開單重置為收合、未載入
+  if(typeof invReset==='function') invReset();
   document.getElementById('oe-overlay').style.display='flex';
   ORD_EDIT_SNAP=ordEditSnapshot();   // 2026-09-01 #25：記下開啟當下的內容，關閉前比對有沒有改過
 }
@@ -811,6 +813,101 @@ async function shpDelRow(btn){
     loadShipmentBadges();                    // 順手刷新訂單列的「分批×N」徽章
   }catch(e){ if(snap&&!ORDERS_CACHE) ORDERS_CACHE=snap; toast(e.message||'刪除失敗','err'); }
   finally{ btn.disabled=false; btn.textContent='刪除'; _busy.shpDel=false; }
+}
+/* ---- 2026-09-24 其他發票（第②張起）：一張訂單有時不只開一張發票（Molly 提出）。
+   上面「③ 發票」原本那組欄位（oe-invoice_no 等）維持不動，當作「發票①」——效期推進／今日待辦／
+   月報表都繼續讀那幾欄，不受影響。這裡另開一個子表只記「發票②起」，跟分批出貨（shp*）同一套寫法。
+   照片先只給貼連結（不像發票①有上傳按鈕）：每張發票各開一個 Drive 資料夾比較複雜，先簡單處理，
+   有需要再加。 ---- */
+let INV_LOADED=false, INV_LIST=[];
+function invReset(){
+  INV_LOADED=false; INV_LIST=[];
+  const box=document.getElementById('inv-box'); if(box) box.style.display='none';
+  const btn=document.getElementById('inv-toggle'); if(btn) btn.textContent='▸ 其他發票（不只一張時才用）';
+  const body=document.getElementById('inv-body'); if(body) body.innerHTML=sklTableRows(6,2);
+}
+function invToggle(){
+  const box=document.getElementById('inv-box');
+  const btn=document.getElementById('inv-toggle');
+  const open=box.style.display==='none';
+  box.style.display=open?'block':'none';
+  if(btn) btn.textContent=(open?'▾':'▸')+' 其他發票（不只一張時才用）';
+  if(open && !INV_LOADED) loadInvoices();
+}
+async function loadInvoices(){
+  const body=document.getElementById('inv-body');
+  body.innerHTML=sklTableRows(6,2);
+  try{
+    const d=await apiCall({ action:'listInvoices', token:AUTH_TOKEN, quote_no:ORD_EDITING });
+    if(!d.ok){ body.innerHTML=`<tr><td colspan="6" class="rec-empty">${d.error||'載入失敗'}</td></tr>`; return; }
+    INV_LIST=d.invoices||d.list||[];
+    INV_LOADED=true;
+    renderInvoicesList();
+  }catch(e){ body.innerHTML=`<tr><td colspan="6" class="rec-empty">${e.message||'載入失敗'}</td></tr>`; }
+}
+function invRowHtml(s, idx){
+  return `<tr data-invid="${escHtml(s.id||'')}">
+    <td style="text-align:center;font-weight:600">${escHtml(String(s.seq||idx+2))}</td>
+    <td><input class="fi" data-f="invoice_no" value="${escHtml(s.invoice_no||'')}" style="min-width:110px"></td>
+    <td><input class="fi" type="date" data-f="invoice_date" value="${escHtml(vmLocalYmd(s.invoice_date))}" style="min-width:132px"></td>
+    <td><input class="fi" data-f="invoice_last5" maxlength="5" inputmode="numeric" value="${escHtml(s.invoice_last5||'')}" style="min-width:72px"></td>
+    <td><input class="fi" data-f="invoice_detail" value="${escHtml(s.invoice_detail||'')}" style="min-width:120px" placeholder="例 果醋禮盒 ×20"></td>
+    <td><input class="fi" data-f="photos" value="${escHtml(s.photos||'')}" style="min-width:140px" placeholder="雲端連結（選填）"></td>
+    <td style="white-space:nowrap"><button type="button" class="rec-act-btn" onclick="invSaveRow(this)">儲存</button> <button type="button" class="rec-act-btn del" onclick="invDelRow(this)">刪除</button></td>
+  </tr>`;
+}
+function renderInvoicesList(){
+  const body=document.getElementById('inv-body');
+  if(!INV_LIST.length){ body.innerHTML='<tr><td colspan="6" class="rec-empty">還沒有其他發票，按「＋新增一張」開始</td></tr>'; return; }
+  body.innerHTML=INV_LIST.map((s,i)=>invRowHtml(s,i)).join('');
+}
+function invAddRow(){
+  const box=document.getElementById('inv-box');
+  if(box.style.display==='none') invToggle();
+  const body=document.getElementById('inv-body');
+  if(body.querySelector('tr[data-invid=""]')){ toast('先儲存這一張，再新增下一張','err'); return; }
+  if(!INV_LIST.length) body.innerHTML='';
+  body.insertAdjacentHTML('beforeend', invRowHtml({id:'', seq:INV_LIST.length+2}, INV_LIST.length));
+}
+async function invSaveRow(btn){
+  const tr=btn.closest('tr'); if(!tr) return;
+  if(_busy.invSave) return; _busy.invSave=true;
+  const id=tr.getAttribute('data-invid');
+  const fields={};
+  tr.querySelectorAll('input[data-f]').forEach(inp=>{ fields[inp.getAttribute('data-f')]=inp.value; });
+  if(!Object.keys(fields).some(k=>String(fields[k]||'').trim())){ toast('這一張還沒填任何內容，先填發票號碼再儲存','err'); _busy.invSave=false; return; }
+  if(fields.invoice_last5 && !/^\d{5}$/.test(fields.invoice_last5)){ toast('發票末五碼需為 5 位數字','err'); _busy.invSave=false; return; }
+  btn.disabled=true; btn.textContent='…';
+  const snap=ORDERS_CACHE;   // 寫入會清空 ORDERS_CACHE，留一份
+  try{
+    let d;
+    if(id){ d=await apiCall({ action:'updateInvoice', token:AUTH_TOKEN, id, fields }); }
+    else  { d=await apiCall(Object.assign({ action:'addInvoice', token:AUTH_TOKEN, quote_no:ORD_EDITING, fields }, fields)); }   // 扁平＋fields 都給，相容兩種後端寫法
+    if(snap&&!ORDERS_CACHE) ORDERS_CACHE=snap;
+    if(!d.ok){ toast(d.error||'儲存失敗','err'); return; }
+    toast(id?'這張發票已更新':'已新增一張發票','ok');
+    await loadInvoices();
+  }catch(e){ if(snap&&!ORDERS_CACHE) ORDERS_CACHE=snap; toast(e.message||'儲存失敗','err'); }
+  finally{ btn.disabled=false; btn.textContent='儲存'; _busy.invSave=false; }
+}
+async function invDelRow(btn){
+  const tr=btn.closest('tr'); if(!tr) return;
+  const id=tr.getAttribute('data-invid');
+  if(!id){                                   // 還沒存進後端的新列：直接把這一列移掉就好
+    tr.remove();
+    if(!document.getElementById('inv-body').children.length) renderInvoicesList();
+    return;
+  }
+  if(!confirm('確定刪除這張發票紀錄？刪除後無法復原。')) return;
+  if(_busy.invDel) return; _busy.invDel=true;
+  btn.disabled=true; btn.textContent='…';
+  try{
+    const d=await apiCall({ action:'deleteInvoice', token:AUTH_TOKEN, id });
+    if(!d.ok){ toast(d.error||'刪除失敗','err'); return; }
+    toast('已刪除','ok');
+    await loadInvoices();
+  }catch(e){ toast(e.message||'刪除失敗','err'); }
+  finally{ btn.disabled=false; btn.textContent='刪除'; _busy.invDel=false; }
 }
 /* 2026-09-07 Molly 回報「酒肉朋友分了好幾天出貨但行事曆都沒顯示」→ 查證發現：她每次分批出貨
    用的是「產生Lot驗收單」（09_verify_form.js），配送日期只存進驗收單留底；行事曆／今日焦點／
