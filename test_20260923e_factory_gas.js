@@ -473,7 +473,7 @@ function syncCtx(o) {
   check('I2 兩筆手動列一樣近（9/19、9/21 各差 1 天）→ 對上第一筆（不另外新增）、列進 possibleDup 請確認', !ins.X2 && r.linked.some(x => x.fx === 'X2' && x.movement_id === 'CM-20260919-0001') && r.possibleDup.some(x => /^X2/.test(x)));
   const led = c.__sheets.consign_ledger.rows;
   const rowOf = fx => led.find(x => String(x[7]).indexOf('[FXC:' + fx) === 0);
-  check('I3 售出單價 0 → 改用報價系統算的 140、列進 priceFallback', ins.X3 && rowOf('X3')[6] === 140 && r.priceFallback.some(x => /^X3/.test(x)));
+  check('I3 售出單價以報價系統為準：廠務 0 → 用報價系統的 140、列進 priceDiff（請同仁改廠務折扣）', ins.X3 && rowOf('X3')[6] === 140 && r.priceDiff.some(x => /^X3/.test(x)) && !r.priceDiff.some(x => /^X5/.test(x)));
   check('I4 售出不同天（手動 9/20、廠務 9/21）→ 不對上', ins.X5 && !r.linked.some(x => x.fx === 'X5'));
   check('I5 Molly 選「不連結」的日光貳叁 → 不自動配、異動不寫、不列進沒對到', !r.dealerMap['經銷商－日光貳參'] && !ins.X4 && !(r.unmappedDealers || {})['經銷商－日光貳參'] && r.ignoredDealers['經銷商－日光貳參'] === 1);
   const last = JSON.parse(c.__props.FACTORY_CONSIGN_LAST_RESULT || '{}');
@@ -491,6 +491,21 @@ function syncCtx(o) {
     const c9 = mkCtx({ factory: b => (b.action === 'extConsignLedger' ? { ok: true, dealers: DEALERS, rows: R2 } : { ok: false }), seed: { consign_customers: CUST, ownbrand_products: PROD, consign_ledger: L2 } });
     const r9 = c9.handleFactoryConsignSync_({});
     check('I9 兩筆一模一樣的手動售出 × 廠務兩筆 → 各對一筆、0 新增、不列可能重複', r9.ok && r9.inserted.length === 0 && r9.linked.length === 2 && new Set(r9.linked.map(x => x.movement_id)).size === 2 && r9.possibleDup.length === 0);
+  }
+  // I10 廠務單價 120、報價系統 140 → 記 140、列 priceDiff；I11 報價系統算不出來（找不到 SKU）→ 先用廠務的、列 priceFallback
+  {
+    const R3 = [{ id: 'Z1', date: '2026-09-24', dealer: '經銷商－島羽', product: '泰奶烏龍蘭姆酒', volume: '100ml', type: '售出', qty: -1, price: 120, createdAt: '2026-09-24 21:00:00' },
+      { id: 'Z2', date: '2026-09-24', dealer: '經銷商－島羽', product: '茉莉香片脆梅琴酒', volume: '100ml', type: '售出', qty: -1, price: 150, createdAt: '2026-09-24 21:01:00' }];
+    const cz = mkCtx({ factory: b => (b.action === 'extConsignLedger' ? { ok: true, dealers: DEALERS, rows: R3 } : { ok: false }),
+      unitPrice: (cid, sku) => (/泰奶/.test(sku) ? { unitPrice: 140 } : (() => { throw new Error('找不到公版商品 SKU'); })()),
+      seed: { consign_customers: CUST, ownbrand_products: PROD, consign_ledger: [] } });
+    const rz = cz.handleFactoryConsignSync_({});
+    const lz = cz.__sheets.consign_ledger.rows;
+    const up = fx => (lz.find(x => String(x[7]).indexOf('[FXC:' + fx) === 0) || [])[6];
+    check('I10 廠務 120／報價系統 140 → 記 140、priceDiff 講出兩邊', rz.ok && up('Z1') === 140 && rz.priceDiff.some(x => /^Z1/.test(x) && /廠務 120/.test(x) && /報價系統 140/.test(x)));
+    check('I11 報價系統算不出單價 → 先用廠務的 150、列 priceFallback', up('Z2') === 150 && rz.priceFallback.some(x => /^Z2/.test(x)));
+    const dd = mkCtx({ factory: b => ({ ok: true, dealers: DEALERS, rows: [], statements: [{ id: 'ST-1', dealer: '經銷商－島羽', period: '2026-09', status: '已結清', amount: 4200, paidDate: '2026-10-03', orderNo: '261003-001', soldQty: 30 }] }) }).handleGetFactoryConsignDealers_();
+    check('I12 getFactoryConsignDealers 一併回廠務對帳單摘要（期別／狀態／金額／入帳日／認列單）', dd.ok && dd.statements.length === 1 && dd.statements[0].status === '已結清' && dd.statements[0].amount === 4200 && dd.statements[0].orderNo === '261003-001');
   }
   c.__cache['FXC_SYNC_BUSY'] = '1';
   const rb = c.handleFactoryConsignSync_({});

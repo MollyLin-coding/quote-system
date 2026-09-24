@@ -342,7 +342,33 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
   check('12 客戶代碼重複（誠品生活／桃園青埔都是 9）→ 下拉鎖住、講明先改代碼', c.dup.disabled === true && /重複/.test(c.dup.hint) && /誠品生活/.test(c.dup.hint), JSON.stringify(c.dup));
   check('13a 同一張廠務訂單兩趟出貨＝兩批（第 1 趟 2 款、第 2 趟 1 款），驗收單備註不帶廠務摘要', c.btns === 2 && c.batches.length === 2 && c.batches.some(x => x.n === 2 && x.date === '2026-09-18') && c.batches.some(x => x.n === 1 && x.date === '2026-09-20') && c.batches.every(x => x.note === ''), JSON.stringify(c.batches));
   check('13b 登記視窗：連結中的島羽照舊提醒；廠務已停用的 downstair 改說「這裡照常登記」', /不用在這裡再登一次/.test(c.ban4) && /已停用/.test(c.ban2) && /照常登記/.test(c.ban2) && !/不用在這裡再登一次/.test(c.ban2), c.ban2);
-  check('14 狀態列：可能重複＋售出單價用牌價補（每小時那次的摘要也看得到）', /跟妳手動登過的很像/.test(c.status) && /沒填單價/.test(c.status), c.status);
+  check('14 狀態列：可能重複＋算不出單價先用廠務的（每小時那次的摘要也看得到）', /跟妳手動登過的很像/.test(c.status) && /算不出單價/.test(c.status), c.status);
+
+  // 15／16 月結提示廠務對帳單、售出單價以報價系統為準的提醒
+  const d2 = await page.evaluate(async () => {
+    const out = {};
+    CS_FX.map = { '4': '經銷商－島羽' }; CS_FX.loaded = true; CS_FX.configured = true;
+    CS_FX.statements = [{ dealer: '經銷商－島羽', period: '2026-09', status: '已結清', amount: 4200, paidDate: '2026-10-03', orderNo: '261003-001' }];
+    CS_CUR = '4';
+    let box = document.getElementById('cs-settled'); if (!box) { box = document.createElement('div'); box.id = 'cs-settled'; document.body.appendChild(box); }
+    CS_MONTHLY = { ok: true, lines: [{ sku_id: 'A|100ml', name: 'A', volume: '100ml', qty: 2, unit_price: 140, amount: 280 }], total: 280, year: 2026, month: 9, customer: { name: '島羽Wing Islands' }, for_customer: '4', for_ym: '2026-09', period: { from: '2026-09-01', to: '2026-09-30' } };
+    window.readCall = async p => ({ ok: true, quotes: [] });
+    await csCheckSettled();
+    out.settled = (document.getElementById('cs-settled') || {}).textContent || '';
+    const cf = []; window.confirm = m => { cf.push(String(m)); return false; };
+    const _stale = window.csMonthlyStale; window.csMonthlyStale = () => false;
+    consignMonthlyToQuote();
+    window.csMonthlyStale = _stale;
+    out.confirm = cf.join(' || ');
+    CS_FX.lastResult = { at: 'x', unmappedDealers: {}, unmappedProducts: {}, ambiguous: {}, possibleDup: [], priceFallback: [], priceDiff: ['Z1（2026-09-24 泰奶|100ml：廠務 120／報價系統 140）'] };
+    CS_FX.dealers = [{ key: '經銷商－島羽', label: '島羽 Wing Islands', enabled: true }];
+    csFxRenderStatus();
+    out.status = (document.getElementById('cs-fxstatus') || {}).textContent || '';
+    return out;
+  });
+  check('15a 月結：廠務這期已結清 → 顯示金額／入帳／認列單、講明會重複請款', /廠務這期（2026-09）已經登記結清/.test(d2.settled) && /4,200/.test(d2.settled) && /261003-001/.test(d2.settled), d2.settled);
+  check('15b 轉報價單前再問一次（廠務已結清）', /廠務這期（2026-09）已經登記結清/.test(d2.confirm) && /重複請款/.test(d2.confirm), d2.confirm);
+  check('16 狀態列：售出單價廠務跟這裡不一樣 → 已照報價系統記、請同仁改廠務折扣', /照報價系統的記/.test(d2.status) && /廠務 120／報價系統 140/.test(d2.status), d2.status);
 
   check('00 零 JS 例外／console error', errors.length === 0, errors.slice(0, 3).join(' | '));
   results.forEach(r => console.log(r[0], r[1], r[2] ? '  ← ' + r[2] : ''));
