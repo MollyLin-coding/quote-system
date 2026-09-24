@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260923f">
-<script src="js/00_qrcode.js?v=20260923f"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260924a">
+<script src="js/00_qrcode.js?v=20260924a"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -470,7 +470,9 @@
         <div class="pay-tabs">
           <button class="ptab on" onclick="setPay(0)">比例訂金＋尾款</button>
           <button class="ptab" onclick="setPay(1)">到貨驗收後付款</button>
-          <button class="ptab" onclick="setPay(2)">隔月指定日付款</button>
+          <!-- 2026-09-24 Molly：「隔月指定日付款」併進「比例訂金＋尾款」（尾款可選隔 N 月 N 號）。
+               按鈕與 pp2 面板保留但隱藏——setPay 靠位置對應分頁，舊單存的 paymentType 2 載入時改走 Tab0。 -->
+          <button class="ptab" onclick="setPay(2)" style="display:none">隔月指定日付款</button>
           <button class="ptab" onclick="setPay(3)">自訂</button>
           <button class="ptab" onclick="setPay(4)">不顯示此欄位</button>
         </div>
@@ -490,7 +492,16 @@
           <div class="fg fg3" style="margin-bottom:14px">
             <div class="fl"><label>製造前幾日內付訂金</label><input class="fi" id="dep-days1" type="number" value="15" min="0" oninput="calcPay()"></div>
             <div class="fl"><label>到貨後幾日內驗收</label><input class="fi" id="dep-days" type="number" value="7" min="0" oninput="calcPay()"></div>
-            <div class="fl"><label>驗收後幾日內付尾款</label><input class="fi" id="dep-fdays" type="number" value="30" min="0" oninput="calcPay()"></div>
+            <div class="fl"><label>尾款付款時間</label>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <select class="fi" id="dep-fmode" style="width:auto;flex:0 0 auto" onchange="depFModeSync();calcPay()">
+                  <option value="days">驗收後幾日內</option>
+                  <option value="month">隔幾月幾號</option>
+                </select>
+                <span id="dep-fm-days" style="display:flex;align-items:center;gap:6px"><input class="fi" id="dep-fdays" type="number" value="30" min="0" style="width:70px" oninput="calcPay()"><span style="color:var(--hint);font-size:13px">日內</span></span>
+                <span id="dep-fm-month" style="display:none;align-items:center;gap:6px"><span style="color:var(--hint);font-size:13px">隔</span><input class="fi" id="dep-fmon" type="number" value="1" min="1" style="width:58px" oninput="calcPay()"><span style="color:var(--hint);font-size:13px">月</span><input class="fi" id="dep-fday" type="number" value="10" min="1" max="31" style="width:62px" oninput="calcPay()"><span style="color:var(--hint);font-size:13px">號</span></span>
+              </div>
+            </div>
           </div>
           <div class="fl"><label>付款條件備註 <span class="opt">選填</span></label><input class="fi" id="dep-ded" placeholder="請輸入備註說明（選填）"></div>
         </div>
@@ -1323,22 +1334,22 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260923f"></script>
-<script src="js/01_quote_form.js?v=20260923f"></script>
-<script src="js/01b_quote_preview.js?v=20260923f"></script>
-<script src="js/02_core_api.js?v=20260923f"></script>
-<script src="js/03_quote_custom.js?v=20260923f"></script>
-<script src="js/04_company.js?v=20260923f"></script>
-<script src="js/05_orders.js?v=20260923f"></script>
-<script src="js/06_verify_mgmt.js?v=20260923f"></script>
-<script src="js/07_calendar.js?v=20260923f"></script>
-<script src="js/08_ownbrand.js?v=20260923f"></script>
-<script src="js/09_verify_form.js?v=20260923f"></script>
-<script src="js/10_today.js?v=20260923f"></script>
-<script src="js/11_customers.js?v=20260923f"></script>
-<script src="js/12_storage.js?v=20260923f"></script>
-<script src="js/13_factory.js?v=20260923f"></script>
-<script src="js/14_contract.js?v=20260923f"></script>
-<script src="js/99_boot.js?v=20260923f"></script>
+<script src="js/00_utils.js?v=20260924a"></script>
+<script src="js/01_quote_form.js?v=20260924a"></script>
+<script src="js/01b_quote_preview.js?v=20260924a"></script>
+<script src="js/02_core_api.js?v=20260924a"></script>
+<script src="js/03_quote_custom.js?v=20260924a"></script>
+<script src="js/04_company.js?v=20260924a"></script>
+<script src="js/05_orders.js?v=20260924a"></script>
+<script src="js/06_verify_mgmt.js?v=20260924a"></script>
+<script src="js/07_calendar.js?v=20260924a"></script>
+<script src="js/08_ownbrand.js?v=20260924a"></script>
+<script src="js/09_verify_form.js?v=20260924a"></script>
+<script src="js/10_today.js?v=20260924a"></script>
+<script src="js/11_customers.js?v=20260924a"></script>
+<script src="js/12_storage.js?v=20260924a"></script>
+<script src="js/13_factory.js?v=20260924a"></script>
+<script src="js/14_contract.js?v=20260924a"></script>
+<script src="js/99_boot.js?v=20260924a"></script>
 </body>
 </html>
