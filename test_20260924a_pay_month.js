@@ -1,7 +1,9 @@
 /* 2026-09-24 Molly：付款條件改版
-   ①「比例訂金＋尾款」的尾款時間可選「驗收後 N 日內」或「隔 N 月 N 號」
-   ②「隔月指定日付款」併進 ①（分頁隱藏；0%＋隔 N 月 N 號＝原本的全額月結）
-   ③ 到貨驗收後付款／自訂／不顯示 不動；舊單 paymentType 2 載入改走 Tab0 並解回月數與日期 */
+   ①「比例訂金＋尾款」的尾款時間可選「驗收後 N 日內」或「驗收後第 N 個月 N 號」
+   ②「隔月指定日付款」併進 ①（分頁隱藏；0%＋驗收後第 N 個月 N 號＝原本的全額月結）
+   ③ 到貨驗收後付款／自訂／不顯示 不動；舊單 paymentType 2 載入改走 Tab0 並解回月數與日期
+   ④ 2026-09-24 二修：Molly 說「隔 N 個月」不夠明確，改成「驗收後第 N 個月 N 號」（N=1 也照寫，不再省略成「隔月」）；
+      restorePayFieldsFromText 仍要吃得回舊單存的「隔月/隔 N 個月 N 號」與更早「收貨後第 N 個月 N 號」寫法 */
 const { chromium } = require('playwright');
 const path = require('path');
 (async () => {
@@ -35,13 +37,19 @@ const path = require('path');
     out.t4 = getPayTerms(); out.p4 = ordPayFromQuote({ payDetail: out.t4 }, 10000);
     // 0% 但有 SGS 費用 → 還是有訂金段
     setup(0, [{ n: 'SGS檢驗費', a: 3000 }]); out.t5 = getPayTerms();
-    // 還原：新寫法（隔 2 個月 5 號）
+    // 還原：現行寫法（驗收後第 2 個月 5 號）
     setup(50); $('dep-fmode').value = 'days'; depFModeSync();
-    restorePayFieldsFromText('訂金支付：…<br>驗收與尾款：…甲方應於到貨後 7 日內完成驗收。驗收無誤後，甲方應於隔 2 個月 5 號支付尾款新台幣 $5,000 元整（即酒水總價剩餘之 50%）。');
+    restorePayFieldsFromText('訂金支付：…<br>驗收與尾款：…甲方應於到貨後 7 日內完成驗收。驗收無誤後，甲方應於驗收後第 2 個月 5 號支付尾款新台幣 $5,000 元整（即酒水總價剩餘之 50%）。');
     out.r1 = { mode: $('dep-fmode').value, mon: $('dep-fmon').value, day: $('dep-fday').value, monVis: vis($('dep-fm-month')) };
     // 還原：舊版 30 日內
     restorePayFieldsFromText('…驗收無誤後，甲方應於 45 日內支付尾款新台幣 $5,000 元整');
     out.r2 = { mode: $('dep-fmode').value, days: $('dep-fdays').value };
+    // 還原：20260924a 第一版寫法（隔 2 個月 5 號，已存的舊單要繼續吃得回來）
+    restorePayFieldsFromText('…驗收無誤後，甲方應於隔 2 個月 5 號支付尾款新台幣 $5,000 元整');
+    out.r1b = { mode: $('dep-fmode').value, mon: $('dep-fmon').value, day: $('dep-fday').value };
+    // 還原：20260924a 第一版寫法 N=1 省略型（隔月 10 號）
+    restorePayFieldsFromText('…驗收無誤後，甲方應於隔月 10 號支付尾款新台幣 $5,000 元整');
+    out.r1c = { mode: $('dep-fmode').value, mon: $('dep-fmon').value, day: $('dep-fday').value };
     // 舊單 paymentType 2 載入
     const legacy = '甲方應於收貨後第 2 個月 30 號支付全額款項新台幣 $17,300 元整，預估付款日：2026/09/30。';
     let pt = parseInt('2') || 0; if (pt === 2) pt = 0;   // 同 loadQuoteIntoForm 的對應
@@ -59,14 +67,16 @@ const path = require('path');
   c('預設「驗收後幾日內」，只顯示天數欄', r.defMode === 'days' && r.defDaysVis && !r.defMonVis);
   c('預設條款跟舊版一字不差（應於 30 日內支付尾款）', /驗收無誤後，甲方應於 30 日內支付尾款新台幣/.test(r.t1), r.t1);
   c('切「隔幾月幾號」→ 只顯示月／號欄', r.monMonVis && !r.monDaysVis);
-  c('條款寫「應於隔月 10 號支付尾款」', /甲方應於隔月 10 號支付尾款新台幣 \$5,000 元整/.test(r.t2), r.t2);
+  c('條款寫「應於驗收後第 1 個月 10 號支付尾款」（N=1 也明確標示，不省略）', /甲方應於驗收後第 1 個月 10 號支付尾款新台幣 \$5,000 元整/.test(r.t2), r.t2);
   c('訂單追蹤讀得出訂金＋尾款', r.p2 && r.p2.dep === 5000 && r.p2.bal === 5000, JSON.stringify(r.p2));
-  c('隔 2 個月寫成「隔 2 個月 10 號」', /應於隔 2 個月 10 號支付尾款/.test(r.t3), r.t3);
-  c('0%＝全額型：不印訂金段', !/訂金/.test(r.t4) && /甲方應於隔月 25 號支付全額款項新台幣 \$10,000 元整。/.test(r.t4), r.t4);
+  c('2 個月寫成「驗收後第 2 個月 10 號」', /應於驗收後第 2 個月 10 號支付尾款/.test(r.t3), r.t3);
+  c('0%＝全額型：不印訂金段', !/訂金/.test(r.t4) && /甲方應於驗收後第 1 個月 25 號支付全額款項新台幣 \$10,000 元整。/.test(r.t4), r.t4);
   c('全額型訂單追蹤讀成 訂金0／尾款全額', r.p4 && r.p4.dep === 0 && r.p4.bal === 10000, JSON.stringify(r.p4));
   c('0% 但有 SGS 費用 → 保留訂金段', /支付訂金總計新台幣/.test(r.t5), r.t5);
-  c('還原新寫法 → 隔 2 月 5 號、顯示月／號欄', r.r1.mode === 'month' && r.r1.mon === '2' && r.r1.day === '5' && r.r1.monVis, JSON.stringify(r.r1));
-  c('還原舊寫法 → 驗收後 45 日內', r.r2.mode === 'days' && r.r2.days === '45', JSON.stringify(r.r2));
+  c('還原現行寫法 → 第 2 月 5 號、顯示月／號欄', r.r1.mode === 'month' && r.r1.mon === '2' && r.r1.day === '5' && r.r1.monVis, JSON.stringify(r.r1));
+  c('還原舊版 30 日內寫法 → 驗收後 45 日內', r.r2.mode === 'days' && r.r2.days === '45', JSON.stringify(r.r2));
+  c('還原 20260924a 舊寫法「隔 2 個月 5 號」→ 第 2 月 5 號', r.r1b.mode === 'month' && r.r1b.mon === '2' && r.r1b.day === '5', JSON.stringify(r.r1b));
+  c('還原 20260924a 舊寫法「隔月 10 號」(N=1省略) → 第 1 月 10 號', r.r1c.mode === 'month' && r.r1c.mon === '1' && r.r1c.day === '10', JSON.stringify(r.r1c));
   c('舊單「隔月指定日」→ Tab0、0%、隔 2 月 30 號', r.r3.tab === 0 && r.r3.pct === '0' && r.r3.mode === 'month' && r.r3.mon === '2' && r.r3.day === '30', JSON.stringify(r.r3));
   c('舊單沒改金額 → 條款沿用原文', r.r3.terms.startsWith('甲方應於收貨後第 2 個月 30 號'), r.r3.terms);
   c('清空 → 回「驗收後幾日內」、隔 1 月 10 號', r.reset.mode === 'days' && r.reset.mon === '1' && r.reset.day === '10' && r.reset.daysVis && !r.reset.monVis, JSON.stringify(r.reset));
