@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260924b">
-<script src="js/00_qrcode.js?v=20260924b"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260924c">
+<script src="js/00_qrcode.js?v=20260924c"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -997,6 +997,19 @@
         <label style="margin-top:8px">照片連結（上傳後自動填入雲端資料夾連結；也可手動貼）</label>
         <input class="fi" id="oe-invoice_photos" placeholder="上傳後自動填入，或手動貼雲端連結">
       </div>
+      <div style="grid-column:1/-1;margin-top:2px">
+        <button type="button" class="rec-act-btn" id="inv-toggle" onclick="invToggle()">▸ 其他發票（不只一張時才用）</button>
+        <div id="inv-box" style="display:none;margin-top:8px">
+          <div class="tbl-scroll">
+            <table class="rec-table" style="font-size:12px">
+              <thead><tr><th style="text-align:center">張</th><th>發票號碼</th><th>開立日</th><th>末五碼</th><th>明細</th><th>照片連結</th><th></th></tr></thead>
+              <tbody id="inv-body"></tbody>
+            </table>
+          </div>
+          <button type="button" class="rec-act-btn" onclick="invAddRow()" style="margin-top:6px">＋ 新增一張</button>
+          <div style="font-size:11px;color:var(--sub);margin-top:4px">上面「發票號碼」等欄位是第一張；同一張訂單另外還開了發票，記在這裡。</div>
+        </div>
+      </div>
 
       <div class="oe-sec">④ 尾款</div>
       <div class="fl"><label>尾款金額</label><input class="fi" type="number" id="oe-final_amt"></div>
@@ -1334,22 +1347,22 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260924b"></script>
-<script src="js/01_quote_form.js?v=20260924b"></script>
-<script src="js/01b_quote_preview.js?v=20260924b"></script>
-<script src="js/02_core_api.js?v=20260924b"></script>
-<script src="js/03_quote_custom.js?v=20260924b"></script>
-<script src="js/04_company.js?v=20260924b"></script>
-<script src="js/05_orders.js?v=20260924b"></script>
-<script src="js/06_verify_mgmt.js?v=20260924b"></script>
-<script src="js/07_calendar.js?v=20260924b"></script>
-<script src="js/08_ownbrand.js?v=20260924b"></script>
-<script src="js/09_verify_form.js?v=20260924b"></script>
-<script src="js/10_today.js?v=20260924b"></script>
-<script src="js/11_customers.js?v=20260924b"></script>
-<script src="js/12_storage.js?v=20260924b"></script>
-<script src="js/13_factory.js?v=20260924b"></script>
-<script src="js/14_contract.js?v=20260924b"></script>
-<script src="js/99_boot.js?v=20260924b"></script>
+<script src="js/00_utils.js?v=20260924c"></script>
+<script src="js/01_quote_form.js?v=20260924c"></script>
+<script src="js/01b_quote_preview.js?v=20260924c"></script>
+<script src="js/02_core_api.js?v=20260924c"></script>
+<script src="js/03_quote_custom.js?v=20260924c"></script>
+<script src="js/04_company.js?v=20260924c"></script>
+<script src="js/05_orders.js?v=20260924c"></script>
+<script src="js/06_verify_mgmt.js?v=20260924c"></script>
+<script src="js/07_calendar.js?v=20260924c"></script>
+<script src="js/08_ownbrand.js?v=20260924c"></script>
+<script src="js/09_verify_form.js?v=20260924c"></script>
+<script src="js/10_today.js?v=20260924c"></script>
+<script src="js/11_customers.js?v=20260924c"></script>
+<script src="js/12_storage.js?v=20260924c"></script>
+<script src="js/13_factory.js?v=20260924c"></script>
+<script src="js/14_contract.js?v=20260924c"></script>
+<script src="js/99_boot.js?v=20260924c"></script>
 </body>
 </html>
