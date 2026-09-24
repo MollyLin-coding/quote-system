@@ -1061,6 +1061,9 @@ function handleResyncOrderStatusFromQuotes_(params) {
 //   沒設定的用名字自動配（去「經銷商－」前綴、去空白、參／叁同視、前綴包含），唯一配到才算、並自動寫進 factory_map。
 //   酒款對照：廠務系統名去尾巴 V2 → 「<酒名>|<規格>」＝ownbrand_products.sku_id；也可 factory_map kind='product' 手動指定。
 //   ⚠ 只會「新增／補標記」consign_ledger，不刪不改數量；廠務端刪出貨會自己寫「進貨取消」負數列，這邊照樣同步進來。
+//   2026-09-23 晚 Molly 決定：①售出單價以報價系統為準（公版牌價×這位客戶的折數／例外折）——廠務的成交單價不一樣時列進 priceDiff
+//     提醒請同仁把廠務的折扣率改成跟報價系統一樣；報價系統算不出來才退用廠務的（priceFallback）
+//     ②月結請款兩邊都留：getFactoryConsignDealers 一併回廠務對帳單摘要（statements），寄售頁月結時提示「廠務這期已結清」防重複請款
 // ===================================================================
 var FXC_TAG_RE = /\[FXC:([^\]|\s]+)(?:\|([^\]]*))?\]/;
 var FXC_TYPE_MAP = { '進貨': 'in', '進貨取消': 'adjust', '售出': 'out', '退貨': 'return', '損耗': 'adjust', '盤點修正': 'adjust' };
@@ -1156,7 +1159,7 @@ function handleFactoryConsignSync_(params) {
       var ledger = v2ReadAll_(SHEET_CONSIGN_LEDGER, CONSIGN_LEDGER_HEADERS);   // 陣列位置＝表列順序（列號＝i+2）
       var noteCol = CONSIGN_LEDGER_HEADERS.indexOf('note') + 1;
       var have = {}; ledger.forEach(function (l) { var t = fxcTagOf_(l.note); if (t) have[t] = 1; });
-      var inserted = [], linked = [], skipped = [], unmappedDealers = {}, unmappedProducts = {}, serialByDate = {}, toAppend = [], possibleDup = [], priceFallback = [], ignoredDealers = {};
+      var inserted = [], linked = [], skipped = [], unmappedDealers = {}, unmappedProducts = {}, serialByDate = {}, toAppend = [], possibleDup = [], priceFallback = [], priceDiff = [], ignoredDealers = {};
       rows.sort(function (a, b) { return String(a.createdAt || '').localeCompare(String(b.createdAt || '')) || String(a.id || '').localeCompare(String(b.id || '')); });
       rows.forEach(function (fr) {
         var id = String(fr.id || '').trim(); if (!id || have[id]) return;
@@ -1206,13 +1209,18 @@ function handleFactoryConsignSync_(params) {
         var mid = 'CM-' + date.replace(/-/g, '') + '-' + ('0000' + serialByDate[date]).slice(-4);
         var unit = '';
         if (type === 'out') {
-          unit = (fr.price !== '' && fr.price != null && !isNaN(Number(fr.price))) ? Number(fr.price) : '';
-          // 複檢 0923：廠務成交單價是 0／空白（例：經銷商設定沒填折扣率）→ 月結會變 $0。退回報價系統自己的算法（公版牌價×這位客戶的折數），並列出來提醒
-          if (!(Number(unit) > 0)) {
-            var rp = null; try { rp = (typeof resolveConsignUnitPrice_ === 'function') ? resolveConsignUnitPrice_(cid, sku) : null; } catch (e) { rp = null; }
-            var up = rp && Number(rp.unitPrice);
-            priceFallback.push(id + '（' + sku + '：廠務單價 ' + (unit === '' ? '空白' : unit) + ' → 報價系統 ' + (up > 0 ? up : '也算不出來') + '）');
-            if (up > 0) unit = up;
+          // 售出單價以報價系統為準（Molly 2026-09-23）：公版牌價×這位客戶的折數（含單品例外折）
+          var fxUnit = (fr.price !== '' && fr.price != null && !isNaN(Number(fr.price))) ? Number(fr.price) : '';
+          var rp = null; try { rp = (typeof resolveConsignUnitPrice_ === 'function') ? resolveConsignUnitPrice_(cid, sku) : null; } catch (e) { rp = null; }
+          var up = rp ? Number(rp.unitPrice) : 0;
+          if (up > 0) {
+            unit = up;
+            if (fxUnit === '' || Math.round(fxUnit) !== Math.round(up)) priceDiff.push(id + '（' + date + ' ' + sku + '：廠務 ' + (fxUnit === '' ? '空白' : fxUnit) + '／報價系統 ' + up + '）');
+          } else if (Number(fxUnit) > 0) {
+            unit = fxUnit;
+            priceFallback.push(id + '（' + sku + '：報價系統算不出單價，先用廠務的 ' + fxUnit + '）');
+          } else {
+            priceFallback.push(id + '（' + sku + '：兩邊都沒有單價，這筆先空白）');
           }
         }
         var cidCell = /^\d+$/.test(String(cid)) ? Number(cid) : String(cid);
@@ -1226,7 +1234,7 @@ function handleFactoryConsignSync_(params) {
     } finally { lock.releaseLock(); }
     var now = tpeNow_();
     var summary = { at: now, inserted: inserted.length, linked: linked.length, unmappedDealers: unmappedDealers, unmappedProducts: unmappedProducts, ignoredDealers: ignoredDealers,
-      ambiguous: dm.ambiguous, possibleDup: possibleDup.slice(0, 20), priceFallback: priceFallback.slice(0, 20), skipped: skipped.slice(0, 10) };
+      ambiguous: dm.ambiguous, possibleDup: possibleDup.slice(0, 20), priceFallback: priceFallback.slice(0, 20), priceDiff: priceDiff.slice(0, 20), skipped: skipped.slice(0, 10) };
     try {
       var pr = PropertiesService.getScriptProperties();
       pr.setProperty('FACTORY_CONSIGN_LAST_SYNC', now);
@@ -1236,7 +1244,7 @@ function handleFactoryConsignSync_(params) {
       try { logChange_('factoryConsignSync', inserted.length + '+' + linked.length, { inserted: inserted.map(function (x) { return x.movement_id + '=' + x.fx; }), linked: linked.map(function (x) { return x.movement_id + '=' + x.fx; }) }); } catch (e) {}
     }
     return { ok: true, inserted: inserted, linked: linked, skipped: skipped, unmappedDealers: unmappedDealers, unmappedProducts: unmappedProducts, ignoredDealers: ignoredDealers,
-      ambiguous: dm.ambiguous, autoMapped: dm.auto, dealerMap: dm.map, dealers: dealers, possibleDup: possibleDup, priceFallback: priceFallback,
+      ambiguous: dm.ambiguous, autoMapped: dm.auto, dealerMap: dm.map, dealers: dealers, possibleDup: possibleDup, priceFallback: priceFallback, priceDiff: priceDiff,
       since: since, goLive: goLive, at: now, factoryRows: rows.length };
   } finally { fxSyncEnd_('FXC_SYNC_BUSY'); }
 }
@@ -1248,5 +1256,7 @@ function handleGetFactoryConsignDealers_() {
   var map = fxMapAll_().filter(function (x) { return String(x.kind) === 'consign_client'; });
   var last = null;
   try { var lr = PropertiesService.getScriptProperties().getProperty('FACTORY_CONSIGN_LAST_RESULT'); if (lr) last = JSON.parse(lr); } catch (e) { last = null; }
-  return { ok: true, configured: true, dealers: r.dealers || [], map: map, lastSync: fxcLastSync_(), since: fxcSince_(), lastResult: last };
+  // 廠務對帳單摘要（期別 yyyy-MM／狀態／請款金額／入帳日／認列單號）：寄售頁月結時提示「廠務這期已結清」，防兩邊重複請款
+  var stmts = (r.statements || []).map(function (x) { return { dealer: x.dealer, period: x.period, status: x.status, amount: x.amount, paidDate: x.paidDate || '', orderNo: x.orderNo || '' }; });
+  return { ok: true, configured: true, dealers: r.dealers || [], map: map, lastSync: fxcLastSync_(), since: fxcSince_(), lastResult: last, statements: stmts };
 }
