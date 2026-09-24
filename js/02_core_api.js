@@ -1150,6 +1150,8 @@ function loadQuoteIntoForm(q){
   // 舊單若存過已移除的 Tab5（酒款訂金＋其他費用，2026-08-05 併回 Tab0），一律回到 Tab0；
   // 付款文字仍由下方 LOADED_PAY_DETAIL 沿用存檔當下的版本，客戶看到的內容不會被改掉
   let pt=parseInt(q.paymentType)||0; if(pt<0||pt>4) pt=0;
+  // 2026-09-24：「隔月指定日付款」已併進 Tab0（0%＋隔 N 月 N 號）；舊單的月數／日期由下方 restorePayFieldsFromText 從原文解回
+  if(pt===2) pt=0;
   setPay(pt);
   if(pt===3 && q.paymentDetail){ const e=document.getElementById('p3-txt'); if(e)e.value=q.paymentDetail; }
   // 沿用存檔當下算好的付款文字，避免重載重算改掉客戶看到的條件（setPay 已把 LOADED_PAY_DETAIL 清為 null，這裡在其後設定）

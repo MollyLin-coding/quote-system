@@ -815,7 +815,17 @@ function restorePayFieldsFromText(txt){
     put('dep-pct', s.match(/酒水總價\s*(\d+(?:\.\d+)?)\s*%/) || s.match(/酒款金額之\s*(\d+(?:\.\d+)?)\s*%/) || s.match(/總價之\s*(\d+(?:\.\d+)?)\s*%/));   // (?:\.\d+)? 支援小數比例如 12.5%（複檢 #16）
     put('dep-days1', s.match(/製造前\s*(\d+)\s*日/));
     put('dep-days',  s.match(/到貨後\s*(\d+)\s*日/));
-    put('dep-fdays', s.match(/(\d+)\s*日內支付尾款/));
+    put('dep-fdays', s.match(/(\d+)\s*日內支付(?:尾款|全額款項)/));
+    /* 2026-09-24：尾款可選「隔 N 月 N 號」；舊單的「隔月指定日付款」（收貨後第 N 個月 N 號、全額）也併到這裡 */
+    const mm=s.match(/隔\s*(?:(\d+)\s*個)?月\s*(\d+)\s*號/) || s.match(/收貨後第\s*(\d+)\s*個月\s*(\d+)\s*號/);
+    const fmEl=document.getElementById('dep-fmode');
+    if(mm){
+      if(fmEl) fmEl.value='month';
+      const a=document.getElementById('dep-fmon'); if(a) a.value=mm[1]||'1';
+      const b=document.getElementById('dep-fday'); if(b) b.value=mm[2];
+    } else if(fmEl && /日內支付(?:尾款|全額款項)/.test(s)) fmEl.value='days';
+    if(/支付全額款項/.test(s) && !/支付訂金/.test(s)){ const e=document.getElementById('dep-pct'); if(e) e.value='0'; }   // 全額型＝不收訂金
+    if(typeof depFModeSync==='function') depFModeSync();
     put('dep-ded', note);
   } else if(payTab===1){
     put('p1-vdays', s.match(/應於\s*(\d+)\s*日內完成驗收/));
@@ -827,6 +837,24 @@ function restorePayFieldsFromText(txt){
     if(typeof estPayDay==='function') estPayDay();
   }
 }
+/* 2026-09-24：尾款付款時間二選一——「驗收後 N 日內」或「隔 N 月 N 號」 */
+function depFMode(){ return document.getElementById('dep-fmode')?.value==='month' ? 'month' : 'days'; }
+function depFModeSync(){
+  const m=depFMode();
+  const a=document.getElementById('dep-fm-days'), b=document.getElementById('dep-fm-month');
+  if(a) a.style.display=(m==='days')?'flex':'none';
+  if(b) b.style.display=(m==='month')?'flex':'none';
+}
+/* 條款裡的尾款時間字樣：「 30 日內」／「隔月 10 號」／「隔 2 個月 10 號」（接在「應於」後面） */
+function depFWhen(){
+  if(depFMode()==='month'){
+    const mon=Math.max(1, parseInt(document.getElementById('dep-fmon')?.value)||1);
+    const day=Math.min(31, Math.max(1, parseInt(document.getElementById('dep-fday')?.value)||10));
+    return mon===1 ? `隔月 ${day} 號` : `隔 ${mon} 個月 ${day} 號`;
+  }
+  return ` ${document.getElementById('dep-fdays')?.value||'30'} 日內`;   // 前面留空白：「應於 30 日內」跟舊條款一字不差
+}
+if(typeof onHook==='function') onHook('afterReset', depFModeSync);
 function calcPay(){
   const b=payBreakdown();
   const da=document.getElementById('dep-amt'); if(da) da.textContent='$'+b.dep.toLocaleString();
@@ -849,7 +877,7 @@ document.addEventListener('input',e=>{ if(e.target.id==='p2-mon'||e.target.id===
 // 使用者一旦編輯任一付款欄位，就取消「沿用已存文字」，改回即時計算並刷新預覽
 document.addEventListener('input',e=>{
   if(LOADED_PAY_DETAIL==null) return;
-  const PAY_FIELDS=['dep-pct','dep-days1','dep-days','dep-fdays','dep-ded','p1-vdays','p1-pct','p1-note','p2-mon','p2-day','p3-txt'];
+  const PAY_FIELDS=['dep-pct','dep-days1','dep-days','dep-fdays','dep-fmode','dep-fmon','dep-fday','dep-ded','p1-vdays','p1-pct','p1-note','p2-mon','p2-day','p3-txt'];
   if(PAY_FIELDS.includes(e.target.id)){ LOADED_PAY_DETAIL=null; LOADED_PAY_SIG=null; if(typeof calc==='function') calc(); }
 });
 // 滾輪滑過「聚焦中的數字欄」時讓它失焦，避免不小心把金額/數量滾掉
@@ -1091,6 +1119,9 @@ function resetAll(skipConfirm){
     else if(el.id==='dep-days1') el.value='15';
     else if(el.id==='dep-days') el.value='7';
     else if(el.id==='dep-fdays') el.value='30';
+    else if(el.id==='dep-fmode') el.value='days';   // 2026-09-24 尾款時間回預設「驗收後幾日內」
+    else if(el.id==='dep-fmon') el.value='1';
+    else if(el.id==='dep-fday') el.value='10';
     else if(el.id==='f-dt') el.value=todayStr();
     else if(el.tagName==='SELECT') el.value='';
     else if(!el.readOnly) el.value='';
@@ -1140,7 +1171,7 @@ function getPayTerms(){
     const bal=document.getElementById('dep-bal')?.textContent||'—';
     const d1=document.getElementById('dep-days1')?.value||'15';   // 製造前幾日內付訂金
     const vd=document.getElementById('dep-days')?.value||'7';     // 到貨後幾日內驗收
-    const fd=document.getElementById('dep-fdays')?.value||'30';   // 驗收後幾日內付尾款
+    const when=depFWhen();   // 尾款時間：「30 日內」或「隔月 10 號」（2026-09-24）
     /* 複檢 2026-08-06 #15：備註與費用名稱都是使用者輸入，條款字串會以 innerHTML 塞進
        預覽/列印，沒跳脫的話輸入「<」開頭的內容會被當標籤吃掉（或被注入）。這裡統一跳脫。
        條款自己的 <br> 是程式產生的、不受影響。 */
@@ -1159,8 +1190,18 @@ function getPayTerms(){
       if(note) tc+=`<br>付款條件備註：${note}`;
       return tc;
     }
+    /* 2026-09-24：完全不收訂金（比例 0%、也沒有併入訂金的費用）＝全額型，不印「訂金 $0」那段。
+       原「隔月指定日付款」就是用這個寫法（0%＋隔 N 月 N 號）。字樣「支付全額款項新台幣…元整」
+       訂單追蹤 ordPayFromQuote 認得（訂金 0、尾款＝全額）。 */
+    if(b.dep===0){
+      let tf=`驗收與付款：乙方完成商品製作並全數交付後，甲方應於到貨後 ${vd} 日內完成驗收。驗收無誤後，甲方應於${when}支付全額款項新台幣 ${bal} 元整`;
+      if(b.negExShown.length) tf+=`（已減去${b.negExShown.map(e=>`${esc(e.n)} ${money(e.a)}`).join('、')}）`;
+      tf+=`。`;
+      if(note) tf+=`<br>付款條件備註：${note}`;
+      return tf;
+    }
     let t=`訂金支付：甲方於乙方製造前 ${d1} 日內，支付訂金總計新台幣 ${dep} 元整（${fees}酒水總價 ${pct}% 之訂金 ${money(b.depWineShown)} 元整），作為乙方啟動生產之依據。`;
-    t+=`<br>驗收與尾款：乙方完成商品製作並全數交付後，甲方應於到貨後 ${vd} 日內完成驗收。驗收無誤後，甲方應於 ${fd} 日內支付尾款新台幣 ${bal} 元整（即酒水總價剩餘之 ${100-pct}%`;
+    t+=`<br>驗收與尾款：乙方完成商品製作並全數交付後，甲方應於到貨後 ${vd} 日內完成驗收。驗收無誤後，甲方應於${when}支付尾款新台幣 ${bal} 元整（即酒水總價剩餘之 ${100-pct}%`;
     if(b.negExShown.length) t+=`，減去${b.negExShown.map(e=>`${esc(e.n)} ${money(e.a)}`).join('、')}`;
     t+=`）。`;
     if(note) t+=`<br>付款條件備註：${note}`;
