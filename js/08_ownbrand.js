@@ -205,7 +205,7 @@ async function initConsignPage(force){
      ・廠務那邊已停用的經銷商：登記視窗不再說「不用在這裡登」
      ・同步摘要多講「可能重複」「售出單價用報價系統補」兩種要她看一眼的狀況
    ============================================================ */
-let CS_FX={ configured:false, loaded:false, dealers:[], map:{}, blocked:{}, lastSync:'', since:'', lastResult:null };
+let CS_FX={ configured:false, loaded:false, dealers:[], map:{}, blocked:{}, lastSync:'', since:'', lastResult:null, statements:[] };
 const CS_FX_NO_LINK='-';   // factory_map consign_client 的 factory_name＝'-'：Molly 選了「不連結廠務」（後端自動配對也會跳過）
 const CS_FX_TAG_RE=/^\s*\[FXC:([^\]|\s]+)(?:\|([^\]#]*)#?([^\]]*))?\]\s*/;
 function csFxTag(note){ const m=String(note||'').match(CS_FX_TAG_RE); return m?{id:m[1], orderNo:m[2]||'', seq:m[3]||''}:null; }
@@ -215,7 +215,7 @@ async function csFxLoad(force){
   const d=await readCall({action:'getFactoryConsignDealers', token:AUTH_TOKEN}, force);
   if(!d||!d.ok) throw new Error((d&&d.error)||'讀取廠務失敗');
   CS_FX.configured=!!d.configured; CS_FX.loaded=true;
-  CS_FX.dealers=d.dealers||[]; CS_FX.since=d.since||'';
+  CS_FX.dealers=d.dealers||[]; CS_FX.since=d.since||''; CS_FX.statements=d.statements||[];   // 廠務對帳單摘要（月結防重複請款用）
   if(String(d.lastSync||'')>String(CS_FX.lastSync||'')) CS_FX.lastSync=d.lastSync;   // 手動同步剛回來的時間比讀取快取新時保留
   if(d.lastResult && (!CS_FX.lastResult || String(d.lastResult.at||'')>=String(CS_FX.lastResult.at||''))) CS_FX.lastResult=d.lastResult;   // 每小時排程那次的摘要也看得到
   CS_FX.map={}; CS_FX.blocked={};
@@ -234,6 +234,11 @@ function csFxDealerBlocked(d){
     const c=(CS_CUSTOMERS||[]).find(x=>String(x.customer_id)===String(cid)); const ck=csFxNameKey(c&&c.name); if(!ck) return false;
     return ck===k1||ck===k2||(ck.length>=2&&(k1.indexOf(ck)===0||k2.indexOf(ck)===0||ck.indexOf(k1)===0||ck.indexOf(k2)===0));
   });
+}
+/* 2026-09-23 Molly：月結請款兩邊都留 → 這位客戶（對到的廠務經銷商）這個月份在廠務的對帳單（期別 yyyy-MM） */
+function csFxStmtFor(cid, ym){
+  const key=csFxDealerOf(cid); if(!key||!ym) return null;
+  return (CS_FX.statements||[]).find(x=>String(x.dealer)===String(key)&&String(x.period||'').slice(0,7)===String(ym).slice(0,7))||null;
 }
 function csFxDupNames(cid){ return (CS_CUSTOMERS||[]).filter(c=>String(c.customer_id)===String(cid)).map(c=>c.name||c.customer_id); }
 function csFxDealerOf(cid){ return CS_FX.map[String(cid||'').trim()]||''; }
@@ -254,9 +259,10 @@ function csFxRenderStatus(){
     if(up.length) parts.push('⚠ 廠務有酒款對不到公版酒，這些異動先沒進帳：'+escHtml(up.join('、'))+'（公版酒主檔要有同名同容量的酒）');
     Object.keys(amb).forEach(k=>parts.push('⚠ '+escHtml(csFxDealerLabel(k))+'：'+escHtml(amb[k])));
     if(ud.length&&!Object.keys(amb).length) parts.push('⚠ 這幾家的異動先沒進帳：'+escHtml(ud.join('、')));
-    const pd=r.possibleDup||[], pf=r.priceFallback||[];
-    if(pd.length) parts.push('⚠ 有 '+pd.length+' 筆廠務異動跟妳手動登過的很像、但分不出是哪一筆，所以照樣新增了：'+escHtml(pd.slice(0,3).join('、'))+'——請到明細看有沒有重複');
-    if(pf.length) parts.push('⚠ 有 '+pf.length+' 筆售出廠務沒填單價，已改用這裡的牌價×折數：'+escHtml(pf.slice(0,3).join('、')));
+    const pd=r.possibleDup||[], pf=r.priceFallback||[], pdf=r.priceDiff||[];
+    if(pd.length) parts.push('⚠ 有 '+pd.length+' 筆廠務異動跟妳手動登過的很像（前後一樣近的有兩筆），先對上其中一筆：'+escHtml(pd.slice(0,3).join('、'))+'——請到明細確認沒對錯');
+    if(pdf.length) parts.push('⚠ 有 '+pdf.length+' 筆售出廠務的單價跟這裡不一樣，已照報價系統的記：'+escHtml(pdf.slice(0,3).join('、'))+'——請同仁把廠務的折扣率改成跟這裡一樣');
+    if(pf.length) parts.push('⚠ 有 '+pf.length+' 筆售出這裡算不出單價（公版酒主檔沒有這款／規格），先用廠務的：'+escHtml(pf.slice(0,3).join('、')));
   }
   el.innerHTML=parts.join('<br>');
 }
@@ -277,7 +283,8 @@ async function csFxSyncNow(btn){
     else if(ud.length) parts.push('⚠ '+ud.length+' 家經銷商還沒對到客戶，先沒進帳');
     if(up.length) parts.push('⚠ '+up.length+' 款酒對不到公版酒，先沒進帳');
     if(r.possibleDup&&r.possibleDup.length) parts.push('⚠ '+r.possibleDup.length+' 筆可能跟手動登的重複（看下方說明）');
-    if(r.priceFallback&&r.priceFallback.length) parts.push(r.priceFallback.length+' 筆售出單價改用牌價×折數');
+    if(r.priceDiff&&r.priceDiff.length) parts.push('⚠ '+r.priceDiff.length+' 筆售出廠務單價跟這裡不一樣（已照報價系統記，請同仁改廠務折扣）');
+    if(r.priceFallback&&r.priceFallback.length) parts.push(r.priceFallback.length+' 筆售出這裡算不出單價、先用廠務的');
     if(r.skipped&&r.skipped.length) parts.push('略過 '+r.skipped.length+' 筆：'+r.skipped.slice(0,2).join('；'));
     toast(parts.length?parts.join('，'):'已跟廠務同步，沒有新異動', (amb.length||up.length||ud.length||(r.possibleDup&&r.possibleDup.length))?'err':'ok');
     await csFxLoad(true).catch(()=>{});   // 自動配對可能寫了新對照
@@ -921,10 +928,16 @@ async function csCheckSettled(){
       && String(q.clientName||'').trim()===String(c.name||'').trim()
       && String(q.remark||'').includes('寄售月結：'+from)):null;
     CS_MONTHLY.settled=q||null;
+    // 2026-09-23 Molly：月結請款兩邊都留 → 同時看廠務這期對帳單（已結清＝廠務那邊已經請過款）
+    const fs=(typeof csFxStmtFor==='function')?csFxStmtFor(CS_MONTHLY.for_customer, CS_MONTHLY.for_ym):null;
+    CS_MONTHLY.fxStmt=fs||null;
+    const fsH=fs?(String(fs.status)==='已結清'
+      ? `<br><span style="color:var(--red,#B3261E);font-weight:600">⚠ 廠務這期（${escHtml(fs.period)}）已經登記結清：${money(fs.amount)}${fs.paidDate?'，入帳 '+escHtml(fs.paidDate):''}${fs.orderNo?'，認列單 '+escHtml(fs.orderNo):''}——這裡再轉報價單會重複請款</span>`
+      : `<br>📄 廠務這期（${escHtml(fs.period)}）已經有對帳單：${money(fs.amount)}（${escHtml(fs.status||'未結清')}）`):'';
     const el=document.getElementById('cs-settled');
-    if(el) el.innerHTML=q
+    if(el) el.innerHTML=(q
       ? `✅ 這個月已於 ${escHtml(q.quoteDate||'')} 轉出報價單 <b>${escHtml(q.quoteNo)}</b>（已請款，別重複開單）`
-      : `📌 這個月還沒轉出報價單（尚未請款）`;
+      : `📌 這個月還沒轉出報價單（尚未請款）`)+fsH;
   }catch(e){ const el=document.getElementById('cs-settled'); if(el) el.textContent=''; }
 }
 function exportConsignMonthly(){
@@ -966,6 +979,8 @@ function consignMonthlyToQuote(){
   if(csMonthlyStale()){ toast('請先按「產生月結」（客戶或月份換過了）','err'); return; }
   if(!CS_MONTHLY||!(CS_MONTHLY.lines&&CS_MONTHLY.lines.length)){ toast('請先「產生月結」再轉為報價單','err'); return; }
   if(CS_MONTHLY.settled && !confirm('這個月已經在 '+(CS_MONTHLY.settled.quoteDate||'')+' 轉出過報價單 '+CS_MONTHLY.settled.quoteNo+'。\n再轉一次會出現兩張同月份的請款單，確定要繼續嗎？')) return;
+  { const _fs=(typeof csFxStmtFor==='function')?csFxStmtFor(CS_MONTHLY.for_customer, CS_MONTHLY.for_ym):null;
+    if(_fs && String(_fs.status)==='已結清' && !confirm('廠務這期（'+_fs.period+'）已經登記結清 '+money(_fs.amount)+(_fs.orderNo?'（認列單 '+_fs.orderNo+'）':'')+'。\n再在這裡轉報價單請款，會跟廠務那邊重複請款，確定要繼續嗎？')) return; }
   if(typeof isFormDirty==='function' && isFormDirty() && !confirm('報價單表單還有未儲存的內容，轉出月結報價單會把它清掉，確定要繼續？')) return;
   const c=CS_MONTHLY.customer||{};
   const period=(CS_MONTHLY.period&&CS_MONTHLY.period.from)?`${CS_MONTHLY.period.from} ～ ${CS_MONTHLY.period.to}`:`${CS_MONTHLY.year}年${CS_MONTHLY.month}月`;
