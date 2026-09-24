@@ -62,6 +62,12 @@ var QUOTE_PDF_HEADERS = ['quote_no','created_at','pdf_url','doc_url','file_name'
 var SHEET_ORDER_SHIPMENTS = 'order_shipments';
 var ORDER_SHIP_HEADERS = ['id','quote_no','seq','ship_date_est','ship_date_actual','amount','invoice_no','invoice_last5','note','created_at','updated_at'];
 var INVOICE_IMG_ROOT = '發票照片';
+/* 2026-09-24：一張訂單可能不只開一張發票（Molly 提出）。order_status 原本的
+   invoice_no/invoice_date/invoice_last5/invoice_detail/invoice_photos 維持不動、
+   當作「發票①」——效期推進(effOrdStatus_)、今日待辦、月報表 CSV 全部繼續讀那幾欄，不受影響。
+   這張子表只記「發票②起」，跟 order_shipments（分批出貨子紀錄）同一套寫法。 */
+var SHEET_ORDER_INVOICES = 'order_invoices';
+var ORDER_INV_HEADERS = ['id','quote_no','seq','invoice_no','invoice_date','invoice_last5','invoice_detail','photos','note','created_at','updated_at'];
 const CALENDAR_HEADERS = ['item_id','kind','date','recur_json','title','detail','category','priority','done','done_date','created_at','updated_at','time','all_day','source_quote_no','repeat_interval'];
 const CHANGELOG_HEADERS = ['ts','action','ref_no','payload_json','operator']; // operator＝2026-08-07 新增，記錄是誰做的操作
 
@@ -585,6 +591,57 @@ function handleUpdateShipment_(params) {
     if (fields[h] !== undefined) sh.getRange(rowNum, i + 1).setValue(v2AsCell_(fields[h]));
   });
   sh.getRange(rowNum, ORDER_SHIP_HEADERS.indexOf('updated_at') + 1).setValue(tpeNow_());
+  return { ok: true, id: id };
+}
+
+// ===== 2026-09-24：一張訂單的第②張起發票（第①張仍是 order_status 上原本那組欄位）=====
+function invGenId_() { return 'INV-' + Utilities.getUuid().slice(0, 8); }
+function handleAddInvoice_(params) {
+  var quoteNo = params.quote_no || params.quoteNo;
+  if (!quoteNo) throw new Error('缺少 quote_no');
+  var fields = params.fields || {};
+  var sh = v2Sheet_(SHEET_ORDER_INVOICES, ORDER_INV_HEADERS);
+  var now = tpeNow_();
+  var all = v2ReadAll_(SHEET_ORDER_INVOICES, ORDER_INV_HEADERS);
+  var seq = all.filter(function (o) { return String(o.quote_no) === String(quoteNo); }).length + 2;   // +2：①是 order_status 那張，子表從②起編號
+  var id = invGenId_();
+  var row = ORDER_INV_HEADERS.map(function (h) {
+    if (h === 'id') return id;
+    if (h === 'quote_no') return quoteNo;
+    if (h === 'seq') return seq;
+    if (h === 'created_at' || h === 'updated_at') return now;
+    return v2AsCell_(fields[h]);
+  });
+  sh.appendRow(row);
+  return { ok: true, id: id, quote_no: quoteNo, seq: seq };
+}
+function handleListInvoices_(params) {
+  var quoteNo = params.quote_no || params.quoteNo;
+  var all = v2ReadAll_(SHEET_ORDER_INVOICES, ORDER_INV_HEADERS);
+  var list = quoteNo ? all.filter(function (o) { return String(o.quote_no) === String(quoteNo); }) : all;
+  return { ok: true, quote_no: quoteNo || '', invoices: list };
+}
+function handleUpdateInvoice_(params) {
+  var id = params.id;
+  var fields = params.fields || {};
+  if (!id) throw new Error('缺少 id');
+  var sh = v2Sheet_(SHEET_ORDER_INVOICES, ORDER_INV_HEADERS);
+  var rowNum = v2FindRow_(SHEET_ORDER_INVOICES, ORDER_INV_HEADERS, 'id', id);
+  if (rowNum === -1) throw new Error('找不到發票紀錄：' + id);
+  ORDER_INV_HEADERS.forEach(function (h, i) {
+    if (h === 'id' || h === 'quote_no' || h === 'created_at' || h === 'updated_at' || h === 'seq') return;
+    if (fields[h] !== undefined) sh.getRange(rowNum, i + 1).setValue(v2AsCell_(fields[h]));
+  });
+  sh.getRange(rowNum, ORDER_INV_HEADERS.indexOf('updated_at') + 1).setValue(tpeNow_());
+  return { ok: true, id: id };
+}
+function handleDeleteInvoice_(params) {
+  var id = params.id;
+  if (!id) throw new Error('缺少 id');
+  var rowNum = v2FindRow_(SHEET_ORDER_INVOICES, ORDER_INV_HEADERS, 'id', id);
+  if (rowNum === -1) throw new Error('找不到發票紀錄：' + id);
+  var sh = v2Sheet_(SHEET_ORDER_INVOICES, ORDER_INV_HEADERS);
+  sh.deleteRow(rowNum);
   return { ok: true, id: id };
 }
 

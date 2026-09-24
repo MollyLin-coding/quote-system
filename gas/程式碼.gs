@@ -118,6 +118,7 @@ var OWNER_ONLY_ACTIONS_ = [
   'setupItemHeaders',
   'deleteQuote',
   'updateOrderStatus', 'saveInvoicePhotos', 'addShipment', 'updateShipment', 'deleteShipment',
+  'addInvoice', 'updateInvoice', 'deleteInvoice',
   'listCalendarItems', 'saveCalendarItem', 'deleteCalendarItem', 'syncCalendarNow',
   'getChangeLog',
   'syncOwnbrandProducts', 'syncCustomerProducts', 'syncAllCustomerProducts',
@@ -587,6 +588,18 @@ function handleRequest_(e) {
       case 'updateShipment':
         requireAuth_(params);
         return jsonResponse_(handleUpdateShipment_(params));
+      case 'addInvoice':
+        requireAuth_(params);
+        return jsonResponse_(handleAddInvoice_(params));
+      case 'listInvoices':
+        requireAuth_(params);
+        return jsonResponse_(handleListInvoices_(params));
+      case 'updateInvoice':
+        requireAuth_(params);
+        return jsonResponse_(handleUpdateInvoice_(params));
+      case 'deleteInvoice':
+        requireAuth_(params);
+        return jsonResponse_(handleDeleteInvoice_(params));
       case 'saveCustomQuote':
         requireAuth_(params);
         return jsonResponse_(handleSaveCustomQuote_(params));
