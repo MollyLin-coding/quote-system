@@ -816,8 +816,10 @@ function restorePayFieldsFromText(txt){
     put('dep-days1', s.match(/製造前\s*(\d+)\s*日/));
     put('dep-days',  s.match(/到貨後\s*(\d+)\s*日/));
     put('dep-fdays', s.match(/(\d+)\s*日內支付(?:尾款|全額款項)/));
-    /* 2026-09-24：尾款可選「隔 N 月 N 號」；舊單的「隔月指定日付款」（收貨後第 N 個月 N 號、全額）也併到這裡 */
-    const mm=s.match(/隔\s*(?:(\d+)\s*個)?月\s*(\d+)\s*號/) || s.match(/收貨後第\s*(\d+)\s*個月\s*(\d+)\s*號/);
+    /* 2026-09-24：尾款可選「驗收後第 N 個月 N 號」（Molly 要求明確標示幾月，改用「第 N 個月」統一寫法，
+       不再有「隔月」省略寫法）；舊單的舊寫法（隔月/隔 N 個月 N 號、或更早「隔月指定日付款」的
+       收貨後第 N 個月 N 號）都要吃得到，解析才不會漏掉既有報價單。 */
+    const mm=s.match(/(?:驗收後|收貨後)第\s*(\d+)\s*個月\s*(\d+)\s*號/) || s.match(/隔\s*(?:(\d+)\s*個)?月\s*(\d+)\s*號/);
     const fmEl=document.getElementById('dep-fmode');
     if(mm){
       if(fmEl) fmEl.value='month';
@@ -845,12 +847,13 @@ function depFModeSync(){
   if(a) a.style.display=(m==='days')?'flex':'none';
   if(b) b.style.display=(m==='month')?'flex':'none';
 }
-/* 條款裡的尾款時間字樣：「 30 日內」／「隔月 10 號」／「隔 2 個月 10 號」（接在「應於」後面） */
+/* 條款裡的尾款時間字樣：「 30 日內」／「驗收後第 1 個月 10 號」／「驗收後第 2 個月 10 號」（接在「應於」後面）。
+   2026-09-24 Molly：不要「隔月」這種省略寫法，要明確標示是第幾個月——統一用「第 N 個月」，N=1 也照樣寫出來。 */
 function depFWhen(){
   if(depFMode()==='month'){
     const mon=Math.max(1, parseInt(document.getElementById('dep-fmon')?.value)||1);
     const day=Math.min(31, Math.max(1, parseInt(document.getElementById('dep-fday')?.value)||10));
-    return mon===1 ? `隔月 ${day} 號` : `隔 ${mon} 個月 ${day} 號`;
+    return `驗收後第 ${mon} 個月 ${day} 號`;
   }
   return ` ${document.getElementById('dep-fdays')?.value||'30'} 日內`;   // 前面留空白：「應於 30 日內」跟舊條款一字不差
 }
