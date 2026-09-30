@@ -22,9 +22,19 @@ async function loadStorage(force){
   }catch(e){ toast(e.message||'載入寄倉資料失敗','err'); }
   finally{ ST_LOADING=false; }
 }
+/* 2026-09-30e：客戶名稱比對不分大小寫、忽略前後與中間空白——「Babyface」「babyface」「baby face」同一本帳
+   （報價單 20260701-01 客戶名是 Babyface、其他張是 babyface，驗收單提領時扣不到）。後端 storageCusKey_ 同一套。
+   顯示與寫入一律用帳上已有的那個拼法（stCusCanon），避免再長出第二種寫法。 */
+function stCusKey(v){ return String(v==null?'':v).trim().toLowerCase().replace(/\s+/g,''); }
+function stCusCanon(name){
+  const k=stCusKey(name); if(!k) return String(name==null?'':name).trim();
+  const hit=(ST_MOVES||[]).find(m=>!stVoided(m) && stCusKey(m.customer)===k) || (ST_MOVES||[]).find(m=>stCusKey(m.customer)===k);
+  return hit ? String(hit.customer) : String(name).trim();
+}
 function stCustomers(){
-  const s=new Set(); (ST_MOVES||[]).forEach(m=>{ if(m.customer) s.add(String(m.customer)); });
-  return [...s].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+  const seen={}, out=[];
+  (ST_MOVES||[]).forEach(m=>{ const k=stCusKey(m.customer); if(!k||seen[k]) return; seen[k]=1; out.push(String(m.customer)); });
+  return out.sort((a,b)=>a.localeCompare(b,'zh-Hant'));
 }
 /* 彙總：客戶＋酒款（sku_id 優先，自行輸入款用 名稱|容量 當 key）→ {in,out} */
 /* 2026-09-01 複檢：同一支酒，手動登記（有選公版酒＝有 sku_id）與驗收單自動登記（沒有 sku_id）
@@ -41,7 +51,7 @@ function stLotFmt(v){
   const s=String(v==null?'':v).trim(); if(!s) return '';
   return (typeof shpLotText==='function') ? shpLotText(s) : (/^lot/i.test(s) ? s.replace(/^lot\s*/i,'Lot ').trim() : ('Lot '+s));
 }
-function stKey(m){ return String(m.customer)+'␟'+stNm(m.name)+'|'+stVol(m.volume)+'␟'+stLotKey(m.lot); }
+function stKey(m){ return stCusKey(m.customer)+'␟'+stNm(m.name)+'|'+stVol(m.volume)+'␟'+stLotKey(m.lot); }
 function stSameItem(m, skuId, name, vol){
   return (skuId && m.sku_id) ? (String(m.sku_id)===String(skuId))
                              : (stNm(m.name)===stNm(name) && stVol(m.volume)===stVol(vol));
@@ -53,7 +63,7 @@ function stSummary(filterCus){
   const map={};
   (ST_MOVES||[]).forEach(m=>{
     if(stVoided(m)) return;
-    if(filterCus && String(m.customer)!==filterCus) return;
+    if(filterCus && stCusKey(m.customer)!==stCusKey(filterCus)) return;
     const k=stKey(m);
     if(!map[k]) map[k]={customer:m.customer, name:m.name||m.sku_id||'—', volume:m.volume||'', lot:stLotFmt(m.lot), sku_id:'', in:0, out:0, quotes:[]};
     { const qn=String(m.quote_no||'').trim(); if(qn && String(m.direction)!=='out' && map[k].quotes.indexOf(qn)<0) map[k].quotes.push(qn); }   // 這一列的酒是哪張報價單入倉的（多款提領產驗收單用）
@@ -69,7 +79,7 @@ function stBalanceFor(cus, skuId, name, vol, lot){
   let bal=0;
   (ST_MOVES||[]).forEach(m=>{
     if(stVoided(m)) return;
-    if(String(m.customer)!==String(cus)) return;
+    if(stCusKey(m.customer)!==stCusKey(cus)) return;
     if(!stSameItem(m, skuId, name, vol)) return;
     if(lot!==undefined && stLotKey(m.lot)!==stLotKey(lot)) return;
     const q=parseFloat(m.qty)||0;
@@ -108,7 +118,7 @@ function stRender(){
       <td data-l="本次提領" style="text-align:right;white-space:nowrap">${bal>0?`<input type="number" class="fi st-pick-qty" data-i="${i}" min="0" max="${bal}" step="1" placeholder="0" style="width:84px;text-align:right;padding:5px 7px" oninput="stPickChange()">`:''}</td></tr>`;
   }).join(''):'<tr><td colspan="8" class="rec-empty">尚無寄倉紀錄</td></tr>';
   stPickChange();
-  const rows=(ST_MOVES||[]).filter(m=>!filter||String(m.customer)===filter)
+  const rows=(ST_MOVES||[]).filter(m=>!filter||stCusKey(m.customer)===stCusKey(filter))
     .slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.move_id||'').localeCompare(String(a.move_id||'')));
   const lg=document.getElementById('st-ledger-body');
   if(lg) lg.innerHTML=rows.length?rows.map(m=>{
@@ -196,7 +206,7 @@ function stWithdrawRow(i){
   const c=document.getElementById('st-f-cus'); if(c) c.value=String(r.customer);
   stFillSkuOptions(); stFillLotList();
   const s=document.getElementById('st-f-sku');
-  const idx=ST_OUT_OPTS.findIndex(o=>String(o.customer)===String(r.customer) && stNm(o.name)===stNm(r.name) && stVol(o.volume)===stVol(r.volume) && stLotKey(o.lot)===stLotKey(r.lot));
+  const idx=ST_OUT_OPTS.findIndex(o=>stCusKey(o.customer)===stCusKey(r.customer) && stNm(o.name)===stNm(r.name) && stVol(o.volume)===stVol(r.volume) && stLotKey(o.lot)===stLotKey(r.lot));
   if(s && idx>=0){ s.value='inv:'+idx; stSkuChange(); }
   const q=document.getElementById('st-f-qty'); if(q){ q.value=''; setTimeout(()=>{ try{ q.focus(); }catch(_){} },50); }
   const box=document.getElementById('st-form'); if(box && box.scrollIntoView) box.scrollIntoView({behavior:'smooth', block:'nearest'});
@@ -222,7 +232,7 @@ function stPickChange(){
   document.querySelectorAll('#st-inv-body .st-pick-qty').forEach(el=>{ const r=ST_SUM[parseInt(el.getAttribute('data-i'),10)]; const q=parseFloat(el.value)||0; el.style.borderColor=(r&&q>(r.in-r.out))?'#C0453F':''; });
   if(!pk.length){ bar.style.display='none'; return; }
   bar.style.display='flex';
-  const cus=[...new Set(pk.map(x=>String(x.row.customer)))];
+  const cus=[...new Set(pk.map(x=>stCusCanon(x.row.customer)))];
   const total=pk.reduce((s,x)=>s+x.qty,0);
   const over=pk.filter(x=>x.over);
   const sum=document.getElementById('st-pick-sum');
@@ -240,8 +250,8 @@ let _stPickSaving=false;
 async function stPickSave(){
   if(_stPickSaving) return;
   const pk=stPicked(); if(!pk.length) return;
-  const cus=String(pk[0].row.customer);
-  if(pk.some(x=>String(x.row.customer)!==cus)){ toast('一次只能提同一位客戶的酒','err'); return; }
+  const cus=stCusCanon(pk[0].row.customer);
+  if(pk.some(x=>stCusKey(x.row.customer)!==stCusKey(cus))){ toast('一次只能提同一位客戶的酒','err'); return; }
   if(pk.some(x=>x.over)){ toast('有品項超過剩餘量，請先修正數量','err'); return; }
   const date=((document.getElementById('st-pick-date')||{}).value)||todayStr();
   const note=((document.getElementById('st-pick-note')||{}).value||'').trim();
@@ -262,8 +272,8 @@ async function stPickSave(){
 /* 產生驗收單：開原報價單的驗收單，把提領數量帶進去 */
 function stPickVerify(){
   const pk=stPicked(); if(!pk.length) return;
-  const cus=String(pk[0].row.customer);
-  if(pk.some(x=>String(x.row.customer)!==cus)){ toast('一次只能提同一位客戶的酒','err'); return; }
+  const cus=stCusCanon(pk[0].row.customer);
+  if(pk.some(x=>stCusKey(x.row.customer)!==stCusKey(cus))){ toast('一次只能提同一位客戶的酒','err'); return; }
   if(pk.some(x=>x.over)){ toast('有品項超過剩餘量，請先修正數量','err'); return; }
   const noLots=pk.filter(x=>!(x.row.quotes||[]).length);
   if(noLots.length){ toast(`${noLots.map(x=>escHtml(x.row.name)).join('、')} 沒有對應的報價單號，無法開驗收單；請用「只登記提領」`,'err'); return; }
@@ -290,7 +300,7 @@ function stFillOutOptions(){
   const cur=s.value;
   /* 2026-09-30c：寄倉資料還沒載完就按「登記提領」→ 先顯示載入中，載完 stRender 會再重建一次（不然會誤顯示「沒有寄倉庫存」） */
   if(ST_MOVES==null){ ST_OUT_OPTS=[]; s.innerHTML='<option value="">寄倉資料載入中…</option>'; if(!ST_LOADING && AUTH_TOKEN) loadStorage(); stSkuChange(); return; }
-  ST_OUT_OPTS = cus ? stSummary(cus).filter(r=>String(r.customer)===cus && (r.in-r.out)>0) : [];
+  ST_OUT_OPTS = cus ? stSummary(cus).filter(r=>stCusKey(r.customer)===stCusKey(cus) && (r.in-r.out)>0) : [];
   if(!cus){ s.innerHTML='<option value="">請先選客戶</option>'; }
   else if(!ST_OUT_OPTS.length){ s.innerHTML='<option value="">這位客戶目前沒有寄倉庫存</option>'; }
   else s.innerHTML='<option value="">選擇要提領的酒款…</option>'
@@ -366,7 +376,7 @@ async function stSaveMove(){
         toast(`提領超過剩餘量：${escHtml(cus)}／${escHtml(name)}／${escHtml(lot||'未填 Lot')} 目前剩 ${bal} 瓶${hint}。登記錯了可在明細按「作廢」再重登。`,'err'); return; }
     }
     const r=await apiCall({action:'addStorageMove', token:AUTH_TOKEN,
-      date:date, customer:cus, sku_id:skuId, name:name, volume:vol,
+      date:date, customer:stCusCanon(cus), sku_id:skuId, name:name, volume:vol,
       direction:ST_DIR, qty:qty, quote_no:quoteNo, note:note, lot:lot});
     if(!r.ok) throw new Error(r.error||'登記失敗');
     toast((ST_DIR==='out'?'已登記提領 ':'已登記入倉 ')+qty+' 瓶','ok');
@@ -429,7 +439,7 @@ function stCustomerTotal(cus){
   let bal=0;
   (ST_MOVES||[]).forEach(m=>{
     if(stVoided(m)) return;
-    if(String(m.customer)!==String(cus)) return;
+    if(stCusKey(m.customer)!==stCusKey(cus)) return;
     bal += (String(m.direction)==='out' ? -1 : 1) * (parseFloat(m.qty)||0);
   });
   return bal;
@@ -443,7 +453,7 @@ async function stSyncFromVerify(d, dir, srcTag){
   const moves=(d.rows||[])
     .map(r=>({ qty:parseFloat(r.thisShip)||0, name:r.name, vol:r.vol, lot:stLotFmt(String(r.lot||'').trim()||String(d.lot||'').trim()) }))
     .filter(r=>r.qty>0)
-    .map(r=>({ customer:d.client, sku_id:'', name:r.name, volume:(r.vol?String(r.vol).replace(/ml$/i,'')+'ml':''),
+    .map(r=>({ customer:stCusCanon(d.client), sku_id:'', name:r.name, volume:(r.vol?String(r.vol).replace(/ml$/i,'')+'ml':''),
       direction:dir, qty:r.qty, date:d.shipDate||todayStr(), quote_no:d.no, lot:r.lot,
       note:(dir==='in'?'驗收單自動入倉':'驗收單自動提領'),
       src:'VF:'+d.no+':'+srcTag+':'+r.name+':'+(r.vol||'') }));
