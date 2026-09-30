@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20260930c">
-<script src="js/00_qrcode.js?v=20260930c"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260930d">
+<script src="js/00_qrcode.js?v=20260930d"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -730,7 +730,7 @@
               <div class="fl" style="flex:1;min-width:180px"><label>寄倉客戶</label>
                 <select class="fi" id="st-customer" onchange="stRender()"><option value="">全部客戶</option></select></div>
               <button class="btn btn-gold" onclick="stOpenForm('in')"><i class="ti ti-plus"></i>登記入倉</button>
-              <button class="btn btn-dk" onclick="stOpenForm('out')" title="也可以直接按下方庫存表每一列的「提領」"><i class="ti ti-minus"></i>登記提領</button>
+              <button class="btn btn-dk" onclick="stOpenForm('out')" title="單款提領用這個；多款一起提請直接在下方庫存表填「本次提領」數量"><i class="ti ti-minus"></i>登記提領</button>
               <button class="btn btn-dk" onclick="loadStorage(true)"><i class="ti ti-refresh"></i>重新整理</button>
             </div>
             <div id="st-form" style="display:none;margin-top:12px;padding:12px;border:1px solid var(--bd);border-radius:8px">
@@ -755,9 +755,18 @@
             </div>
             <div class="tbl-scroll" style="margin-top:12px">
               <table class="rec-table mcard">
-                <thead><tr><th>客戶</th><th>Lot</th><th>酒款</th><th style="text-align:center">容量</th><th style="text-align:right">已入倉</th><th style="text-align:right">已提領</th><th style="text-align:right">剩餘</th><th></th></tr></thead>
+                <thead><tr><th>客戶</th><th>Lot</th><th>酒款</th><th style="text-align:center">容量</th><th style="text-align:right">已入倉</th><th style="text-align:right">已提領</th><th style="text-align:right">剩餘</th><th style="text-align:right">本次提領</th></tr></thead>
                 <tbody id="st-inv-body"><tr><td colspan="8" class="rec-empty">尚無寄倉紀錄</td></tr></tbody>
               </table>
+            </div>
+            <!-- 2026-09-30d：多款提領動作列——上表「本次提領」填了數量才出現 -->
+            <div id="st-pick-bar" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;padding:10px 12px;border:1px solid var(--gold);border-radius:8px;background:var(--gold-pale)">
+              <div id="st-pick-sum" style="flex:1;min-width:220px;font-size:13px;color:var(--ink)"></div>
+              <div class="fl" style="margin:0"><label style="font-size:11px">提領日期</label><input class="fi" type="date" id="st-pick-date" style="width:150px"></div>
+              <div class="fl" style="margin:0;flex:1;min-width:160px"><label style="font-size:11px">備註 <span class="opt">選填</span></label><input class="fi" id="st-pick-note" placeholder="例：客戶自取"></div>
+              <button class="btn btn-dk" id="st-pick-save" onclick="stPickSave()" title="只寫寄倉帳，不出驗收單"><i class="ti ti-minus"></i>只登記提領</button>
+              <button class="btn btn-gold" id="st-pick-vf" onclick="stPickVerify()" title="開原報價單的驗收單（第 N 次出貨），產生後寄倉扣庫存、訂單待出貨跟著減"><i class="ti ti-file-download"></i>產生驗收單</button>
+              <button class="btn btn-g" onclick="stPickClear()">清除</button>
             </div>
             <div style="font-size:12px;color:var(--sub);margin:14px 0 6px;font-weight:600">寄倉明細（最近在前）</div>
             <div class="tbl-scroll">
@@ -1349,22 +1358,22 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20260930c"></script>
-<script src="js/01_quote_form.js?v=20260930c"></script>
-<script src="js/01b_quote_preview.js?v=20260930c"></script>
-<script src="js/02_core_api.js?v=20260930c"></script>
-<script src="js/03_quote_custom.js?v=20260930c"></script>
-<script src="js/04_company.js?v=20260930c"></script>
-<script src="js/05_orders.js?v=20260930c"></script>
-<script src="js/06_verify_mgmt.js?v=20260930c"></script>
-<script src="js/07_calendar.js?v=20260930c"></script>
-<script src="js/08_ownbrand.js?v=20260930c"></script>
-<script src="js/09_verify_form.js?v=20260930c"></script>
-<script src="js/10_today.js?v=20260930c"></script>
-<script src="js/11_customers.js?v=20260930c"></script>
-<script src="js/12_storage.js?v=20260930c"></script>
-<script src="js/13_factory.js?v=20260930c"></script>
-<script src="js/14_contract.js?v=20260930c"></script>
-<script src="js/99_boot.js?v=20260930c"></script>
+<script src="js/00_utils.js?v=20260930d"></script>
+<script src="js/01_quote_form.js?v=20260930d"></script>
+<script src="js/01b_quote_preview.js?v=20260930d"></script>
+<script src="js/02_core_api.js?v=20260930d"></script>
+<script src="js/03_quote_custom.js?v=20260930d"></script>
+<script src="js/04_company.js?v=20260930d"></script>
+<script src="js/05_orders.js?v=20260930d"></script>
+<script src="js/06_verify_mgmt.js?v=20260930d"></script>
+<script src="js/07_calendar.js?v=20260930d"></script>
+<script src="js/08_ownbrand.js?v=20260930d"></script>
+<script src="js/09_verify_form.js?v=20260930d"></script>
+<script src="js/10_today.js?v=20260930d"></script>
+<script src="js/11_customers.js?v=20260930d"></script>
+<script src="js/12_storage.js?v=20260930d"></script>
+<script src="js/13_factory.js?v=20260930d"></script>
+<script src="js/14_contract.js?v=20260930d"></script>
+<script src="js/99_boot.js?v=20260930d"></script>
 </body>
 </html>
