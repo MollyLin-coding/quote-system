@@ -55,7 +55,8 @@ function stSummary(filterCus){
     if(stVoided(m)) return;
     if(filterCus && String(m.customer)!==filterCus) return;
     const k=stKey(m);
-    if(!map[k]) map[k]={customer:m.customer, name:m.name||m.sku_id||'—', volume:m.volume||'', lot:stLotFmt(m.lot), sku_id:'', in:0, out:0};
+    if(!map[k]) map[k]={customer:m.customer, name:m.name||m.sku_id||'—', volume:m.volume||'', lot:stLotFmt(m.lot), sku_id:'', in:0, out:0, quotes:[]};
+    { const qn=String(m.quote_no||'').trim(); if(qn && String(m.direction)!=='out' && map[k].quotes.indexOf(qn)<0) map[k].quotes.push(qn); }   // 這一列的酒是哪張報價單入倉的（多款提領產驗收單用）
     if(m.sku_id && !map[k].sku_id) map[k].sku_id=String(m.sku_id);
     if(m.sku_id && m.name) map[k].name=m.name;   // 同一支酒併成一列時，用有酒款編號那筆的名稱
     const q=parseFloat(m.qty)||0;
@@ -104,8 +105,9 @@ function stRender(){
       <td data-l="已入倉" style="text-align:right">${r.in.toLocaleString()}</td>
       <td data-l="已提領" style="text-align:right">${r.out.toLocaleString()}</td>
       <td data-l="剩餘" style="text-align:right"><strong style="color:${bal>0?'var(--ink)':'var(--hint)'}">${bal.toLocaleString()}</strong></td>
-      <td style="text-align:right;white-space:nowrap">${bal>0?`<button class="rec-act-btn" title="從這一列直接登記提領" onclick="stWithdrawRow(${i})"><i class="ti ti-minus"></i> 提領</button>`:''}</td></tr>`;
+      <td data-l="本次提領" style="text-align:right;white-space:nowrap">${bal>0?`<input type="number" class="fi st-pick-qty" data-i="${i}" min="0" max="${bal}" step="1" placeholder="0" style="width:84px;text-align:right;padding:5px 7px" oninput="stPickChange()">`:''}</td></tr>`;
   }).join(''):'<tr><td colspan="8" class="rec-empty">尚無寄倉紀錄</td></tr>';
+  stPickChange();
   const rows=(ST_MOVES||[]).filter(m=>!filter||String(m.customer)===filter)
     .slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.move_id||'').localeCompare(String(a.move_id||'')));
   const lg=document.getElementById('st-ledger-body');
@@ -198,6 +200,79 @@ function stWithdrawRow(i){
   if(s && idx>=0){ s.value='inv:'+idx; stSkuChange(); }
   const q=document.getElementById('st-f-qty'); if(q){ q.value=''; setTimeout(()=>{ try{ q.focus(); }catch(_){} },50); }
   const box=document.getElementById('st-form'); if(box && box.scrollIntoView) box.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+/* 2026-09-30d Molly：「提領也可能單次同時提領多酒款，且要可以產生驗收單」
+   庫存表每列多一欄「本次提領」數量：填幾列就是提幾款。下方動作列即時顯示「已選 N 款／共 M 瓶」，
+   ・「只登記提領」→ 直接寫寄倉帳（一次多筆、各自帶 Lot），不出驗收單
+   ・「產生驗收單」→ 開這批貨原本那張報價單的驗收單（第 N 次出貨），本次出貨數＝提領數量、Lot 帶好、
+     寄倉方向預選「提領」；產生後寄倉扣庫存、訂單待出貨減、行事曆記配送日（Molly 2026-09-30 定案）。
+     同一次只能提同一張報價單的品項；跨單或沒有報價單號的列，會提示分開處理。 */
+function stPicked(){
+  const out=[];
+  document.querySelectorAll('#st-inv-body .st-pick-qty').forEach(el=>{
+    const q=parseFloat(el.value)||0; if(q<=0) return;
+    const r=ST_SUM[parseInt(el.getAttribute('data-i'),10)]; if(!r) return;
+    out.push({ row:r, qty:q, over:q>(r.in-r.out) });
+  });
+  return out;
+}
+function stPickChange(){
+  const bar=document.getElementById('st-pick-bar'); if(!bar) return;
+  const pk=stPicked();
+  document.querySelectorAll('#st-inv-body .st-pick-qty').forEach(el=>{ const r=ST_SUM[parseInt(el.getAttribute('data-i'),10)]; const q=parseFloat(el.value)||0; el.style.borderColor=(r&&q>(r.in-r.out))?'#C0453F':''; });
+  if(!pk.length){ bar.style.display='none'; return; }
+  bar.style.display='flex';
+  const cus=[...new Set(pk.map(x=>String(x.row.customer)))];
+  const total=pk.reduce((s,x)=>s+x.qty,0);
+  const over=pk.filter(x=>x.over);
+  const sum=document.getElementById('st-pick-sum');
+  if(sum) sum.innerHTML = (cus.length>1)
+    ? `<span style="color:#C0453F">⚠ 選到 ${cus.length} 位客戶的酒（${cus.map(escHtml).join('、')}），一次只能提同一位客戶</span>`
+    : (over.length ? `<span style="color:#C0453F">⚠ ${over.map(x=>escHtml(x.row.name)+(x.row.lot?('／'+escHtml(x.row.lot)):'')).join('、')} 超過剩餘量</span>`
+    : `提領 <strong>${escHtml(cus[0])}</strong>：已選 <strong>${pk.length}</strong> 款、共 <strong>${total.toLocaleString()}</strong> 瓶`);
+  const ok=cus.length===1 && !over.length;
+  ['st-pick-save','st-pick-vf'].forEach(id=>{ const b=document.getElementById(id); if(b) b.disabled=!ok; });
+  const d=document.getElementById('st-pick-date'); if(d && !d.value) d.value=todayStr();
+}
+function stPickClear(){ document.querySelectorAll('#st-inv-body .st-pick-qty').forEach(el=>{ el.value=''; }); const n=document.getElementById('st-pick-note'); if(n) n.value=''; stPickChange(); }
+let _stPickSaving=false;
+/* 只登記提領（不出驗收單） */
+async function stPickSave(){
+  if(_stPickSaving) return;
+  const pk=stPicked(); if(!pk.length) return;
+  const cus=String(pk[0].row.customer);
+  if(pk.some(x=>String(x.row.customer)!==cus)){ toast('一次只能提同一位客戶的酒','err'); return; }
+  if(pk.some(x=>x.over)){ toast('有品項超過剩餘量，請先修正數量','err'); return; }
+  const date=((document.getElementById('st-pick-date')||{}).value)||todayStr();
+  const note=((document.getElementById('st-pick-note')||{}).value||'').trim();
+  if(!confirm(`登記提領 ${cus}：${pk.length} 款、共 ${pk.reduce((s,x)=>s+x.qty,0)} 瓶（${date}）？\n\n只寫寄倉帳、不出驗收單。`)) return;
+  _stPickSaving=true; btnBusy('st-pick-save',true,'登記中…');
+  try{
+    const moves=pk.map(x=>({ customer:cus, sku_id:x.row.sku_id||'', name:x.row.name, volume:x.row.volume||'', direction:'out', qty:x.qty, date:date,
+      quote_no:(x.row.quotes||[])[0]||'', note:note, lot:x.row.lot||'' }));
+    const r=await apiCall({action:'addStorageMoves', token:AUTH_TOKEN, moves});
+    if(!r.ok) throw new Error(r.error||'登記失敗');
+    const nS=(r.saved||[]).length, nK=(r.skipped||[]).length;
+    toast(`已登記提領 ${nS} 款`+(nK?`；${nK} 款沒登記：${(r.skipped||[]).map(x=>x.reason).join('；')}`:''), nK?'err':'ok');
+    stPickClear();
+    await loadStorage(true);
+  }catch(e){ toast(e.message||'登記失敗','err'); }
+  finally{ _stPickSaving=false; btnBusy('st-pick-save',false); }
+}
+/* 產生驗收單：開原報價單的驗收單，把提領數量帶進去 */
+function stPickVerify(){
+  const pk=stPicked(); if(!pk.length) return;
+  const cus=String(pk[0].row.customer);
+  if(pk.some(x=>String(x.row.customer)!==cus)){ toast('一次只能提同一位客戶的酒','err'); return; }
+  if(pk.some(x=>x.over)){ toast('有品項超過剩餘量，請先修正數量','err'); return; }
+  const noLots=pk.filter(x=>!(x.row.quotes||[]).length);
+  if(noLots.length){ toast(`${noLots.map(x=>escHtml(x.row.name)).join('、')} 沒有對應的報價單號，無法開驗收單；請用「只登記提領」`,'err'); return; }
+  const qs=[...new Set(pk.map(x=>(x.row.quotes||[])[0]))];
+  if(qs.length>1){ toast(`選到的品項來自 ${qs.length} 張報價單（${qs.join('、')}），驗收單一次只能開一張，請分開提領`,'err'); return; }
+  if(pk.some(x=>(x.row.quotes||[]).length>1)) toast('有品項是從多張報價單入倉的，驗收單會掛在第一張（'+qs[0]+'）','ok');
+  if(typeof openVerifyForm!=='function'){ toast('驗收單模組未載入','err'); return; }
+  const date=((document.getElementById('st-pick-date')||{}).value)||todayStr();
+  openVerifyForm(qs[0], { storageOut:{ date, items: pk.map(x=>({ name:x.row.name, vol:x.row.volume||'', qty:x.qty, lot:x.row.lot||'' })) } });
 }
 /* 表單上方的提示列：提領時寫出「要提領的是誰的哪一支酒、哪個 Lot、剩幾瓶」，選錯一眼就看得出來 */
 function stPickBanner(){

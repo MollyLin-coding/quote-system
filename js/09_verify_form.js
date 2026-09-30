@@ -78,9 +78,15 @@ function ensureVerifyOverlay(){
 }
 function closeVerifyForm(){ VF_EDIT_ID=null; const o=document.getElementById('vf-overlay'); if(o) o.style.display='none'; }
 
-async function openVerifyForm(no){
+/* 2026-09-30d Molly：「提領也可能單次同時提領多酒款，且要可以產生驗收單」
+   opts.storageOut＝從「客戶寄倉」多款提領進來：{ items:[{name,vol,qty,lot}], date }
+   → 沿用這張報價單的驗收單（第 N 次出貨）：本次出貨數帶提領數量（沒勾的品項＝0）、
+     每列 Lot 帶寄倉的 Lot、寄倉區塊強制出現且預選「提領」、配送日期帶提領日期。
+     產生後：寄倉扣庫存（stSyncFromVerify 帶 Lot）、訂單待出貨跟著減、行事曆記配送日——跟一般分批出貨一模一樣。 */
+async function openVerifyForm(no, opts){
   if(!no) return;
   VF_EDIT_ID=null;
+  const _so=(opts&&opts.storageOut)||null;
   try{
     toast('讀取訂單資料…','ok');
     // 走讀取快取：留底那份登入後就預抓好了，通常 0 秒；報價單本身 90 秒內開過也 0 秒
@@ -161,8 +167,35 @@ async function openVerifyForm(no){
       const _o=(ORDERS_CACHE||[]).find(x=>String(x.no)===String(no));
       if(_o && typeof ordCustLot==='function') _hdrLot=ordCustLot(_o)||'';
     }catch(_){}
+    if(_so && Array.isArray(_so.items)){
+      const _nm=v=>String(v==null?'':v).trim().toLowerCase().replace(/\s+/g,''), _vl=v=>_nm(v).replace(/ml$/,'');
+      const _left=_so.items.map(it=>Object.assign({}, it));
+      VERIFY_DATA.rows.forEach(r=>{
+        const i=_left.findIndex(it=>_nm(it.name)===_nm(r.name) && _vl(it.vol)===_vl(r.vol));
+        if(i<0){ r.thisShip=0; return; }
+        const it=_left.splice(i,1)[0];
+        r.thisShip=parseFloat(it.qty)||0;
+        if(it.lot) r.lot=String(it.lot);
+      });
+      VERIFY_DATA.storage=true;            // 品項就是從寄倉來的，一定要同步扣寄倉
+      VERIFY_DATA.stForceDir='out';
+      VERIFY_DATA.stDate=String(_so.date||'');
+      const _lots=[...new Set(VERIFY_DATA.rows.filter(r=>(parseFloat(r.thisShip)||0)>0).map(r=>String(r.lot||'').trim()).filter(Boolean))];
+      if(_lots.length===1 && !_hdrLot) _hdrLot=_lots[0].replace(/^lot\s*/i,'');   // 抬頭客戶批號沿用同一個 Lot（去掉 Lot 字樣，跟既有填法一致）
+      if(_left.length) toast(`⚠ 有 ${_left.length} 款寄倉品項在報價單 ${no} 找不到對應品項（${_left.map(x=>x.name).join('、')}），這幾款不會印在驗收單上，請回寄倉頁單獨登記`,'err');
+    }
     buildVerifyModal(_hdrLot);
     document.getElementById('vf-overlay').style.display='flex';
+    if(_so){
+      try{
+        const _on=document.getElementById('vf-st-on'); if(_on) _on.checked=true;
+        const _r=document.querySelector('input[name="vf-st-dir"][value="out"]'); if(_r) _r.checked=true;
+        const _sd=document.getElementById('vf-shipdate'); if(_sd && VERIFY_DATA.stDate) _sd.value=VERIFY_DATA.stDate;
+        if(VERIFY_DATA.rows.some(r=>String(r.lot||'').trim())) { const _cb=document.getElementById('vf-showlot'); if(_cb && !_cb.checked){ _cb.checked=true; toggleLotCol(); } }
+        recalcVerify();
+        toast('已從客戶寄倉帶入提領品項與數量（寄倉方向已選「提領」），確認後按「產生分批驗收單」','ok');
+      }catch(_){}
+    }
     /* 複檢 2026-08-06 #24：留底是用「品名＋容量」跟報價單品項比對的，報價單存檔後若改過
        品名或容量（例如 500→550），舊留底就對不上任何一列 → 已出貨全部歸零、本次出貨又帶
        成全部訂購量，但「第幾次出貨」還是照算，會印出矛盾的單。這種情況要明講，不能默默帶錯。 */
@@ -249,7 +282,7 @@ function vfStorageBlockHtml(d){
      改成只看「這張驗收單上的這幾款酒」目前在我方倉庫的餘額。 */
   let bal=0;
   try{ bal=(typeof stBalanceForRows==='function')?stBalanceForRows(d.client, d.rows):0; }catch(_){}
-  const defOut = bal>0;
+  const defOut = (d.stForceDir==='out') ? true : bal>0;
   const balNote = bal>0 ? `（這幾款酒目前在我方倉庫還有 <strong>${bal}</strong> 瓶）` : '（這幾款酒目前沒有寄倉庫存）';
   return `<div id="vf-storage-box" style="margin-top:14px;padding:11px 13px;border:1px solid var(--bd);border-radius:8px">
     <label style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer">
