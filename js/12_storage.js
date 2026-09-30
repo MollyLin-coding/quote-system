@@ -32,7 +32,16 @@ function stCustomers(){
    改成：**兩邊都有 sku_id 才比 sku_id，否則一律比「酒款名＋容量」**（後端 v71 的判斷同步改成一樣）。 */
 function stNm(v){ return String(v==null?'':v).trim().toLowerCase().replace(/\s+/g,''); }
 function stVol(v){ return stNm(v).replace(/ml$/,''); }
-function stKey(m){ return String(m.customer)+'␟'+stNm(m.name)+'|'+stVol(m.volume); }
+/* 2026-09-30 Molly：「寄倉庫存明細我需要顯示是哪一個 lot 號」＋「彙總也分 Lot」
+   → 寄倉每筆多一個 lot 欄；彙總依 客戶＋酒款＋容量＋Lot 分列；提領要指定 Lot、餘額也按 Lot 算。
+   Lot 比對不分大小寫、忽略空白與開頭的「Lot」：「Lot 18」「LOT18」「18」視為同一個（後端 storageLotKey_ 同一套）。
+   顯示一律用 shpLotText 的格式（Lot 18）。舊紀錄沒有 Lot 的，歸在「未填 Lot」那一列。 */
+function stLotKey(v){ return stNm(v).replace(/^lot[-_#:.]?/,''); }
+function stLotFmt(v){
+  const s=String(v==null?'':v).trim(); if(!s) return '';
+  return (typeof shpLotText==='function') ? shpLotText(s) : (/^lot/i.test(s) ? s.replace(/^lot\s*/i,'Lot ').trim() : ('Lot '+s));
+}
+function stKey(m){ return String(m.customer)+'␟'+stNm(m.name)+'|'+stVol(m.volume)+'␟'+stLotKey(m.lot); }
 function stSameItem(m, skuId, name, vol){
   return (skuId && m.sku_id) ? (String(m.sku_id)===String(skuId))
                              : (stNm(m.name)===stNm(name) && stVol(m.volume)===stVol(vol));
@@ -46,20 +55,21 @@ function stSummary(filterCus){
     if(stVoided(m)) return;
     if(filterCus && String(m.customer)!==filterCus) return;
     const k=stKey(m);
-    if(!map[k]) map[k]={customer:m.customer, name:m.name||m.sku_id||'—', volume:m.volume||'', in:0, out:0};
+    if(!map[k]) map[k]={customer:m.customer, name:m.name||m.sku_id||'—', volume:m.volume||'', lot:stLotFmt(m.lot), in:0, out:0};
     if(m.sku_id && m.name) map[k].name=m.name;   // 同一支酒併成一列時，用有酒款編號那筆的名稱
     const q=parseFloat(m.qty)||0;
     if(String(m.direction)==='out') map[k].out+=q; else map[k].in+=q;
   });
-  return Object.values(map).sort((a,b)=>String(a.customer).localeCompare(String(b.customer),'zh-Hant')||String(a.name).localeCompare(String(b.name),'zh-Hant'));
+  return Object.values(map).sort((a,b)=>String(a.customer).localeCompare(String(b.customer),'zh-Hant')||String(a.lot).localeCompare(String(b.lot),'zh-Hant',{numeric:true})||String(a.name).localeCompare(String(b.name),'zh-Hant'));
 }
-/* 某客戶某酒款目前剩餘（提領防呆用） */
-function stBalanceFor(cus, skuId, name, vol){
+/* 某客戶某酒款目前剩餘（提領防呆用）；lot 有給（含空字串＝未填 Lot）就只算那個 Lot，沒給（undefined）＝全部 Lot 合計 */
+function stBalanceFor(cus, skuId, name, vol, lot){
   let bal=0;
   (ST_MOVES||[]).forEach(m=>{
     if(stVoided(m)) return;
     if(String(m.customer)!==String(cus)) return;
     if(!stSameItem(m, skuId, name, vol)) return;
+    if(lot!==undefined && stLotKey(m.lot)!==stLotKey(lot)) return;
     const q=parseFloat(m.qty)||0;
     bal += (String(m.direction)==='out') ? -q : q;
   });
@@ -87,12 +97,12 @@ function stRender(){
   const inv=document.getElementById('st-inv-body');
   if(inv) inv.innerHTML=sum.length?sum.map(r=>{
     const bal=r.in-r.out;
-    return `<tr><td data-l="客戶">${escHtml(r.customer)}</td><td data-l="酒款">${escHtml(r.name)}</td>
+    return `<tr><td data-l="客戶">${escHtml(r.customer)}</td><td data-l="Lot" style="white-space:nowrap">${r.lot?escHtml(r.lot):'<span style="color:var(--hint)">未填</span>'}</td><td data-l="酒款">${escHtml(r.name)}</td>
       <td data-l="容量" style="text-align:center">${escHtml(r.volume||'—')}</td>
       <td data-l="已入倉" style="text-align:right">${r.in.toLocaleString()}</td>
       <td data-l="已提領" style="text-align:right">${r.out.toLocaleString()}</td>
       <td data-l="剩餘" style="text-align:right"><strong style="color:${bal>0?'var(--ink)':'var(--hint)'}">${bal.toLocaleString()}</strong></td></tr>`;
-  }).join(''):'<tr><td colspan="6" class="rec-empty">尚無寄倉紀錄</td></tr>';
+  }).join(''):'<tr><td colspan="7" class="rec-empty">尚無寄倉紀錄</td></tr>';
   const rows=(ST_MOVES||[]).filter(m=>!filter||String(m.customer)===filter)
     .slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.move_id||'').localeCompare(String(a.move_id||'')));
   const lg=document.getElementById('st-ledger-body');
@@ -103,6 +113,7 @@ function stRender(){
     if(vd) return `<tr style="opacity:.55"><td data-l="日期" style="text-decoration:line-through">${escHtml(m.date||'')}</td>
       <td data-l="類型"><span style="font-weight:600;color:var(--hint)">${isOut?'提領':'入倉'}（已作廢）</span></td>
       <td data-l="客戶" style="text-decoration:line-through">${escHtml(m.customer||'')}</td>
+      <td data-l="Lot" style="text-decoration:line-through;white-space:nowrap">${escHtml(stLotFmt(m.lot)||'—')}</td>
       <td data-l="酒款" style="text-decoration:line-through">${escHtml((m.name||m.sku_id||'—')+(m.volume?('（'+m.volume+'）'):''))}</td>
       <td data-l="數量" style="text-align:right;text-decoration:line-through">${(parseFloat(m.qty)||0).toLocaleString()}</td>
       <td data-l="單號">${escHtml(m.quote_no||'—')}</td>
@@ -110,12 +121,13 @@ function stRender(){
     return `<tr><td data-l="日期">${escHtml(m.date||'')}</td>
       <td data-l="類型"><span style="font-weight:600;color:${isOut?'#B0483A':'#4A7A46'}">${isOut?'提領':'入倉'}</span></td>
       <td data-l="客戶">${escHtml(m.customer||'')}</td>
+      <td data-l="Lot" style="white-space:nowrap">${escHtml(stLotFmt(m.lot)||'—')}</td>
       <td data-l="酒款">${escHtml((m.name||m.sku_id||'—')+(m.volume?('（'+m.volume+'）'):''))}</td>
       <td data-l="數量" style="text-align:right">${(parseFloat(m.qty)||0).toLocaleString()}</td>
       <td data-l="單號">${escHtml(m.quote_no||'—')}</td>
       <td data-l="備註">${escHtml(m.note||'')}</td>
       <td style="text-align:right"><button class="rec-act-btn" title="作廢這筆（登記錯了才用；紀錄會留著）" onclick="stDeleteMove('${escAttr(m.move_id)}')">作廢</button></td></tr>`;
-  }).join(''):'<tr><td colspan="8" class="rec-empty">尚無寄倉紀錄</td></tr>';
+  }).join(''):'<tr><td colspan="9" class="rec-empty">尚無寄倉紀錄</td></tr>';
 }
 /* ---- 登記表單 ---- */
 function stOpenForm(dir){
@@ -126,10 +138,39 @@ function stOpenForm(dir){
   { const d=document.getElementById('st-f-date'); if(d && !d.value) d.value=todayStr(); }
   { const c=document.getElementById('st-f-cus'); if(c && !c.value){ const f=document.getElementById('st-customer'); if(f&&f.value) c.value=f.value; } }
   stFillSkuOptions();
+  stFillLotList();
+}
+/* Lot 建議清單：提領＝這位客戶目前還有剩的 Lot；入倉＝這位客戶用過的 Lot（新 Lot 直接打） */
+function stFillLotList(){
+  const dl=document.getElementById('st-lotlist'); if(!dl) return;
+  const cus=((document.getElementById('st-f-cus')||{}).value||'').trim();
+  const seen={}, out=[];
+  stSummary(cus||'').forEach(r=>{
+    if(!r.lot) return;
+    if(ST_DIR==='out' && !(r.in-r.out>0)) return;
+    const k=stLotKey(r.lot); if(seen[k]) return; seen[k]=1; out.push(r.lot);
+  });
+  dl.innerHTML=out.map(v=>`<option value="${escAttr(v)}">`).join('');
+}
+/* 填了對應報價單號、Lot 還空著 → 用報價紀錄同一套來源帶 Lot（訂單進度客戶批號→驗收單→廠務→報價單批次標籤），帶了還是可以改 */
+async function stNoChange(){
+  const lotEl=document.getElementById('st-f-lot'); if(!lotEl || String(lotEl.value||'').trim()) return;
+  const no=((document.getElementById('st-f-no')||{}).value||'').trim(); if(!no) return;
+  try{
+    if(typeof REC_OS!=='undefined' && !REC_OS && typeof recLoadLots==='function') await recLoadLots(false);
+    let tag='';
+    try{ const q=(typeof REC_QUOTES!=='undefined' && Array.isArray(REC_QUOTES)) ? REC_QUOTES.find(x=>x&&x.quoteNo===no) : null; tag=(q&&q.tagLot)||''; }catch(_){}
+    if(!tag){
+      const r=(typeof recPayload==='function') ? await readCall(recPayload()).catch(()=>null) : null;   // 跟報價紀錄同一份快取
+      const q=r&&Array.isArray(r.quotes) ? r.quotes.find(x=>x&&x.quoteNo===no) : null; tag=(q&&q.tagLot)||'';
+    }
+    const lot=(typeof recLotOf==='function') ? recLotOf(no, tag) : stLotFmt(tag);
+    if(lot && !String(lotEl.value||'').trim()) lotEl.value=lot;
+  }catch(_){}
 }
 function stCloseForm(){
   const box=document.getElementById('st-form'); if(box) box.style.display='none';
-  ['st-f-cus','st-f-qty','st-f-no','st-f-note','st-f-name','st-f-vol','st-f-date'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });   // 2026-09-11：日期也清，下一筆才會回到今天
+  ['st-f-cus','st-f-qty','st-f-no','st-f-note','st-f-name','st-f-vol','st-f-date','st-f-lot'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });   // 2026-09-11：日期也清，下一筆才會回到今天
   { const s=document.getElementById('st-f-sku'); if(s) s.value=''; }
   stSkuChange();
 }
@@ -162,6 +203,7 @@ async function stSaveMove(){
     const qty=parseFloat(document.getElementById('st-f-qty').value);
     const quoteNo=(document.getElementById('st-f-no').value||'').trim();
     const note=(document.getElementById('st-f-note').value||'').trim();
+    const lot=stLotFmt((document.getElementById('st-f-lot')||{}).value||'');
     if(!cus){ toast('請填客戶名稱','err'); return; }
     if(!(qty>0)){ toast('數量要大於 0','err'); return; }
     let skuId='', name='', vol='';
@@ -174,12 +216,15 @@ async function stSaveMove(){
       if(!name){ toast('請填酒款名稱','err'); return; }
     } else { toast('請選公版酒（或選「其他」自行輸入）','err'); return; }
     if(ST_DIR==='out'){
-      const bal=stBalanceFor(cus, skuId, name, vol);
-      if(qty>bal){ toast(`提領超過剩餘量（${escHtml(cus)}／${escHtml(name)} 目前剩 ${bal} 瓶）。登記錯了可在明細按「作廢」再重登。`,'err'); return; }
+      const bal=stBalanceFor(cus, skuId, name, vol, lot);
+      if(qty>bal){
+        const all=stBalanceFor(cus, skuId, name, vol);
+        const hint=(all>bal) ? `（其他 Lot 合計還有 ${all-bal} 瓶，請確認 Lot 有沒有選對）` : '';
+        toast(`提領超過剩餘量：${escHtml(cus)}／${escHtml(name)}／${escHtml(lot||'未填 Lot')} 目前剩 ${bal} 瓶${hint}。登記錯了可在明細按「作廢」再重登。`,'err'); return; }
     }
     const r=await apiCall({action:'addStorageMove', token:AUTH_TOKEN,
       date:date, customer:cus, sku_id:skuId, name:name, volume:vol,
-      direction:ST_DIR, qty:qty, quote_no:quoteNo, note:note});
+      direction:ST_DIR, qty:qty, quote_no:quoteNo, note:note, lot:lot});
     if(!r.ok) throw new Error(r.error||'登記失敗');
     toast((ST_DIR==='out'?'已登記提領 ':'已登記入倉 ')+qty+' 瓶','ok');
     stCloseForm();
@@ -253,10 +298,10 @@ async function stSyncFromVerify(d, dir, srcTag){
      否則後端會因為 src 相同直接跳過，寄倉數字永遠停在第一次的舊值（複檢 #8）。 */
   if(d && d.__stReplace){ try{ await stRemoveMovesBySrc(d.no, srcTag); }catch(e){} }
   const moves=(d.rows||[])
-    .map(r=>({ qty:parseFloat(r.thisShip)||0, name:r.name, vol:r.vol }))
+    .map(r=>({ qty:parseFloat(r.thisShip)||0, name:r.name, vol:r.vol, lot:stLotFmt(String(r.lot||'').trim()||String(d.lot||'').trim()) }))
     .filter(r=>r.qty>0)
     .map(r=>({ customer:d.client, sku_id:'', name:r.name, volume:(r.vol?String(r.vol).replace(/ml$/i,'')+'ml':''),
-      direction:dir, qty:r.qty, date:d.shipDate||todayStr(), quote_no:d.no,
+      direction:dir, qty:r.qty, date:d.shipDate||todayStr(), quote_no:d.no, lot:r.lot,
       note:(dir==='in'?'驗收單自動入倉':'驗收單自動提領'),
       src:'VF:'+d.no+':'+srcTag+':'+r.name+':'+(r.vol||'') }));
   if(!moves.length) return { ok:true, saved:[], skipped:[] };
