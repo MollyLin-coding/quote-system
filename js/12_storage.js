@@ -55,7 +55,8 @@ function stSummary(filterCus){
     if(stVoided(m)) return;
     if(filterCus && String(m.customer)!==filterCus) return;
     const k=stKey(m);
-    if(!map[k]) map[k]={customer:m.customer, name:m.name||m.sku_id||'—', volume:m.volume||'', lot:stLotFmt(m.lot), in:0, out:0};
+    if(!map[k]) map[k]={customer:m.customer, name:m.name||m.sku_id||'—', volume:m.volume||'', lot:stLotFmt(m.lot), sku_id:'', in:0, out:0};
+    if(m.sku_id && !map[k].sku_id) map[k].sku_id=String(m.sku_id);
     if(m.sku_id && m.name) map[k].name=m.name;   // 同一支酒併成一列時，用有酒款編號那筆的名稱
     const q=parseFloat(m.qty)||0;
     if(String(m.direction)==='out') map[k].out+=q; else map[k].in+=q;
@@ -140,6 +141,8 @@ function stOpenForm(dir){
   stFillSkuOptions();
   stFillLotList();
 }
+/* 客戶欄改了：提領的酒款清單要跟著換成這位客戶的寄倉品項；Lot 建議清單也重算 */
+function stCusChange(){ stFillSkuOptions(); stFillLotList(); }
 /* Lot 建議清單：提領＝這位客戶目前還有剩的 Lot；入倉＝這位客戶用過的 Lot（新 Lot 直接打） */
 function stFillLotList(){
   const dl=document.getElementById('st-lotlist'); if(!dl) return;
@@ -172,11 +175,38 @@ function stCloseForm(){
   const box=document.getElementById('st-form'); if(box) box.style.display='none';
   ['st-f-cus','st-f-qty','st-f-no','st-f-note','st-f-name','st-f-vol','st-f-date','st-f-lot'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });   // 2026-09-11：日期也清，下一筆才會回到今天
   { const s=document.getElementById('st-f-sku'); if(s) s.value=''; }
+  { const lt=document.getElementById('st-f-lot'); if(lt) lt.readOnly=false; }
   stSkuChange();
+}
+/* 2026-09-30b Molly：「登記提領的流程不對，babyface 品項跳成公版酒了」
+   → 提領不能從公版酒清單選（客戶寄的多半是代工／客製酒，公版酒清單根本沒有）。
+     提領時酒款下拉改成「這位客戶目前寄倉還有剩的品項」，一列＝酒款＋容量＋Lot＋剩幾瓶；
+     選了就自動帶 Lot（鎖住不給改，避免提錯 Lot）。入倉維持原本：公版酒＋其他（自行輸入）。 */
+let ST_OUT_OPTS=[];
+function stSkuLabel(txt){ const s=document.getElementById('st-f-sku'); const l=s&&s.parentElement&&s.parentElement.querySelector('label'); if(l) l.textContent=txt; }
+function stFillOutOptions(){
+  const s=document.getElementById('st-f-sku'); if(!s) return;
+  const cus=((document.getElementById('st-f-cus')||{}).value||'').trim();
+  const cur=s.value;
+  ST_OUT_OPTS = cus ? stSummary(cus).filter(r=>String(r.customer)===cus && (r.in-r.out)>0) : [];
+  if(!cus){ s.innerHTML='<option value="">請先選客戶</option>'; }
+  else if(!ST_OUT_OPTS.length){ s.innerHTML='<option value="">這位客戶目前沒有寄倉庫存</option>'; }
+  else s.innerHTML='<option value="">選擇要提領的酒款…</option>'
+    + ST_OUT_OPTS.map((r,i)=>{ const v='inv:'+i; return `<option value="${v}"${v===cur?' selected':''}>${escHtml(r.name+'（'+(r.volume||'—')+'）'+(r.lot?('｜'+r.lot):'｜未填 Lot')+'｜剩 '+(r.in-r.out).toLocaleString()+' 瓶')}</option>`; }).join('');
+  if(ST_OUT_OPTS.length===1 && !s.value){ s.value='inv:0'; }
+  stSkuChange();
+}
+function stOutPick(){
+  const v=((document.getElementById('st-f-sku')||{}).value||'');
+  return (v.indexOf('inv:')===0) ? (ST_OUT_OPTS[parseInt(v.slice(4),10)]||null) : null;
 }
 function stFillSkuOptions(){
   const s=document.getElementById('st-f-sku'); if(!s) return;
+  if(ST_DIR==='out'){ stSkuLabel('寄倉中的酒款'); stFillOutOptions(); return; }
+  stSkuLabel('公版酒');
+  { const lt=document.getElementById('st-f-lot'); if(lt) lt.readOnly=false; }
   const build=()=>{
+    if(ST_DIR==='out') return;   // 非同步載入回來時使用者已切到提領，別把清單蓋回公版酒
     /* cur 要在「重建當下」才讀：公版酒清單是非同步載入（寫入後快取被清就要重抓），
        使用者可能在載入完成前就先選好了，用呼叫當下抓的舊值會把選擇蓋掉 */
     const cur=s.value;
@@ -192,6 +222,11 @@ function stFillSkuOptions(){
 function stSkuChange(){
   const s=document.getElementById('st-f-sku'), w=document.getElementById('st-f-freewrap');
   if(w) w.style.display=(s&&s.value==='__free')?'block':'none';
+  if(ST_DIR==='out'){
+    const pk=stOutPick(), lt=document.getElementById('st-f-lot');
+    if(lt){ lt.readOnly=!!pk; if(pk) lt.value=pk.lot||''; }
+    const q=document.getElementById('st-f-qty'); if(q){ if(pk) q.max=String(pk.in-pk.out); else q.removeAttribute('max'); }
+  }
 }
 let _stSaving=false; btnBusy('st-f-save',false);
 async function stSaveMove(){
@@ -203,11 +238,16 @@ async function stSaveMove(){
     const qty=parseFloat(document.getElementById('st-f-qty').value);
     const quoteNo=(document.getElementById('st-f-no').value||'').trim();
     const note=(document.getElementById('st-f-note').value||'').trim();
-    const lot=stLotFmt((document.getElementById('st-f-lot')||{}).value||'');
+    let lot=stLotFmt((document.getElementById('st-f-lot')||{}).value||'');
     if(!cus){ toast('請填客戶名稱','err'); return; }
     if(!(qty>0)){ toast('數量要大於 0','err'); return; }
     let skuId='', name='', vol='';
-    if(skuSel && skuSel!=='__free'){
+    const pk=(ST_DIR==='out') ? stOutPick() : null;
+    if(ST_DIR==='out'){
+      if(!pk){ toast('請選要提領的酒款（清單是這位客戶目前寄倉還有剩的品項）','err'); return; }
+      skuId=pk.sku_id||''; name=pk.name; vol=pk.volume||'';
+      lot=pk.lot||'';
+    } else if(skuSel && skuSel!=='__free'){
       const p=(typeof ownbrandBySku==='function')?ownbrandBySku(skuSel):null;
       skuId=skuSel; name=p?p.name:skuSel; vol=p?String(p.volume||''):'';
     } else if(skuSel==='__free'){
