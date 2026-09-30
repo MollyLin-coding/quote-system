@@ -95,15 +95,17 @@ function stRender(){
     } }
   const filter=cusSel.value;
   const sum=stSummary(filter);
+  ST_SUM=sum;   // 2026-09-30c：每列的「提領」鈕靠索引找回這一列
   const inv=document.getElementById('st-inv-body');
-  if(inv) inv.innerHTML=sum.length?sum.map(r=>{
+  if(inv) inv.innerHTML=sum.length?sum.map((r,i)=>{
     const bal=r.in-r.out;
     return `<tr><td data-l="客戶">${escHtml(r.customer)}</td><td data-l="Lot" style="white-space:nowrap">${r.lot?escHtml(r.lot):'<span style="color:var(--hint)">未填</span>'}</td><td data-l="酒款">${escHtml(r.name)}</td>
       <td data-l="容量" style="text-align:center">${escHtml(r.volume||'—')}</td>
       <td data-l="已入倉" style="text-align:right">${r.in.toLocaleString()}</td>
       <td data-l="已提領" style="text-align:right">${r.out.toLocaleString()}</td>
-      <td data-l="剩餘" style="text-align:right"><strong style="color:${bal>0?'var(--ink)':'var(--hint)'}">${bal.toLocaleString()}</strong></td></tr>`;
-  }).join(''):'<tr><td colspan="7" class="rec-empty">尚無寄倉紀錄</td></tr>';
+      <td data-l="剩餘" style="text-align:right"><strong style="color:${bal>0?'var(--ink)':'var(--hint)'}">${bal.toLocaleString()}</strong></td>
+      <td style="text-align:right;white-space:nowrap">${bal>0?`<button class="rec-act-btn" title="從這一列直接登記提領" onclick="stWithdrawRow(${i})"><i class="ti ti-minus"></i> 提領</button>`:''}</td></tr>`;
+  }).join(''):'<tr><td colspan="8" class="rec-empty">尚無寄倉紀錄</td></tr>';
   const rows=(ST_MOVES||[]).filter(m=>!filter||String(m.customer)===filter)
     .slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.move_id||'').localeCompare(String(a.move_id||'')));
   const lg=document.getElementById('st-ledger-body');
@@ -129,6 +131,7 @@ function stRender(){
       <td data-l="備註">${escHtml(m.note||'')}</td>
       <td style="text-align:right"><button class="rec-act-btn" title="作廢這筆（登記錯了才用；紀錄會留著）" onclick="stDeleteMove('${escAttr(m.move_id)}')">作廢</button></td></tr>`;
   }).join(''):'<tr><td colspan="9" class="rec-empty">尚無寄倉紀錄</td></tr>';
+  { const f=document.getElementById('st-form'); if(f && f.style.display!=='none' && ST_DIR==='out') stFillOutOptions(); }   // 提領表單開著：資料更新後酒款清單跟著重建
 }
 /* ---- 登記表單 ---- */
 function stOpenForm(dir){
@@ -182,12 +185,36 @@ function stCloseForm(){
    → 提領不能從公版酒清單選（客戶寄的多半是代工／客製酒，公版酒清單根本沒有）。
      提領時酒款下拉改成「這位客戶目前寄倉還有剩的品項」，一列＝酒款＋容量＋Lot＋剩幾瓶；
      選了就自動帶 Lot（鎖住不給改，避免提錯 Lot）。入倉維持原本：公版酒＋其他（自行輸入）。 */
-let ST_OUT_OPTS=[];
+let ST_OUT_OPTS=[], ST_SUM=[];
+/* 2026-09-30c Molly：「請設計成更直覺化」→ 庫存表每一列直接有「提領」鈕：
+   按下去客戶／酒款／Lot 全部帶好、鎖住，只要填數量（＋日期／備註），表單上方清楚寫出要提領的是哪一列、剩幾瓶。 */
+function stWithdrawRow(i){
+  const r=ST_SUM[i]; if(!r) return;
+  stOpenForm('out');
+  const c=document.getElementById('st-f-cus'); if(c) c.value=String(r.customer);
+  stFillSkuOptions(); stFillLotList();
+  const s=document.getElementById('st-f-sku');
+  const idx=ST_OUT_OPTS.findIndex(o=>String(o.customer)===String(r.customer) && stNm(o.name)===stNm(r.name) && stVol(o.volume)===stVol(r.volume) && stLotKey(o.lot)===stLotKey(r.lot));
+  if(s && idx>=0){ s.value='inv:'+idx; stSkuChange(); }
+  const q=document.getElementById('st-f-qty'); if(q){ q.value=''; setTimeout(()=>{ try{ q.focus(); }catch(_){} },50); }
+  const box=document.getElementById('st-form'); if(box && box.scrollIntoView) box.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+/* 表單上方的提示列：提領時寫出「要提領的是誰的哪一支酒、哪個 Lot、剩幾瓶」，選錯一眼就看得出來 */
+function stPickBanner(){
+  const b=document.getElementById('st-f-pick'); if(!b) return;
+  const pk=(ST_DIR==='out')?stOutPick():null;
+  if(!pk){ b.style.display='none'; b.innerHTML=''; return; }
+  const bal=pk.in-pk.out;
+  b.style.display='block';
+  b.innerHTML=`<i class="ti ti-building-warehouse"></i> 提領 <strong>${escHtml(pk.customer)}</strong> 寄倉的 <strong>${escHtml(pk.name)}（${escHtml(pk.volume||'—')}）</strong>　${pk.lot?escHtml(pk.lot):'未填 Lot'}　目前剩 <strong>${bal.toLocaleString()}</strong> 瓶`;
+}
 function stSkuLabel(txt){ const s=document.getElementById('st-f-sku'); const l=s&&s.parentElement&&s.parentElement.querySelector('label'); if(l) l.textContent=txt; }
 function stFillOutOptions(){
   const s=document.getElementById('st-f-sku'); if(!s) return;
   const cus=((document.getElementById('st-f-cus')||{}).value||'').trim();
   const cur=s.value;
+  /* 2026-09-30c：寄倉資料還沒載完就按「登記提領」→ 先顯示載入中，載完 stRender 會再重建一次（不然會誤顯示「沒有寄倉庫存」） */
+  if(ST_MOVES==null){ ST_OUT_OPTS=[]; s.innerHTML='<option value="">寄倉資料載入中…</option>'; if(!ST_LOADING && AUTH_TOKEN) loadStorage(); stSkuChange(); return; }
   ST_OUT_OPTS = cus ? stSummary(cus).filter(r=>String(r.customer)===cus && (r.in-r.out)>0) : [];
   if(!cus){ s.innerHTML='<option value="">請先選客戶</option>'; }
   else if(!ST_OUT_OPTS.length){ s.innerHTML='<option value="">這位客戶目前沒有寄倉庫存</option>'; }
@@ -227,6 +254,7 @@ function stSkuChange(){
     if(lt){ lt.readOnly=!!pk; if(pk) lt.value=pk.lot||''; }
     const q=document.getElementById('st-f-qty'); if(q){ if(pk) q.max=String(pk.in-pk.out); else q.removeAttribute('max'); }
   }
+  stPickBanner();
 }
 let _stSaving=false; btnBusy('st-f-save',false);
 async function stSaveMove(){
