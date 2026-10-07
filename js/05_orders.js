@@ -1264,6 +1264,55 @@ function exportReport(){
   setTimeout(()=>URL.revokeObjectURL(a.href),3000);
 }
 
+/* ⚠ 純報價單 ↔ 正式單 切換時的「行事曆出貨提醒」處理（只有這一份，saveQuote 存檔後呼叫）
+   2026-10-07 Molly：「福寶寶報價單轉純報價後行事曆沒有移除 10/31 的出貨紀錄」。
+   查證 20260909-03：報價單主表已經是「純報價」，但訂單追蹤進度列還留著 ship_date_est=2026-10-31，
+   Google 日曆「南坡萬」上那顆 🚚 事件（qs_key:ship:20260909-03）就是後端照這一欄推的。
+   前端原本在存純報價時整個「跳過 syncCalendarNow」，連修正的機會都沒有，事件就一直掛在 10/31。
+   規則（只動出貨日，總額／訂金／發票／備註一概不碰）：
+   - 存成純報價 → 清掉進度列的「預計出貨日」，再補一次 syncCalendarNow，Google 日曆那顆會被收走。
+     進度列有「實際出貨日」＝這張單真的出過貨，不清掉、改成明確提醒（純報價＋已出貨是矛盾狀態）。
+   - 從純報價改回正式單 → 把報價單上的「預計出貨日」寫回進度列，行事曆提醒跟著回來（不是只能靠手填）。
+   - 從沒建過訂單追蹤進度列 → 行事曆本來就沒有這張單，什麼都不做。
+   出貨日不會憑空消失：報價單上的「預計出貨日」欄位完全沒被動到。 */
+async function qoShipCalendarOnSave(quoteNo, quote, qOnly, wasQo){
+  const no=String(quoteNo||'').trim();
+  if(!no || !AUTH_TOKEN || typeof readCall!=='function') return;
+  if(typeof isOwner==='function' && !isOwner()) return;   // updateOrderStatus 是 owner-only，一般使用者不要跳一堆錯誤提示
+  if(!qOnly && !wasQo) return;                            // 一直都是正式單 → 維持原本行為，不插手
+  try{
+    const d=await readCall({ action:'getOrderStatusList', token:AUTH_TOKEN }, true);
+    const st=((d&&d.orders)||[]).find(o=>String(o.quote_no)===no);
+    if(!st) return;
+    const ymd=v=>(typeof vmLocalYmd==='function')?(vmLocalYmd(v)||''):String(v||'').trim();
+    const est=ymd(st.ship_date_est), act=ymd(st.ship_date_actual);
+    if(qOnly){
+      if(act){ toast('⚠ 已存成純報價，但訂單追蹤裡有「實際出貨日」'+act+'（這張單真的出過貨）→ 行事曆上的出貨紀錄保留沒動，請確認是不是不該勾純報價','err'); return; }
+      if(!est) return;                                    // 進度列沒有出貨日 → 行事曆上本來就沒有
+      const r=await apiCall({ action:'updateOrderStatus', token:AUTH_TOKEN, quote_no:no, fields:{ ship_date_est:'' } });
+      if(r&&r.ok){
+        toast('已改為純報價：行事曆上 '+est+' 的出貨提醒已移除（報價單的預計出貨日還在，改回正式單就會回來）','ok');
+        apiCall({ action:'syncCalendarNow', token:AUTH_TOKEN }).catch(()=>{});   // Google 日曆上那顆也要收走
+      }
+      /* 失敗時一定要講「怎麼自己救」：這張單已經是純報價，在「訂單追蹤」清單裡看不到，
+         不能只叫她去訂單追蹤——得先取消純報價勾選才找得到那一列。 */
+      else toast('⚠ 已存成純報價，但行事曆上 '+est+' 的出貨提醒沒移除掉（'+((r&&r.error)||'後台沒有回應')+'）→ 請先取消「純報價」勾選存檔，到「訂單追蹤」把預計出貨日清掉，再勾回純報價','err');
+      return;
+    }
+    /* 純報價 → 正式單：把報價單上的預計出貨日補回進度列（進度列已經有出貨日就不覆蓋） */
+    const want=ymd(quote&&quote.expectedShipDate);
+    if(!want || est || act) return;
+    const r2=await apiCall({ action:'updateOrderStatus', token:AUTH_TOKEN, quote_no:no, fields:{ ship_date_est:want } });
+    if(r2&&r2.ok){
+      toast('已改回正式單：行事曆上 '+want+' 的出貨提醒已恢復','ok');
+      apiCall({ action:'syncCalendarNow', token:AUTH_TOKEN }).catch(()=>{});
+    }
+    else toast('⚠ 已改回正式單，但行事曆的出貨提醒（'+want+'）沒補回去（'+((r2&&r2.error)||'後台沒有回應')+'）→ 請到「訂單追蹤」把預計出貨日填上','err');
+  }catch(e){
+    toast('⚠ 報價單已存，但行事曆的出貨提醒沒處理到，請到「訂單追蹤」確認這張單的預計出貨日','err');
+  }
+}
+
 /* 寫入類動作清掉讀取快取時，訂單頁的衍生資料也一併歸零，
    免得下一次進來先畫出「存檔前」的舊列表。 */
 onCacheClear(function(){ ORDERS_CACHE=null; ORDER_VSUM=null; SHP_SUM=null; });

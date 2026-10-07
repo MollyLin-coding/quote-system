@@ -27,7 +27,13 @@ function calShipMemoDup(it){
   if(!isShip) return false;
   const no=sq || String(it.item_id||'').replace(/^ship-/,'');
   const o=(ORDERS_CACHE||[]).find(x=>String(x.no)===String(no));
-  return !!(o && o.st && (o.st.ship_date_est||o.st.ship_date_actual));
+  if(o) return !!(o.st && (o.st.ship_date_est||o.st.ship_date_actual));
+  /* 2026-10-07 Molly：「福寶寶報價單轉純報價後行事曆沒有移除 10/31 的出貨紀錄」。
+     20260909-03 轉純報價後整張單不在訂單清單裡（ORDERS_CACHE 本來就排除純報價／已刪除）
+     → 上面那行查不到單、擋不住，這顆自動產生的「出貨：福寶寶（20260909-03）」備忘就冒出來。
+     訂單清單已經載好、卻查不到這張單 ⇒ 它已經不是訂單（純報價或已刪除），這種自動備忘一律不顯示。
+     還沒載好（null／空陣列）時維持原本行為，載好後 renderCalendar() 會再畫一次。 */
+  return Array.isArray(ORDERS_CACHE) && ORDERS_CACHE.length>0;
 }
 /* 產生某日的全部事件 */
 /* 2026-09-02 Molly：「把我的 Google 日曆與此系統分開」→ 分類「私人」的行程整個從系統畫面移除

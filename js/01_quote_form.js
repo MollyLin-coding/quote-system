@@ -1105,7 +1105,12 @@ function applyDocOpts(q){
     if(ta){ ta.value=(typeof o.storageTerms==='string'&&o.storageTerms.trim())?o.storageTerms:(typeof OB_STORAGE_DEFAULT!=='undefined'?OB_STORAGE_DEFAULT:''); } }
   if(typeof obStorageToggle==='function'){ const on=!!(document.getElementById('ob-storage')&&document.getElementById('ob-storage').checked); const ta=document.getElementById('ob-storage-terms'); if(ta) ta.style.display=on?'block':'none'; }
   /* 2026-08-28：純報價單勾選＋稅金顯示還原（沒存＝預設不勾／含稅顯示） */
-  { const qo=document.getElementById('f-quoteonly'); if(qo) qo.checked=!!(o.quoteOnly&&o.quoteOnly!=='0'&&o.quoteOnly!=='N'); }
+  { const qo=document.getElementById('f-quoteonly');
+    const was=!!(o.quoteOnly&&o.quoteOnly!=='0'&&o.quoteOnly!=='N');
+    if(qo) qo.checked=was;
+    /* 2026-10-07：記住這張單打開時是不是純報價，存檔後 qoShipCalendarOnSave 要分辨方向
+       （轉成純報價＝清掉行事曆的出貨提醒／轉回正式單＝把提醒補回去）。 */
+    if(typeof QUOTE_WAS_QO!=='undefined') QUOTE_WAS_QO=was; }
   { const td=document.getElementById('f-taxdisplay'); if(td) td.value=(o.taxDisplay==='excl')?'excl':''; }
   { const h=document.getElementById('taxdisp-hint'); if(h) h.textContent=''; }
   updateOrdProgVisibility();
@@ -1133,7 +1138,8 @@ function resetAll(skipConfirm){
   { const h=document.getElementById('f-hidetotals'); if(h) h.checked=false; const e=document.getElementById('f-imgsize'); if(e) e.value='m'; } // 文件顯示設定回到預設
   // 2026-08-28：本單級距回標準、寄倉勾選取消（tier/條款輸入欄上面的迴圈已清空，這裡補回標準值與勾選狀態）
   { const st=document.getElementById('ob-storage'); if(st) st.checked=false; const ta=document.getElementById('ob-storage-terms'); if(ta) ta.style.display='none'; }
-  { const qo=document.getElementById('f-quoteonly'); if(qo) qo.checked=false; const h=document.getElementById('taxdisp-hint'); if(h) h.textContent=''; } // 純報價勾選回預設（稅金顯示 select 由上方通用迴圈清回''＝含稅）
+  { const qo=document.getElementById('f-quoteonly'); if(qo) qo.checked=false; const h=document.getElementById('taxdisp-hint'); if(h) h.textContent='';
+    if(typeof QUOTE_WAS_QO!=='undefined') QUOTE_WAS_QO=false; } // 純報價勾選回預設（稅金顯示 select 由上方通用迴圈清回''＝含稅）
   if(typeof obFillTiers==='function') obFillTiers(null,true);
   botDedCache={}; botLogoCache={}; botLotCache={}; botGiftCache={};
   colDed=false; colLogo=false; colLot=false; colGift=false;

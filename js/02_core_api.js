@@ -113,6 +113,9 @@ function setUser(role, name){
   applyRoleUI();
 }
 let editingQuoteNo = null;    // 若非 null 表示正在編輯既有報價單
+/* 2026-10-07：這張單「打開的時候」是不是純報價單（applyDocOpts 還原勾選時寫入、resetAll 清回 false）。
+   存檔後 qoShipCalendarOnSave 要靠它分辨「轉成純報價」與「從純報價轉回正式單」。 */
+let QUOTE_WAS_QO = false;
 
 /* ---- API 呼叫核心（GAS Web App 用 text/plain 避開 CORS preflight）---- */
 const _busy={};   // 各儲存動作的「進行中」旗標，避免連點重複送出
@@ -540,6 +543,7 @@ async function saveQuote(){
   }
   const quote=collectQuote();
   const wasNewQuote=!editingQuoteNo;   // 2026-08-12：存檔前先記住是不是新單，決定要不要順便建訂單追蹤進度
+  const wasQuoteOnly=!!QUOTE_WAS_QO;   // 2026-10-07：存檔前的純報價狀態（存完要用來判斷是轉入還是轉出）
   const btn=document.getElementById('btn-save');
   if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader"></i>儲存中…'; }
   try {
@@ -576,6 +580,14 @@ async function saveQuote(){
       if(!_qOnly && isOwner()){
         try{ apiCall({action:'syncCalendarNow', token:AUTH_TOKEN}).catch(()=>{}); }catch(e){}
       }
+      /* 2026-10-07 Molly：「福寶寶報價單轉純報價後行事曆沒有移除 10/31 的出貨紀錄」。
+         純報價單不建行事曆，但這張單之前是正式單時「預計出貨日」早就同步進訂單追蹤進度列，
+         Google 日曆的 🚚 事件是後端照那一欄推的——轉純報價時沒人清它，提醒就一直留在原本那天。
+         規則與兩個方向的處理都在 js/05_orders.js 的 qoShipCalendarOnSave（只動出貨日）。 */
+      if(!wasNewQuote && typeof qoShipCalendarOnSave==='function'){   // 全新的單不可能有進度列，省一次讀取
+        try{ await qoShipCalendarOnSave(data.quoteNo, quote, _qOnly, wasQuoteOnly); }catch(e){}
+      }
+      QUOTE_WAS_QO=_qOnly;   // 存檔後這張單的新狀態（接著再按一次儲存不會被誤判成又轉了一次）
     } else {
       toast(data.error||'儲存失敗','err');
     }
