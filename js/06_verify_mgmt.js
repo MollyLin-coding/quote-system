@@ -296,7 +296,7 @@ async function vmDelForm(id, no){
 }
 /* 編輯／重印驗收單留底：把那筆紀錄帶回「產生驗收單」視窗（buildVerifyModal 在 09_verify_form.js）。
    看完不動＝純檢視；要重印就按「產生」；改過再按「產生」＝存新留底並刪舊的（取代，見 saveVerifyFormRecord）。 */
-function vmEditForm(id){
+async function vmEditForm(id){
   const f=((VM_DATA&&VM_DATA.forms)||[]).find(x=>String(x.id)===String(id));
   if(!f){ toast('查無此留底紀錄，請先按重新整理','err'); return; }
   const items=Array.isArray(f.items)?f.items:parseJsonSafe(f.items_json,[]);
@@ -324,7 +324,16 @@ function vmEditForm(id){
     const _do=_items.find(it=>it&&it.itemType==='docopts');
     if(_do&&_do.flavorList){ const _o=JSON.parse(_do.flavorList); _stOn=!!(_o.storage&&_o.storage!=='0'&&_o.storage!=='N'); }
   }catch(_){}
-  VERIFY_DATA={ no:noStr, client:vmClientOf(noStr)||'', priorCount:earlier, storage:_stOn,
+  /* 2026-10-07 Molly：Lot 18 寄倉數量有誤。這一次出貨先前如果已經寫進寄倉帳（就算報價單沒勾寄倉、
+     例如從客戶寄倉頁「提領＋產生驗收單」進來的），編輯後也要讓寄倉區塊出現，產生時才會對帳、不留舊的提領。
+     寄倉帳還沒載入就先載（有快取，通常 0 秒）。 */
+  let _prior=[];
+  try{
+    if(typeof ST_MOVES!=='undefined' && !ST_MOVES && typeof loadStorage==='function' && AUTH_TOKEN) await loadStorage();
+    if(typeof stActiveRowsByTag==='function') _prior=stActiveRowsByTag(noStr, earlier+1);
+  }catch(_){}
+  VERIFY_DATA={ no:noStr, client:vmClientOf(noStr)||'', priorCount:earlier, storage:(_stOn||_prior.length>0),
+    stPrior:_prior, stPriorSeq:earlier+1,
     rows:items.map(it=>({ name:it.name||'', lot:it.lot||'', vol:it.vol||'',
       mfg:vmLocalYmd(it.mfg)||'', ordered:parseFloat(it.ordered)||0,
       thisShip:(it.thisShip!=null&&it.thisShip!=='')?it.thisShip:0,

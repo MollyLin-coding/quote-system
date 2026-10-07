@@ -444,12 +444,26 @@ function stCustomerTotal(cus){
   });
   return bal;
 }
+/* 2026-10-07：這張驗收單「這一次出貨」已經寫進寄倉帳、還有效（沒作廢）的紀錄。
+   src 格式 VF:單號:第N次:酒款:容量，前綴帶尾巴冒號，所以第 3 次不會誤抓到第 30 次。
+   開驗收單時用來：預設方向照先前登記的、並提示「這次出貨先前已登記過」。 */
+function stActiveRowsByTag(no, srcTag){
+  const prefix='VF:'+String(no==null?'':no).trim()+':'+srcTag+':';
+  return (ST_MOVES||[]).filter(m=>String(m.src||'').indexOf(prefix)===0 && !stVoided(m));
+}
 /* 驗收單存檔後呼叫：把這批「本次出貨」寫進寄倉帳
-   d：驗收單資料（client/no/shipDate/rows），dir：'in'｜'out'，srcTag：第幾次出貨 */
+   d：驗收單資料（client/no/shipDate/rows），dir：'in'｜'out'，srcTag：第幾次出貨
+
+   2026-10-07 Molly：「babyface Lot18 寄倉數量有誤」。10/06 第 3 次出貨先產生驗收單（大馬士革 100／茉莉 100／泰奶 50，
+   茉莉、泰奶是預設帶入的剩餘量），發現不對，重新產生成只出大馬士革 100——但寄倉那邊同一次出貨的舊紀錄 src 相同，
+   被當成「已登記過」略過，茉莉 100、泰奶 50 兩筆提領就一直掛著，Lot 18 少算 150 瓶。
+   → 改成「對帳」（不分新開／從留底編輯，只要是同一張單同一次出貨）：
+     已登記過的紀錄逐筆跟這次驗收單比對——
+       完全一樣 → 不動（重印不會重複計、也不留垃圾紀錄）
+       數量／方向／Lot 變了、這一行改成 0、或重複登記 → 舊紀錄「作廢」（留註記、不刪），需要的再補新的
+       還沒登記過的 → 新增
+     （取代 2026-09-01 的 __stReplace：那是「整批作廢再重寫」，只在從留底編輯時才會做，重新開一張同次數的驗收單就漏掉了。） */
 async function stSyncFromVerify(d, dir, srcTag){
-  /* 2026-09-01：重印／編輯後重新產生時，先把「同一張單同一次出貨」的舊紀錄刪掉再重寫，
-     否則後端會因為 src 相同直接跳過，寄倉數字永遠停在第一次的舊值（複檢 #8）。 */
-  if(d && d.__stReplace){ try{ await stRemoveMovesBySrc(d.no, srcTag); }catch(e){} }
   const moves=(d.rows||[])
     .map(r=>({ qty:parseFloat(r.thisShip)||0, name:r.name, vol:r.vol, lot:stLotFmt(String(r.lot||'').trim()||String(d.lot||'').trim()) }))
     .filter(r=>r.qty>0)
@@ -457,12 +471,44 @@ async function stSyncFromVerify(d, dir, srcTag){
       direction:dir, qty:r.qty, date:d.shipDate||todayStr(), quote_no:d.no, lot:r.lot,
       note:(dir==='in'?'驗收單自動入倉':'驗收單自動提領'),
       src:'VF:'+d.no+':'+srcTag+':'+r.name+':'+(r.vol||'') }));
-  if(!moves.length) return { ok:true, saved:[], skipped:[] };
-  const r=await apiCall({action:'addStorageMoves', token:AUTH_TOKEN, moves});
+  /* —— 對帳：先處理這次出貨先前登記過的舊紀錄 —— */
+  const keep={}; let nVoid=0, nFail=0;
+  try{
+    const led=await readCall({action:'getStorageData', token:AUTH_TOKEN}, true);
+    const list=(led&&led.ok&&Array.isArray(led.moves))?led.moves:[];
+    const prefix='VF:'+d.no+':'+srcTag+':';
+    const want={}; moves.forEach(m=>{ if(!(m.src in want)) want[m.src]=m; });
+    const dirTxt=x=>String(x)==='out'?'提領':'入倉';
+    for(const m of list){
+      if(String(m.src||'').indexOf(prefix)!==0 || stVoided(m)) continue;
+      const w=want[m.src];
+      if(w && !keep[m.src] && String(m.direction)===String(w.direction) && (parseFloat(m.qty)||0)===(parseFloat(w.qty)||0)
+         && stLotKey(m.lot)===stLotKey(w.lot) && stCusKey(m.customer)===stCusKey(w.customer)){ keep[m.src]=1; continue; }
+      let why;
+      if(!w) why='驗收單重新產生，這一行本次出貨改為 0（沒有出貨）';
+      else if(keep[m.src]) why='驗收單重新產生，同一次出貨重複登記，作廢多的一筆';
+      else if(String(m.direction)!==String(w.direction)) why='驗收單重新產生，方向由'+dirTxt(m.direction)+'改為'+dirTxt(w.direction);
+      else if((parseFloat(m.qty)||0)!==(parseFloat(w.qty)||0)) why='驗收單重新產生，數量由 '+(parseFloat(m.qty)||0)+' 改為 '+(parseFloat(w.qty)||0);
+      else why='驗收單重新產生，Lot／客戶已更新';
+      try{
+        const r=await apiCall({action:'deleteStorageMove', token:AUTH_TOKEN, move_id:m.move_id, note:why});
+        if(r && r.ok===false) nFail++; else nVoid++;
+      }catch(e){ nFail++; }
+    }
+  }catch(e){ /* 讀不到寄倉帳就略過對帳，照舊新增（後端仍會用 src 擋掉重複） */ }
+  if(nVoid||nFail) ST_MOVES=null;
+  if(nFail) toast(`⚠ 這次出貨先前登記在寄倉的紀錄，有 ${nFail} 筆沒能作廢，請到「客戶寄倉」確認並手動作廢（作廢＝紀錄留著、註明原因）`,'err');
+  const toAdd=moves.filter(m=>!keep[m.src]);
+  if(!toAdd.length){
+    if(nVoid && !nFail) toast(`已依這張驗收單更新寄倉：作廢 ${nVoid} 筆舊紀錄（紀錄留著、註明原因）`,'ok');
+    else if(!nVoid && !nFail && moves.length) toast('這次出貨的寄倉紀錄已經是最新的，沒有重複計入','ok');
+    return { ok:true, saved:[], skipped:[], voided:nVoid, failed:nFail };
+  }
+  const r=await apiCall({action:'addStorageMoves', token:AUTH_TOKEN, moves:toAdd});
   if(!r.ok) throw new Error(r.error||'寄倉登記失敗');
   ST_MOVES=null;
   const nSave=(r.saved||[]).length, nSkip=(r.skipped||[]).length;
-  if(nSave) toast(`已自動${dir==='in'?'入倉':'登記提領'} ${nSave} 個品項到客戶寄倉`,'ok');
+  if(nSave) toast(`已自動${dir==='in'?'入倉':'登記提領'} ${nSave} 個品項到客戶寄倉`+(nVoid?`（並作廢 ${nVoid} 筆舊紀錄）`:''),'ok');
   if(nSkip){
     const why=(r.skipped||[]).map(x=>x.reason).filter((v,i,a)=>a.indexOf(v)===i).join('；');
     toast(`寄倉有 ${nSkip} 筆沒登記：${why}`, nSave?'ok':'err');

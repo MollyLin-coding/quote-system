@@ -160,6 +160,14 @@ async function openVerifyForm(no, opts){
           mfg:_ymd(f0&&f0.mfg),
           thisShip: shipped>0 ? (remain>0?remain:0) : ordered, shipped };
       }) };
+    /* 2026-10-07 Molly：Lot 18 寄倉數量有誤——同一次出貨重新產生驗收單，寄倉舊紀錄沒跟著更新。
+       這次出貨（預設第 priorCount+1 次）如果先前已經寫進寄倉帳：記下來，讓寄倉區塊（預設方向、提示）照先前登記的走，
+       即使報價單沒勾寄倉也要讓區塊出現（舊紀錄才有機會被對帳）。實際對帳在 stSyncFromVerify。 */
+    try{
+      const _seq0=priorCount+1;
+      const _prior=(typeof stActiveRowsByTag==='function')?stActiveRowsByTag(q.quoteNo, _seq0):[];
+      if(_prior.length){ VERIFY_DATA.stPrior=_prior; VERIFY_DATA.stPriorSeq=_seq0; VERIFY_DATA.storage=true; }
+    }catch(_){}
     /* 2026-09-01 複檢 #22：客戶批號其實訂單追蹤裡就有一欄（而且「驗收單→訂單追蹤」那個方向
        8/28 就做了自動帶入，只做了一半）。這裡把反方向補上：訂單追蹤有填就帶進來，她可以再改。 */
     let _hdrLot='';
@@ -282,14 +290,22 @@ function vfStorageBlockHtml(d){
      改成只看「這張驗收單上的這幾款酒」目前在我方倉庫的餘額。 */
   let bal=0;
   try{ bal=(typeof stBalanceForRows==='function')?stBalanceForRows(d.client, d.rows):0; }catch(_){}
-  const defOut = (d.stForceDir==='out') ? true : bal>0;
+  /* 2026-10-07：這次出貨先前已經登記過（重新產生／從留底編輯）→ 方向照先前登記的，不再用「剩餘量 > 0」猜。
+     否則整批提領完、剩餘量剛好 0 時，重新產生會預設成「入倉」，對帳就會把原本的提領改成入倉。 */
+  const prior=Array.isArray(d.stPrior)?d.stPrior:[];
+  const priorOut=prior.filter(m=>String(m.direction)==='out').length, priorIn=prior.length-priorOut;
+  const priorDir=(prior.length && (priorOut===0||priorIn===0)) ? (priorOut>0?'out':'in') : '';
+  const defOut = (d.stForceDir==='out') ? true : (priorDir ? priorDir==='out' : bal>0);
   const balNote = bal>0 ? `（這幾款酒目前在我方倉庫還有 <strong>${bal}</strong> 瓶）` : '（這幾款酒目前沒有寄倉庫存）';
+  const priorNote = prior.length ? `<div style="margin-top:6px;padding:7px 9px;background:var(--gold-pale);border-radius:6px;font-size:12px;line-height:1.7;color:var(--ink)">
+        ⚠ 這次出貨（第 ${escHtml(String(d.stPriorSeq||''))} 次）先前已經登記過寄倉：${prior.map(m=>escHtml((String(m.direction)==='out'?'提領 ':'入倉 ')+(m.name||'')+(m.volume?(' '+m.volume):'')+' '+(parseFloat(m.qty)||0))).join('、')}。<br>
+        按「產生」後會依這張驗收單的新內容<strong>對帳</strong>：數量有改的、或改成 0 的舊紀錄會<strong>作廢</strong>（紀錄留著、註明原因），一樣的不會重複計。</div>` : '';
   return `<div id="vf-storage-box" style="margin-top:14px;padding:11px 13px;border:1px solid var(--bd);border-radius:8px">
     <label style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer">
       <input type="checkbox" id="vf-st-on" checked style="width:15px;height:15px"> 同步更新「客戶寄倉」庫存
     </label>
     <div id="vf-st-opts" style="margin-top:8px;font-size:12.5px;color:var(--sub);line-height:1.9">
-      這張單有開放寄倉${balNote}。本次出貨的數量要記成：
+      這張單有開放寄倉${balNote}。本次出貨的數量要記成：${priorNote}
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px">
         <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
           <input type="radio" name="vf-st-dir" value="in"${defOut?'':' checked'}> 入倉（做好了先放我方倉庫，客戶暫不提領）</label>
@@ -338,7 +354,6 @@ function generateVerifyPdf(mode){
   vfRememberPm(d.shipper);   // 2026-09-01：記住 PM，下一張自動帶
   d.shipSeq=parseInt(gvl('vf-shipseq'),10)||1; // 「第幾次出貨」改成人工填，不再自動算
   if(!vfKeyReady(d.no)) return;   // 複檢 #2-1：沒有 QR 驗證碼就先別印
-  const _wasEdit=!!VF_EDIT_ID;   // 2026-09-11 複檢：saveVerifyFormRecord 會同步清掉 VF_EDIT_ID，寄倉重寫的旗標要先記
   /* 複檢 2026-08-13 #1-3：留底一定要先存。原本是彈窗被瀏覽器擋掉就直接 return，留底一筆都不會存
      → 下次開同一張單的驗收單，「已出貨」歸零、「本次出貨」又帶成全部訂購量，第二批會印成整批數量。 */
   saveVerifyFormRecord(d);
@@ -354,11 +369,14 @@ function generateVerifyPdf(mode){
     if(d.storage && _stOn && _stOn.checked && typeof stSyncFromVerify==='function'){
       const _dirEl=document.querySelector('input[name="vf-st-dir"]:checked');
       const _dir=(_dirEl&&_dirEl.value==='out')?'out':'in';
-      /* 2026-09-01 複檢 #8：這是「編輯／重印」既有留底（VF_EDIT_ID 有值）→ 數量可能改過了，
-         要先把上一次寫進寄倉的同一批紀錄刪掉再重寫，否則後端看到相同的 src 會直接跳過，
-         寄倉數字永遠停在第一次的舊值。 */
-      stSyncFromVerify(Object.assign({}, d, {__stReplace:_wasEdit}), _dir, d.shipSeq)
+      /* 2026-10-07：同一張單同一次出貨先前登記過的寄倉紀錄（不管是從留底編輯、還是重新開一張同次數的驗收單），
+         一律在 stSyncFromVerify 裡跟這次內容對帳：一樣的不動、數量改了或改成 0 的作廢（留註記）、沒登記過的新增。
+         （2026-09-01 複檢 #8 的做法只在「從留底編輯」時整批作廢重寫，重新開單會漏掉 → Lot 18 提領多算 150 瓶。） */
+      stSyncFromVerify(d, _dir, d.shipSeq)
         .catch(e=>toast(e.message||'寄倉登記失敗，請到「客戶寄倉」手動登記','err'));
+    } else if(d.storage && _stOn && !_stOn.checked && Array.isArray(d.stPrior) && d.stPrior.length){
+      /* 先前這次出貨登記過寄倉，這次卻取消勾選「同步」→ 舊紀錄不會跟著這張驗收單更新，明講免得又對不上 */
+      toast(`⚠ 這次出貨（第 ${d.stPriorSeq||d.shipSeq} 次）先前已登記過 ${d.stPrior.length} 筆寄倉，這次沒勾「同步更新客戶寄倉」，那幾筆不會跟著這張驗收單更新，請到「客戶寄倉」確認數字`,'err');
     }
   }catch(_){}
   const seqEl=document.getElementById('vf-shipseq'); if(seqEl) seqEl.value=d.shipSeq+1; // 方便下一次接著填
