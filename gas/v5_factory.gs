@@ -716,7 +716,13 @@ function fxLookupPrice_(ctx, clientName, name, vol) {
   for (var i = 0; i < ctx.ob.length; i++) {
     var p = ctx.ob[i];
     if (String(p.active).toUpperCase() === 'N') continue;
-    if (fxKey_(p.name) === nk && (!vk || fxKey_(fxVolMl_(p.volume)) === vk) && fxNum_(p.list_price) !== '') return fxNum_(p.list_price);
+    if (fxKey_(p.name) === nk && (!vk || fxKey_(fxVolMl_(p.volume)) === vk) && fxNum_(p.list_price) !== '') {
+      // 2026-10-12：舊價客戶（島羽／downstairs）用漲價前牌價
+      if (ctx.legacy === undefined) { try { ctx.legacy = legacyPriceMap_(); } catch (e) { ctx.legacy = {}; } }
+      var lg = ctx.legacy[String(p.sku_id)];
+      if (lg > 0 && isLegacyClientName_(clientName)) return lg;
+      return fxNum_(p.list_price);
+    }
   }
   var cid = '';
   for (var j = 0; j < ctx.companies.length; j++) if (fxKey_(ctx.companies[j].name) === fxKey_(clientName)) { cid = String(ctx.companies[j].company_id); break; }
