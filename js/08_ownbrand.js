@@ -3,6 +3,7 @@
    ============================================================ */
 let OWNBRAND_PRODUCTS=null, OWNBRAND_TIERS=null, CONSIGN_TERMS=null;
 let OWNBRAND_LEGACY=[];   // 2026-10-12：舊價客戶名稱（consign_customers.price_basis='old'，後端 getOwnbrandTiers 帶回）
+let OWNBRAND_USER_EMAILS={};   // 2026-10-12b：{ 帳號名稱: email }，後端 users 分頁 email 欄＋OWNER_EMAIL
 
 async function loadOwnbrandData(force){
   if(OWNBRAND_PRODUCTS && OWNBRAND_TIERS && !force) return;
@@ -13,7 +14,7 @@ async function loadOwnbrandData(force){
   ]);
   if(!p.ok) throw new Error(p.error||'載入公版酒失敗');
   OWNBRAND_PRODUCTS=(p.products||[]).filter(x=>String(x.active||'Y').toUpperCase()!=='N');
-  if(t.ok){ OWNBRAND_TIERS=t.tiers||[]; CONSIGN_TERMS=t.terms||{}; OWNBRAND_LEGACY=t.legacy_customers||[]; }
+  if(t.ok){ OWNBRAND_TIERS=t.tiers||[]; CONSIGN_TERMS=t.terms||{}; OWNBRAND_LEGACY=t.legacy_customers||[]; OWNBRAND_USER_EMAILS=t.user_emails||{}; }
   else { OWNBRAND_TIERS=OWNBRAND_TIERS||[]; CONSIGN_TERMS=CONSIGN_TERMS||{}; }
 }
 function ownbrandProductLabel(p){
