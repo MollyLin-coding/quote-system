@@ -329,7 +329,8 @@ function gotoPage(p){
   { const e=document.getElementById('page-today'); if(e) e.classList.toggle('on', p==='today'); }
   { const e=document.getElementById('page-customer'); if(e) e.classList.toggle('on', p==='customer'); }
   { const e=document.getElementById('page-contract'); if(e) e.classList.toggle('on', p==='contract'); }   // 2026-09-15：合約產生
-  document.getElementById('tbr-standard').style.display = (p==='custom'||p==='orders'||p==='report'||p==='cal'||p==='consign'||p==='storage'||p==='verify'||p==='today'||p==='customer'||p==='contract') ? 'none' : 'flex';
+  { const e=document.getElementById('page-pricesheet'); if(e) e.classList.toggle('on', p==='pricesheet'); }   // 2026-10-12：通路報價單
+  document.getElementById('tbr-standard').style.display = (p==='custom'||p==='orders'||p==='report'||p==='cal'||p==='consign'||p==='storage'||p==='verify'||p==='today'||p==='customer'||p==='contract'||p==='pricesheet') ? 'none' : 'flex';
   document.getElementById('tbr-custom').style.display = p==='custom' ? 'flex' : 'none';
   const _titles={today:['今日待辦','今天該做的事，一頁看完，點下去就能處理'],
     custom:['自訂報價單','自由建立非常規報價單，可儲存到後台備份，並直接匯出 PDF / Word'],
@@ -340,11 +341,12 @@ function gotoPage(p){
     consign:['寄售管理','公版酒鋪貨・銷售・庫存・月結，一頁掌握'],
     storage:['客戶寄倉','客戶買斷後寄放我方倉庫的酒：登記入倉／提領，隨時看剩幾瓶'],
     customer:['客戶管理','每個客戶的聯絡資訊、往來報價單、訂單進度與未收款、驗收客訴，一頁看完'],
-    contract:['合約','從報價單一鍵帶入，產生代工／寄售合約：Google 文件可手改＋PDF＋Word']};
+    contract:['合約','從報價單一鍵帶入，產生代工／寄售合約：Google 文件可手改＋PDF＋Word'],
+    pricesheet:['通路報價單','標準通路報價單：價格依公版酒主檔自動產生，隨時下載 PDF']};
   document.getElementById('tb-title').textContent = _titles[p]?_titles[p][0]:'報價單製作';
   document.getElementById('tb-sub').textContent = _titles[p]?_titles[p][1]:'填寫後可即時預覽，並匯出 PDF / Word';
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
-  const QUOTE_SUBPAGES=['new','custom','records'];
+  const QUOTE_SUBPAGES=['new','custom','records','pricesheet'];
   document.getElementById('nav-quote').classList.toggle('parent-active', QUOTE_SUBPAGES.includes(p));
   if(QUOTE_SUBPAGES.includes(p)) setQuoteMenuOpen(true);
   if(p==='new'){ document.getElementById('nav-new').classList.add('on'); }
@@ -366,6 +368,7 @@ function gotoPage(p){
   if(p==='consign'){ document.getElementById('nav-consign').classList.add('on'); initConsignPage().catch(()=>{}); }
   if(p==='storage'){ document.getElementById('nav-storage').classList.add('on'); loadStorage().catch(()=>{}); }
   if(p==='customer'){ document.getElementById('nav-customer').classList.add('on'); loadCustomers().catch(()=>{}); }
+  if(p==='pricesheet'){ const nb=document.getElementById('nav-pricesheet'); if(nb) nb.classList.add('on'); if(typeof loadPriceSheet==='function') loadPriceSheet(false); }
   if(p==='contract'){ const nb=document.getElementById('nav-contract'); if(nb) nb.classList.add('on'); if(typeof loadContracts==='function') loadContracts().catch(()=>{}); }
   if(p==='custom'){
     document.getElementById('nav-custom').classList.add('on');
