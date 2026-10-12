@@ -240,7 +240,8 @@ function handleGetOwnbrandTiers_(params) {
     ok: true,
     tiers: v2ReadAll_(SHEET_OWNBRAND_TIERS, OWNBRAND_TIERS_HEADERS),
     terms: getConsignTermsMap_(),
-    legacy_customers: legacyCustomers_().map(function (c) { return String(c.name || c.customer_id); })   // 2026-10-12
+    legacy_customers: legacyCustomers_().map(function (c) { return String(c.name || c.customer_id); }),   // 2026-10-12
+    user_emails: userEmailMap_()   // 2026-10-12b：通路報價單頁尾信箱跟著登入帳號
   };
 }
 
