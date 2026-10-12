@@ -58,7 +58,7 @@ function obListPriceForCustomer_(customerId, product) {
 }
 
 /* 一次性設定（在 Apps Script 編輯器手動執行；主檔改價之前跑） */
-function setupLegacyPrices() {
+function setupLegacyPrices_() {   // 2026-10-12 已執行過，改成私有避免誤跑
   var out = [];
   var sh = v2Sheet_(SHEET_LEGACY_PRICES, LEGACY_PRICE_HEADERS);
   var have = legacyPriceMap_();
@@ -111,5 +111,120 @@ function applyUnifiedPrice20261012() {
   try { CacheService.getScriptCache().remove(CD_CACHE_KEY_); } catch (e) {}
   var msg = '改 ' + changed.length + ' 列：' + changed.join(', ') + ' / 同步 ' + JSON.stringify(s);
   logChange_('applyUnifiedPrice20261012', '', { msg: msg });
+  return msg;
+}
+
+/* ===================================================================
+ * 2026-10-12b：帳號信箱（通路報價單頁尾跟著登入帳號換）
+ *  - users 分頁多一欄 email（表頭自動補在最後一欄後面，不動 USERS_HEADERS）
+ *  - 老闆帳號（Molly，PIN_CODE 那組）不在 users 分頁 → 存在 Script Properties 的 OWNER_EMAIL
+ *  - getOwnbrandTiers 回 user_emails：{ 名字: email }（只給已登入的人，前端報價單用）
+ * =================================================================== */
+function userEmailMap_() {
+  var map = {};
+  try {
+    var own = PropertiesService.getScriptProperties().getProperty('OWNER_EMAIL');
+    if (own) map[OWNER_DISPLAY_NAME] = own;
+    var sh = getUsersSheet_();
+    var lastCol = sh.getLastColumn(), lastRow = sh.getLastRow();
+    if (lastRow < 2) return map;
+    var head = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
+    var iName = head.indexOf('name'), iMail = head.indexOf('email'), iAct = head.indexOf('active');
+    if (iName < 0 || iMail < 0) return map;
+    sh.getRange(2, 1, lastRow - 1, lastCol).getValues().forEach(function (r) {
+      if (iAct >= 0 && String(r[iAct]) === 'N') return;
+      var nm = String(r[iName] || '').trim(), em = String(r[iMail] || '').trim();
+      if (nm && em) map[nm] = em;
+    });
+  } catch (e) {}
+  return map;
+}
+
+/* 一次性：寫入三人信箱（2026-10-12 Molly 提供） */
+function setupUserEmails20261012() {
+  var MAIL = { 'Kevin': 'kevin_huang@kevinnumber1-cocktail.com', 'Vic': 'vic_kuo@kevinnumber1-cocktail.com' };
+  PropertiesService.getScriptProperties().setProperty('OWNER_EMAIL', 'molly_lin@kevinnumber1-cocktail.com');
+  var sh = getUsersSheet_();
+  var lastCol = sh.getLastColumn();
+  var head = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
+  var iMail = head.indexOf('email');
+  if (iMail < 0) { iMail = lastCol; sh.getRange(1, lastCol + 1).setValue('email').setFontWeight('bold'); }
+  var iName = head.indexOf('name');
+  var out = ['OWNER_EMAIL 已設'];
+  var lastRow = sh.getLastRow();
+  if (lastRow >= 2) {
+    var names = sh.getRange(2, iName + 1, lastRow - 1, 1).getValues();
+    names.forEach(function (r, i) {
+      var nm = String(r[0] || '').trim();
+      var key = Object.keys(MAIL).filter(function (k) { return k.toLowerCase() === nm.toLowerCase(); })[0];
+      if (key) { sh.getRange(i + 2, iMail + 1).setValue(MAIL[key]); out.push(nm + ' → ' + MAIL[key]); }
+    });
+  }
+  Logger.log(out.join(' / '));
+  return out.join(' / ');
+}
+
+/* ===================================================================
+ * 2026-10-12b：定價毛利試算表加「寄售 7 折」情境（多數寄售客戶 7 折）
+ *  - 在「寄售 標準 75折」參數列下面插一列「寄售 7折（多數寄售客戶）」0.7（黃色可改）
+ *  - 在 75折寄售那三欄（寄售價／毛利**／毛利率）右邊插三欄 7折寄售價／毛利**／毛利率，
+ *    公式同 75 折那組（寄售運費買方負擔不扣運費），格式＋顏色規則照抄
+ *  - 跑之前先整頁備份「備份_定價毛利試算表_20261012」
+ * =================================================================== */
+function addConsign70Scenario20261012() {
+  var ss = SpreadsheetApp.openById(OWNBRAND_SOURCE_SHEET_ID);
+  var sh = ss.getSheetByName('定價毛利試算表');
+  if (!sh) throw new Error('找不到分頁：定價毛利試算表');
+  var bk = '備份_定價毛利試算表_20261012';
+  if (!ss.getSheetByName(bk)) sh.copyTo(ss).setName(bk);
+  var colA = sh.getRange(1, 1, sh.getLastRow(), 1).getValues().map(function (r) { return String(r[0]); });
+  if (colA.some(function (s) { return s.indexOf('寄售 7折') === 0; })) return '已經加過了，略過';
+  var pRow = colA.findIndex(function (s) { return s.indexOf('寄售 標準') === 0; }) + 1;
+  if (pRow < 1) throw new Error('找不到「寄售 標準」參數列');
+  sh.insertRowAfter(pRow);
+  var newP = pRow + 1;
+  sh.getRange(pRow, 1, 1, 3).copyTo(sh.getRange(newP, 1, 1, 3));   // 連格式（黃格）一起
+  sh.getRange(newP, 1).setValue('寄售 7折（多數寄售客戶）');
+  sh.getRange(newP, 2).setValue(0.7);
+  sh.getRange(newP, 3).clearContent();
+  // 表頭列＝A 欄是「品名」那列
+  colA = sh.getRange(1, 1, sh.getLastRow(), 1).getValues().map(function (r) { return String(r[0]); });
+  var hRow = colA.indexOf('品名') + 1;
+  var lastCol = sh.getLastColumn();
+  var head = sh.getRange(hRow, 1, 1, lastCol).getValues()[0].map(String);
+  var rCol = head.findIndex(function (s) { return s.indexOf('寄售價') >= 0; }) + 1;   // 75折寄售價
+  if (rCol < 1) throw new Error('找不到寄售價欄');
+  var first = hRow + 1, last = first;
+  while (last + 1 <= sh.getLastRow() && String(sh.getRange(last + 1, 3).getValue()).match(/ml$/)) last++;
+  var n = last - first + 1;
+  sh.insertColumnsAfter(rCol + 2, 3);
+  var c0 = rCol + 3;
+  sh.getRange(hRow, rCol, n + 1, 3).copyTo(sh.getRange(hRow, c0, n + 1, 3), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+  sh.getRange(hRow, c0, 1, 3).setValues([['7折寄售價', '毛利**', '毛利率']]);
+  var L = function (c) { return sh.getRange(1, c).getA1Notation().replace(/\d+/, ''); };
+  var D = 'D', E = 'E', P = L(c0), S = L(c0 + 1);
+  var f = [];
+  for (var r = first; r <= last; r++) {
+    f.push(['=ROUND(' + D + r + '*$B$' + newP + ',0)', '=ROUND(' + P + r + '-' + E + r + ',0)', '=IF(' + P + r + '=0,0,' + S + r + '/' + P + r + ')']);
+  }
+  sh.getRange(first, c0, n, 3).setFormulas(f);
+  // 75折那組的顏色規則（條件式格式）若只套在原欄，複製一份到新毛利率欄
+  var rules = sh.getConditionalFormatRules(), add = [];
+  var tColA1 = L(rCol + 2);
+  rules.forEach(function (rule) {
+    var hit = rule.getRanges().some(function (rg) { return rg.getColumn() <= rCol + 2 && rg.getLastColumn() >= rCol + 2 && rg.getColumn() >= rCol; });
+    if (!hit) return;
+    var b = rule.copy().setRanges([sh.getRange(first, c0 + 2, n, 1)]);
+    var cond = rule.getBooleanCondition();
+    if (cond && cond.getCriteriaType() === SpreadsheetApp.BooleanCriteria.CUSTOM_FORMULA) {
+      var re = new RegExp('(^|[^A-Z$])(\\$?)' + tColA1 + '(\\$?\\d+)', 'g');
+      var fx = String(cond.getCriteriaValues()[0]).replace(re, '$1$2' + L(c0 + 2) + '$3');
+      b.whenFormulaSatisfied(fx);
+    }
+    add.push(b.build());
+  });
+  if (add.length) sh.setConditionalFormatRules(rules.concat(add));
+  var msg = '參數列 ' + newP + '（0.7）／新增欄 ' + P + ':' + L(c0 + 2) + '／資料列 ' + first + '-' + last + '（' + n + ' 列）／複製顏色規則 ' + add.length + ' 條';
+  Logger.log(msg);
   return msg;
 }
