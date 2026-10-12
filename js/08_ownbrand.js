@@ -2,6 +2,7 @@
    v3.0 自有品牌公版酒（A. 通路買斷報價模式）
    ============================================================ */
 let OWNBRAND_PRODUCTS=null, OWNBRAND_TIERS=null, CONSIGN_TERMS=null;
+let OWNBRAND_LEGACY=[];   // 2026-10-12：舊價客戶名稱（consign_customers.price_basis='old'，後端 getOwnbrandTiers 帶回）
 
 async function loadOwnbrandData(force){
   if(OWNBRAND_PRODUCTS && OWNBRAND_TIERS && !force) return;
@@ -12,7 +13,7 @@ async function loadOwnbrandData(force){
   ]);
   if(!p.ok) throw new Error(p.error||'載入公版酒失敗');
   OWNBRAND_PRODUCTS=(p.products||[]).filter(x=>String(x.active||'Y').toUpperCase()!=='N');
-  if(t.ok){ OWNBRAND_TIERS=t.tiers||[]; CONSIGN_TERMS=t.terms||{}; }
+  if(t.ok){ OWNBRAND_TIERS=t.tiers||[]; CONSIGN_TERMS=t.terms||{}; OWNBRAND_LEGACY=t.legacy_customers||[]; }
   else { OWNBRAND_TIERS=OWNBRAND_TIERS||[]; CONSIGN_TERMS=CONSIGN_TERMS||{}; }
 }
 function ownbrandProductLabel(p){
@@ -118,8 +119,11 @@ function quickAddOwnbrand(){
   const sku=document.getElementById('ob-product').value; if(!sku){ toast('請先選擇公版酒','err'); return; }
   const p=ownbrandBySku(sku); if(!p) return;
   const vol=String(p.volume||'').replace(/[^\d]/g,'');
-  addBotRow({ name:p.name, vol:vol, price:p.list_price, qty:'', sku:p.sku_id, listprice:p.list_price });
-  toast('已帶入 '+p.name+'（'+p.volume+'）','ok');
+  if(typeof psSyncLegacyBox==='function') psSyncLegacyBox();   // 客戶名稱是程式帶入的（選公司／開舊單）也要判斷一次
+  const lp=(typeof obEffectiveListPrice==='function')?obEffectiveListPrice(p):p.list_price;
+  const isOld=Number(lp)!==Number(p.list_price);
+  addBotRow({ name:p.name, vol:vol, price:lp, qty:'', sku:p.sku_id, listprice:lp });
+  toast('已帶入 '+p.name+'（'+p.volume+'）'+(isOld?'｜舊價 '+lp:''),'ok');
   calc();
 }
 /* 計價單價＝原價×折（折欄以「折」為單位：6＝6折；留空＝原價）——回填 readonly 計價欄並更新總額 */
@@ -570,6 +574,7 @@ function openConsignCustomerEdit(id){
   g('cs-f-addr').value=c?.ship_address||'';
   g('cs-f-note').value=c?.note||'';
   g('cs-f-active').value=String(c?.active||'Y').toUpperCase()==='N'?'N':'Y';
+  g('cs-f-pricebasis').value=String(c?.price_basis||'').toLowerCase()==='old'?'old':'';
   // 例外折：僅在編輯既有客戶時顯示（需 customer_id）
   const w=g('cs-exc-wrap');
   if(editing){ w.style.display='block'; populateConsignSkuSelect('cs-exc-sku'); renderConsignExceptions(id); }
@@ -636,6 +641,7 @@ async function saveConsignCustomerForm(){
   const customer={ customer_id:id, name, default_discount:(disc>0&&disc<=1)?disc:0.75,
     billing_day:g('cs-f-bill'), contact:g('cs-f-contact'), phone:g('cs-f-phone'),
     ship_address:g('cs-f-addr'), note:g('cs-f-note'), active:document.getElementById('cs-f-active').value,
+    price_basis:document.getElementById('cs-f-pricebasis').value,   // 2026-10-12：'old'＝舊價客戶
     /* 保證金欄位已從畫面移除（2026-08-21）。這裡照抄客戶原本的值送回去，避免存檔時
        把舊資料的 deposit_required 洗掉；新客戶不帶這欄，交給後端維持空白。 */
     ...(function(){ const old=CS_CUSTOMERS.find(x=>String(x.customer_id)===String(id));
