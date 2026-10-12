@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20261007b">
-<script src="js/00_qrcode.js?v=20261007b"></script>
+<link rel="stylesheet" href="assets/app.css?v=20261012a">
+<script src="js/00_qrcode.js?v=20261012a"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -68,6 +68,7 @@
       <button class="nb nb-sub" id="nav-records" onclick="gotoPage('records')"><i class="ti ti-files"></i>報價紀錄</button>
       <button class="nb nb-sub on" id="nav-new" onclick="newQuote()"><i class="ti ti-file-plus"></i>新增報價單</button>
       <button class="nb nb-sub" id="nav-custom" onclick="gotoPage('custom')"><i class="ti ti-edit"></i>自訂報價單</button>
+      <button class="nb nb-sub" id="nav-pricesheet" onclick="gotoPage('pricesheet')"><i class="ti ti-file-download"></i>通路報價單</button>
     </div>
     <button class="nb" id="nav-verify" onclick="gotoPage('verify')"><i class="ti ti-clipboard-check"></i>出貨驗收</button>
     <button class="nb" id="nav-customer" data-owner-only onclick="gotoPage('customer')"><i class="ti ti-users"></i>客戶管理</button>
@@ -176,6 +177,11 @@
             </label>
           </div>
         </div>
+        <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--sub);cursor:pointer;margin-top:8px">
+          <input type="checkbox" id="ob-legacy" onchange="psLegacyToggled()" style="width:15px;height:15px">
+          舊價客戶（帶入時用漲價前的牌價當原價；依客戶名稱自動判斷，可手動改）
+        </label>
+        <div id="ob-legacy-hint" style="font-size:11.5px;color:var(--hint);margin-top:2px"></div>
         <div id="ob-tierinfo" class="prodinfo"></div>
         <!-- 2026-08-28：一次性採購 量價級距（MOQ）每張單可調；預設帶標準級距，改了只影響這張單，存檔跟著單走 -->
         <div id="ob-tieredit" style="display:none;margin-top:8px;padding:10px 12px;border:1px solid var(--bd);border-radius:8px">
@@ -666,6 +672,21 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- 2026-10-12：通路報價單（標準報價單）——價格讀公版酒主檔自動產生，所有帳號可下載 -->
+  <div class="page" id="page-pricesheet">
+    <div class="rec-wrap">
+      <div class="rec-toolbar">
+        <button class="btn btn-gold" onclick="psDownload()"><i class="ti ti-download"></i>下載 PDF</button>
+        <button class="rec-act-btn" onclick="loadPriceSheet(true)"><i class="ti ti-refresh"></i> 重新整理</button>
+      </div>
+      <div id="ps-status" style="font-size:12px;color:var(--sub);margin:4px 2px 10px"></div>
+      <div id="ps-wrap" style="width:100%;max-width:794px;overflow:hidden;border:1px solid var(--bd);border-radius:6px;background:#fff">
+        <iframe id="ps-frame" title="通路報價單" style="width:794px;height:1123px;border:0;transform-origin:0 0;display:block"></iframe>
+      </div>
+      <div style="font-size:11.5px;color:var(--hint);margin-top:8px">下載 PDF：會開啟列印視窗，目的地選「另存為 PDF」。</div>
+    </div>
   </div>
 
   <div class="page" id="page-records">
@@ -1288,6 +1309,7 @@
       <div class="fl" style="grid-column:span 2"><label>鋪貨/出貨地址 <span class="opt">選填</span></label><input class="fi" id="cs-f-addr"></div>
       <div class="fl" style="grid-column:span 2"><label>備註 <span class="opt">選填</span></label><input class="fi" id="cs-f-note"></div>
       <div class="fl"><label>狀態</label><select class="fi" id="cs-f-active"><option value="Y">啟用中</option><option value="N">已終止/停用</option></select></div>
+      <div class="fl"><label>價格基準 <span class="opt">售出單價＝牌價×折數</span></label><select class="fi" id="cs-f-pricebasis"><option value="">新價（主檔現行牌價）</option><option value="old">舊價客戶（用漲價前牌價）</option></select></div>
       <div class="fl" style="grid-column:span 2"><label>對應廠務經銷商 <span class="opt">連結後，廠務的進貨／售出／退貨會自動同步到這位客戶的寄售帳</span></label>
         <select class="fi" id="cs-f-fxdealer"><option value="">（不連結廠務）</option></select>
         <div id="cs-f-fxdealer-hint" style="font-size:11px;color:var(--hint);margin-top:3px"></div></div>
@@ -1358,22 +1380,23 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20261007b"></script>
-<script src="js/01_quote_form.js?v=20261007b"></script>
-<script src="js/01b_quote_preview.js?v=20261007b"></script>
-<script src="js/02_core_api.js?v=20261007b"></script>
-<script src="js/03_quote_custom.js?v=20261007b"></script>
-<script src="js/04_company.js?v=20261007b"></script>
-<script src="js/05_orders.js?v=20261007b"></script>
-<script src="js/06_verify_mgmt.js?v=20261007b"></script>
-<script src="js/07_calendar.js?v=20261007b"></script>
-<script src="js/08_ownbrand.js?v=20261007b"></script>
-<script src="js/09_verify_form.js?v=20261007b"></script>
-<script src="js/10_today.js?v=20261007b"></script>
-<script src="js/11_customers.js?v=20261007b"></script>
-<script src="js/12_storage.js?v=20261007b"></script>
-<script src="js/13_factory.js?v=20261007b"></script>
-<script src="js/14_contract.js?v=20261007b"></script>
-<script src="js/99_boot.js?v=20261007b"></script>
+<script src="js/00_utils.js?v=20261012a"></script>
+<script src="js/01_quote_form.js?v=20261012a"></script>
+<script src="js/01b_quote_preview.js?v=20261012a"></script>
+<script src="js/02_core_api.js?v=20261012a"></script>
+<script src="js/03_quote_custom.js?v=20261012a"></script>
+<script src="js/04_company.js?v=20261012a"></script>
+<script src="js/05_orders.js?v=20261012a"></script>
+<script src="js/06_verify_mgmt.js?v=20261012a"></script>
+<script src="js/07_calendar.js?v=20261012a"></script>
+<script src="js/08_ownbrand.js?v=20261012a"></script>
+<script src="js/09_verify_form.js?v=20261012a"></script>
+<script src="js/10_today.js?v=20261012a"></script>
+<script src="js/11_customers.js?v=20261012a"></script>
+<script src="js/12_storage.js?v=20261012a"></script>
+<script src="js/13_factory.js?v=20261012a"></script>
+<script src="js/14_contract.js?v=20261012a"></script>
+<script src="js/15_pricesheet.js?v=20261012a"></script>
+<script src="js/99_boot.js?v=20261012a"></script>
 </body>
 </html>
