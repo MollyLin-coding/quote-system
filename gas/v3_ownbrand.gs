@@ -45,7 +45,7 @@ const OWNBRAND_TIERS_HEADERS = ['channel', 'min_qty', 'discount', 'free_ship', '
 const CONSIGN_TERMS_HEADERS = ['key', 'value', 'note'];
 /* deposit_required（2026-08-06 加）：這個客戶要不要押保證金。空白／'Y' 視為要收（維持舊行為），
    填 'N' 的客戶鋪貨時不計保證金、庫存頁也不累計保證金餘額。舊資料沒有這欄＝照舊收。 */
-const CONSIGN_CUSTOMERS_HEADERS = ['customer_id', 'company_id', 'name', 'default_discount', 'billing_day', 'contact', 'phone', 'ship_address', 'active', 'note', 'deposit_required'];
+const CONSIGN_CUSTOMERS_HEADERS = ['customer_id', 'company_id', 'name', 'default_discount', 'billing_day', 'contact', 'phone', 'ship_address', 'active', 'note', 'deposit_required', 'price_basis'];   // price_basis（2026-10-12）：'old'＝舊價客戶，見 v7_legacy_price.gs
 const CONSIGN_DISCOUNTS_HEADERS = ['customer_id', 'sku_id', 'discount', 'note'];
 const CONSIGN_LEDGER_HEADERS = ['movement_id', 'date', 'customer_id', 'sku_id', 'type', 'qty', 'unit_price', 'note', 'created_at'];
 
@@ -227,14 +227,20 @@ function setupOwnbrandSyncTrigger() {
 // ===================================================================
 function handleGetOwnbrandProducts_(params) {
   const isActive = function (o) { return String(o.active).toUpperCase() !== 'N'; };
-  return { ok: true, products: v2ReadAll_(SHEET_OWNBRAND_PRODUCTS, OWNBRAND_PRODUCTS_HEADERS).filter(isActive) };
+  const lg = legacyPriceMap_();   // 2026-10-12：每列多帶 legacy_price（舊價客戶用）
+  const list = v2ReadAll_(SHEET_OWNBRAND_PRODUCTS, OWNBRAND_PRODUCTS_HEADERS).filter(isActive).map(function (p) {
+    p.legacy_price = lg[String(p.sku_id)] || '';
+    return p;
+  });
+  return { ok: true, products: list };
 }
 
 function handleGetOwnbrandTiers_(params) {
   return {
     ok: true,
     tiers: v2ReadAll_(SHEET_OWNBRAND_TIERS, OWNBRAND_TIERS_HEADERS),
-    terms: getConsignTermsMap_()
+    terms: getConsignTermsMap_(),
+    legacy_customers: legacyCustomers_().map(function (c) { return String(c.name || c.customer_id); })   // 2026-10-12
   };
 }
 
@@ -365,8 +371,9 @@ function resolveConsignUnitPrice_(customerId, skuId) {
   const product = getOwnbrandProductBySku_(skuId);
   if (!product) throw new Error('找不到公版商品 SKU：' + skuId);
   const discount = resolveConsignDiscount_(customerId, skuId);
-  const unitPrice = Math.round(Number(product.list_price || 0) * discount);
-  return { unitPrice: unitPrice, discount: discount, listPrice: Number(product.list_price || 0), volume: product.volume, name: product.name };
+  const listPrice = obListPriceForCustomer_(customerId, product);   // 2026-10-12：舊價客戶用漲價前牌價
+  const unitPrice = Math.round(listPrice * discount);
+  return { unitPrice: unitPrice, discount: discount, listPrice: listPrice, volume: product.volume, name: product.name };
 }
 
 // ===================================================================
