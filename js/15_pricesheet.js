@@ -24,6 +24,15 @@ const PS_FLAVOR=[
   ['泰奶烏龍蘭姆酒','絲絨奶香・沉韻炭焙'],
   ['梔子花金萱威士忌','醉意金萱・清雅梔子']
 ];
+/* 頁尾聯絡信箱跟著登入帳號：信箱記在後台（users 分頁 email 欄；老闆帳號在 Script Properties OWNER_EMAIL），
+   由 getOwnbrandTiers 帶回 { 名字: email }。名稱比對不分大小寫；找不到就用公司預設信箱 */
+const PS_DEFAULT_EMAIL='molly_lin@kevinnumber1-cocktail.com';
+function psUserEmail(name, map){
+  map=map||((typeof OWNBRAND_USER_EMAILS!=='undefined')?OWNBRAND_USER_EMAILS:{})||{};
+  const k=String(name||'').trim().toLowerCase();
+  const hit=Object.keys(map).find(x=>x.trim().toLowerCase()===k);
+  return (hit && map[hit]) || PS_DEFAULT_EMAIL;
+}
 /* 主檔品名 → 報價單顯示名（主檔是簡稱） */
 const PS_DISPLAY_NAME={'泰奶烏龍蘭姆酒':'泰奶焙火烏龍蘭姆酒'};
 /* 徽章（固定文案；改這裡就好） */
@@ -45,8 +54,8 @@ function psFmt(n){ return Number(n).toLocaleString('en-US'); }
 function psDiscText(d){ const z=Math.round(d*1000)/100; return (Number.isInteger(z)?z:String(z).replace(/0+$/,''))+'折'; }
 
 /* 純函式：主檔＋級距＋條款 → 報價單模型（node 測試可直接呼叫） */
-function psBuildModel(products, tiers, terms, now){
-  terms=terms||{}; now=now||new Date();
+function psBuildModel(products, tiers, terms, now, opts){
+  terms=terms||{}; now=now||new Date(); opts=opts||{};
   const byName={};
   (products||[]).forEach(p=>{
     if(String(p.active==null?'Y':p.active).toUpperCase()==='N') return;
@@ -98,7 +107,9 @@ function psBuildModel(products, tiers, terms, now){
     .map(t=>({min:psNum(t.min_qty)||0, disc:psNum(t.discount)}))
     .filter(t=>t.min>0 && t.disc>0 && t.disc<=1).sort((a,b)=>a.min-b.min);
   const cs=(tiers||[]).find(t=>String(t.channel)==='consign');
-  const consignDisc=(cs && psNum(cs.discount)>0 && psNum(cs.discount)<=1)?psNum(cs.discount):0.75;
+  const stdConsign=(cs && psNum(cs.discount)>0 && psNum(cs.discount)<=1)?psNum(cs.discount):0.75;
+  /* 2026-10-12：寄售折數可在頁面切換（多數寄售客戶 7 折）；沒指定就用標準級距 */
+  const consignDisc=(opts.consignDisc>0 && opts.consignDisc<=1)?opts.consignDisc:stdConsign;
   groups.forEach(g=>{
     g.rows=vols.map(v=>{
       const lp=g.prices[v];
@@ -118,7 +129,8 @@ function psBuildModel(products, tiers, terms, now){
     caseText: vols.map(v=>`${v}ml ${PS_CASE[v]}瓶/箱`).join('・'),
     foq, ship: String(terms.ship_note||'運費買方負擔').replace(/^運費/,'')||'買方負擔',
     exchange: `${exMonths}個月內（外觀完好）`,
-    dateText: ym, fileName:`通路報價單_凱文南坡萬實業社_${ymTag}`,
+    dateText: ym, fileName:`通路報價單_凱文南坡萬實業社_${ymTag}`+(consignDisc!==stdConsign?`_寄售${psConsignText(consignDisc)}`:''),
+    stdConsign, email: opts.email||PS_DEFAULT_EMAIL,
     uniform: groups.length===1
   };
 }
@@ -205,7 +217,7 @@ function psSheetHtml(m, base){
 <tr><td class="lbl">結算</td><td class="val">月結（每月5日對帳）</td></tr>
 <tr><td class="lbl">換貨期限</td><td class="val">${psEsc(m.exchange)}</td></tr></table></div></div></div>
 <div class="note"><b>備　註</b>　以上報價均為含稅價（已含菸酒稅・營業稅）。報價有效期 <b>90 日</b>，逾期請重新洽詢。客製酒標（ODM）方案另洽。<br>初次合作提供免費試飲樣品組，無採購承諾。</div>
-<div class="footer"><div>凱文南坡萬實業社｜molly_lin@kevinnumber1-cocktail.com｜kevinnumber1-cocktail.com.tw</div><div><span class="dept">品牌開發部</span>　統一編號 92719710</div></div>
+<div class="footer"><div>凱文南坡萬實業社｜${psEsc(m.email)}｜kevinnumber1-cocktail.com.tw</div><div><span class="dept">品牌開發部</span>　統一編號 92719710</div></div>
 <div class="warn">禁止酒駕　・　飲酒過量，有害健康<br>未滿十八歲禁止飲酒</div>
 </div></body></html>`;
 }
@@ -217,7 +229,9 @@ async function loadPriceSheet(force){
   if(st) st.textContent='讀取公版酒價格中…';
   try{
     await loadOwnbrandData(!!force);
-    PS_MODEL=psBuildModel(OWNBRAND_PRODUCTS, OWNBRAND_TIERS, CONSIGN_TERMS, new Date());
+    const sel=document.getElementById('ps-consign'); const cd=sel?parseFloat(sel.value):NaN;
+    PS_MODEL=psBuildModel(OWNBRAND_PRODUCTS, OWNBRAND_TIERS, CONSIGN_TERMS, new Date(), {consignDisc:cd>0?cd:null, email:psUserEmail(typeof USER_NAME!=='undefined'?USER_NAME:'')});
+    if(sel && !sel.dataset.init){ sel.dataset.init='1'; sel.options[0].text=`標準 ${psConsignText(PS_MODEL.stdConsign)}`; }
     if(!PS_MODEL.items.length) throw new Error('公版酒主檔沒有 100／500／700ml 的價格');
     const fr=document.getElementById('ps-frame');
     const base=location.href.replace(/[#?].*$/,'').replace(/[^/]*$/,'');
@@ -280,4 +294,4 @@ if(typeof document!=='undefined') document.addEventListener('DOMContentLoaded',(
   if(cli){ cli.addEventListener('input',psSyncLegacyBox); cli.addEventListener('change',psSyncLegacyBox); }
 });
 if(typeof onHook==='function') onHook('afterReset',()=>{ const cb=document.getElementById('ob-legacy'); if(cb){ cb.dataset.manual=''; cb.checked=false; } psLegacyHint(); });
-if(typeof module!=='undefined') module.exports={psBuildModel, psSheetHtml, psIsLegacyClient, psNameTokens};
+if(typeof module!=='undefined') module.exports={psBuildModel, psSheetHtml, psIsLegacyClient, psNameTokens, psUserEmail};
