@@ -435,6 +435,33 @@ function stBalanceForRows(cus, rows){
   });
   return bal;
 }
+/* 2026-10-19 Molly：「寄倉要可以分 LOT 顯示，我要提領 LOT15，列出了很多別的品項，看起來很凌亂」
+   給驗收單的寄倉區塊用：rows（通常是「本次要出貨」那幾列，只看酒款＋容量）這幾款酒
+   目前在這位客戶名下的寄倉庫存，**依 Lot 分組**，每組帶明細與小計，只回還有剩的。
+   分組一律照帳上實際的 Lot 走（rows 自己填的 Lot 不影響分組），呼叫端再決定要聚焦哪一個 Lot。 */
+function stLotStockForRows(cus, rows){
+  const want={};
+  (rows||[]).forEach(r=>{
+    const k=stNm(r.name)+'|'+stVol(r.vol);
+    if(!want[k]) want[k]={ name:r.name, vol:r.vol };
+  });
+  const g={};
+  (ST_MOVES||[]).forEach(m=>{
+    if(stVoided(m)) return;
+    if(stCusKey(m.customer)!==stCusKey(cus)) return;
+    const k=stNm(m.name)+'|'+stVol(m.volume);
+    if(!want[k]) return;
+    const lk=stLotKey(m.lot);
+    if(!g[lk]) g[lk]={ lotKey:lk, lot:stLotFmt(m.lot), total:0, items:{} };
+    if(!g[lk].items[k]) g[lk].items[k]={ name:m.name||want[k].name, vol:m.volume||want[k].vol, bal:0 };
+    const q=(parseFloat(m.qty)||0)*((String(m.direction)==='out')?-1:1);
+    g[lk].items[k].bal+=q; g[lk].total+=q;
+  });
+  return Object.keys(g).map(lk=>g[lk]).filter(x=>x.total>0)
+    .map(x=>({ lotKey:x.lotKey, lot:x.lot, total:x.total,
+               items:Object.keys(x.items).map(k=>x.items[k]).filter(it=>it.bal>0) }))
+    .sort((a,b)=>String(a.lot).localeCompare(String(b.lot),'zh-Hant',{numeric:true}));
+}
 function stCustomerTotal(cus){
   let bal=0;
   (ST_MOVES||[]).forEach(m=>{

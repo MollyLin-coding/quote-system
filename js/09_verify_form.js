@@ -237,7 +237,14 @@ function buildVerifyModal(hdrLot){
   const d=VERIFY_DATA;
   const today=(function(){ const t=new Date(),p=n=>String(n).padStart(2,'0'); return t.getFullYear()+'-'+p(t.getMonth()+1)+'-'+p(t.getDate()); })();
   const inS='border:1px solid var(--bd);border-radius:5px;padding:5px 7px;font-size:12px;font-family:inherit;width:100%';
-  const rowsH=d.rows.map((r,i)=>`<tr>
+  /* 2026-10-19 Molly：「我要提領 Lot15，列出了很多別的品項，看起來很凌亂」
+     → 「本次出貨數」是 0 的品項（早就出完的、不在這次提領範圍的）預設收起來，
+       要改再按一下「顯示全部品項」展開。列還留在 DOM 裡（index 不變、recalcVerify 照樣收得到值），只是不顯示。
+     全部品項都有出貨（第一次整批出貨）或全部都是 0 時不收，免得整張表空白。 */
+  const _shipN=d.rows.filter(r=>(parseFloat(r.thisShip)||0)>0).length;
+  const _collapse=_shipN>0 && _shipN<d.rows.length;
+  const _isOff=r=>_collapse && !((parseFloat(r.thisShip)||0)>0);
+  const rowsH=d.rows.map((r,i)=>`<tr class="vf-row"${_isOff(r)?' data-off="1" style="display:none"':''}>
     <td style="font-weight:600;text-align:left;padding-left:6px">${escHtml(r.name)}</td>
     <td><input type="date" style="${inS};width:130px" data-i="${i}" data-k="mfg" class="vfi" value="${escHtml(r.mfg||'')}"></td>
     <td class="vf-lotcol" style="display:none"><input style="${inS};width:70px" data-i="${i}" data-k="lot" class="vfi" value="${escHtml(r.lot)}"></td>
@@ -272,6 +279,8 @@ function buildVerifyModal(hdrLot){
         <tbody>${rowsH}</tbody>
       </table>
     </div>
+    ${_collapse?`<label style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--sub);cursor:pointer">
+      <input type="checkbox" id="vf-showall" onchange="vfToggleAllRows()"> 顯示全部品項（本次沒出貨的 ${d.rows.length-_shipN} 項已收起，列印出來的驗收單也只會有本次出貨的品項）</label>`:''}
     ${vfStorageBlockHtml(d)}
     <p style="font-size:11px;color:var(--hint);margin-top:10px;line-height:1.6">
       「待出貨」＝總受訂數 − 已出貨 − 本次出貨數，系統自動算。<br>
@@ -288,15 +297,37 @@ function vfStorageBlockHtml(d){
   /* 2026-09-01 複檢：原本看的是「這位客戶所有酒款的總餘額」，所以只要客戶那邊還剩別支酒 3 瓶，
      這次新做好的 600 瓶就會被預設成「提領」，沒注意直接按下去，寄倉帳就差了 1200 瓶。
      改成只看「這張驗收單上的這幾款酒」目前在我方倉庫的餘額。 */
-  let bal=0;
-  try{ bal=(typeof stBalanceForRows==='function')?stBalanceForRows(d.client, d.rows):0; }catch(_){}
+  /* 2026-10-19 Molly：「寄倉要可以分 LOT 顯示」——原本寫「這幾款酒目前在我方倉庫還有 550 瓶」，
+     那其實是 Lot 15 的 250 ＋ Lot 18 的 300 混在一起，看不出這次提領到底要扣哪一批。
+     改成只看「本次要出貨的那幾款酒」：品項有帶 Lot 而且帳上對得上 → 只顯示那個 Lot（Molly 選的）；
+     舊單品項沒填 Lot 時，退一步把這幾款酒的庫存**分 Lot 列出來**，至少不會再給一個混在一起的總數。
+     方向的聰明預設（bal>0＝提領）也跟著只看這個範圍，比看全部 Lot 準。 */
+  const _ship=(d.rows||[]).filter(r=>(parseFloat(r.thisShip)||0)>0);
+  const _rowsForSt=_ship.length?_ship:(d.rows||[]);
+  let bal=0, stockNote='（這幾款酒目前沒有寄倉庫存）';
+  try{
+    const _groups=(typeof stLotStockForRows==='function')?stLotStockForRows(d.client, _rowsForSt):[];
+    const _focus=(typeof stLotKey==='function')
+      ? [...new Set(_rowsForSt.map(r=>stLotKey(r.lot)).filter(Boolean))] : [];
+    const _hit=_groups.filter(g=>_focus.indexOf(g.lotKey)>=0);
+    const _show=_hit.length?_hit:_groups;
+    bal=_show.reduce((t,g)=>t+g.total,0);
+    if(_show.length){
+      const _txt=_show.map(g=>`<strong>${escHtml(g.lot||'未填 Lot')}</strong>：`
+        + g.items.map(it=>escHtml(it.name)+(it.vol?(' '+escHtml(String(it.vol))):'')+' '+it.bal).join('、')
+        + `（共 <strong>${g.total}</strong> 瓶）`).join('<br>');
+      stockNote=`，${_hit.length?'本次要扣的這一批':'這幾款酒目前的'}寄倉庫存：<br>${_txt}`;
+    }
+  }catch(_){
+    try{ bal=(typeof stBalanceForRows==='function')?stBalanceForRows(d.client, _rowsForSt):0; }catch(__){}
+    if(bal>0) stockNote=`（這幾款酒目前在我方倉庫還有 <strong>${bal}</strong> 瓶）`;
+  }
   /* 2026-10-07：這次出貨先前已經登記過（重新產生／從留底編輯）→ 方向照先前登記的，不再用「剩餘量 > 0」猜。
      否則整批提領完、剩餘量剛好 0 時，重新產生會預設成「入倉」，對帳就會把原本的提領改成入倉。 */
   const prior=Array.isArray(d.stPrior)?d.stPrior:[];
   const priorOut=prior.filter(m=>String(m.direction)==='out').length, priorIn=prior.length-priorOut;
   const priorDir=(prior.length && (priorOut===0||priorIn===0)) ? (priorOut>0?'out':'in') : '';
   const defOut = (d.stForceDir==='out') ? true : (priorDir ? priorDir==='out' : bal>0);
-  const balNote = bal>0 ? `（這幾款酒目前在我方倉庫還有 <strong>${bal}</strong> 瓶）` : '（這幾款酒目前沒有寄倉庫存）';
   const priorNote = prior.length ? `<div style="margin-top:6px;padding:7px 9px;background:var(--gold-pale);border-radius:6px;font-size:12px;line-height:1.7;color:var(--ink)">
         ⚠ 這次出貨（第 ${escHtml(String(d.stPriorSeq||''))} 次）先前已經登記過寄倉：${prior.map(m=>escHtml((String(m.direction)==='out'?'提領 ':'入倉 ')+(m.name||'')+(m.volume?(' '+m.volume):'')+' '+(parseFloat(m.qty)||0))).join('、')}。<br>
         按「產生」後會依這張驗收單的新內容<strong>對帳</strong>：數量有改的、或改成 0 的舊紀錄會<strong>作廢</strong>（紀錄留著、註明原因），一樣的不會重複計。</div>` : '';
@@ -305,7 +336,8 @@ function vfStorageBlockHtml(d){
       <input type="checkbox" id="vf-st-on" checked style="width:15px;height:15px"> 同步更新「客戶寄倉」庫存
     </label>
     <div id="vf-st-opts" style="margin-top:8px;font-size:12.5px;color:var(--sub);line-height:1.9">
-      這張單有開放寄倉${balNote}。本次出貨的數量要記成：${priorNote}
+      <div>這張單有開放寄倉${stockNote}</div>
+      <div style="margin-top:3px">本次出貨的數量要記成：</div>${priorNote}
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px">
         <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
           <input type="radio" name="vf-st-dir" value="in"${defOut?'':' checked'}> 入倉（做好了先放我方倉庫，客戶暫不提領）</label>
@@ -315,6 +347,12 @@ function vfStorageBlockHtml(d){
       <div style="font-size:11px;color:var(--hint);margin-top:5px">客戶、酒款、容量、數量、日期全部自動沿用上面的驗收單內容，不用重填；同一張驗收單重印不會重複計。</div>
     </div>
   </div>`;
+}
+/* 2026-10-19：展開／收起「本次沒出貨」的品項列（只是顯示，資料沒有被拿掉） */
+function vfToggleAllRows(){
+  const on=document.getElementById('vf-showall');
+  const show=!!(on&&on.checked);
+  document.querySelectorAll('#vf-body tr.vf-row[data-off="1"]').forEach(el=>{ el.style.display=show?'':'none'; });
 }
 function toggleLotCol(){
   const on=document.getElementById('vf-showlot');
@@ -535,9 +573,16 @@ function buildVerifyDocHtml(d,opts){
   const isPreview=!!(opts&&opts.preview);
   const mode=(d.mode==='partial')?'partial':'full';
   const isPartial=mode==='partial';
+  /* 2026-10-19 Molly：「我要提領 Lot15，列出了很多別的品項，看起來很凌亂」
+     → 列印出來的驗收單只列「本次有出貨」（本次出貨數 > 0）的品項，合計也只算這幾列；
+       全部都是 0 時照舊全列，不給客戶一張空表。
+     ⚠ 留底（saveVerifyFormRecord）仍然存全部品項——下一次開這張單的驗收單要靠它算「已出貨」。 */
+  const rowsAll=d.rows||[];
+  const rowsShip=rowsAll.filter(r=>(parseFloat(r.thisShip)||0)>0);
+  const rows=rowsShip.length?rowsShip:rowsAll;
   /* LOT／製造日期兩欄都是「有輸入才顯示欄位（含抬頭）」，沒人填就整欄不印 */
-  const hasLot=d.rows.some(r=>String(r.lot||'').trim()!=='');
-  const hasMfg=d.rows.some(r=>String(r.mfg||'').trim()!=='');
+  const hasLot=rows.some(r=>String(r.lot||'').trim()!=='');
+  const hasMfg=rows.some(r=>String(r.mfg||'').trim()!=='');
   const qrSvg=verifyQrSvg(verifyQrUrl(d.no,d.lot),4);
   const volMl=v=>{ if(!v) return 0; const s=String(v).toLowerCase(); let m=s.match(/([\d.]+)\s*ml/); if(m) return parseFloat(m[1])||0; m=s.match(/([\d.]+)\s*l/); if(m) return (parseFloat(m[1])||0)*1000; m=s.match(/([\d.]+)/); return m?(parseFloat(m[1])||0):0; };
   const unitOf=r=>volMl(r.vol)>=4000?'桶':'瓶';
@@ -549,9 +594,9 @@ function buildVerifyDocHtml(d,opts){
     return n>0 ? (n+' '+u) : '—';
   };
   let tThis=0,tShip=0,tOrd=0;
-  d.rows.forEach(r=>{ tThis+=parseFloat(r.thisShip)||0; tShip+=parseFloat(r.shipped)||0; tOrd+=parseFloat(r.ordered)||0; });
+  rows.forEach(r=>{ tThis+=parseFloat(r.thisShip)||0; tShip+=parseFloat(r.shipped)||0; tOrd+=parseFloat(r.ordered)||0; });
   const tRemain=tOrd-tShip-tThis;
-  const units=Array.from(new Set(d.rows.map(unitOf)));
+  const units=Array.from(new Set(rows.map(unitOf)));
   const tw=(units.length===1)?(' '+units[0]):'';
   const sv=n=>n>0?(n+tw):'—';
   const lotTh=hasLot?`<th style="width:10%">LOT</th>`:'';
@@ -560,7 +605,7 @@ function buildVerifyDocHtml(d,opts){
   const mfgTh=hasMfg?`<th style="width:16%">製造日期</th>`:'';
   const mfgTd=r=>hasMfg?`<td class="mut">${vfDate(r.mfg)||'—'}</td>`:'';
   const mfgEmpty=hasMfg?'<td></td>':'';
-  const rowsHtml=d.rows.map(r=>{
+  const rowsHtml=rows.map(r=>{
     const u=unitOf(r);
     const remain=(parseFloat(r.ordered)||0)-(parseFloat(r.shipped)||0)-(parseFloat(r.thisShip)||0);
     if(isPartial){
@@ -584,7 +629,7 @@ function buildVerifyDocHtml(d,opts){
     </tr>`;
   });
   const colCount=(isPartial?6:3)+(hasLot?1:0)+(hasMfg?1:0);
-  const pad=Math.max(0,VERIFY_MIN_ROWS-d.rows.length);
+  const pad=Math.max(0,VERIFY_MIN_ROWS-rows.length);
   const emptyCells='<td class="l">&nbsp;</td>'+'<td></td>'.repeat(colCount-1);
   for(let k=0;k<pad;k++) rowsHtml.push(`<tr>${emptyCells}</tr>`);
   const sumRow=isPartial
