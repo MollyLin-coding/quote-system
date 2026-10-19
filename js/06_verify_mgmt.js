@@ -334,6 +334,9 @@ async function vmEditForm(id){
   }catch(_){}
   VERIFY_DATA={ no:noStr, client:vmClientOf(noStr)||'', priorCount:earlier, storage:(_stOn||_prior.length>0),
     stPrior:_prior, stPriorSeq:earlier+1,
+    /* 2026-10-19：製造日期欄新開一律預設隱藏；但這筆留底本來就有製造日期（以前印過），
+       重印時要照舊顯示並列印，不然同一張單重印會少一欄。 */
+    showMfg:items.some(it=>String(vmLocalYmd(it.mfg)||'').trim()!==''),
     rows:items.map(it=>({ name:it.name||'', lot:it.lot||'', vol:it.vol||'',
       mfg:vmLocalYmd(it.mfg)||'', ordered:parseFloat(it.ordered)||0,
       thisShip:(it.thisShip!=null&&it.thisShip!=='')?it.thisShip:0,

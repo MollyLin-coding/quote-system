@@ -142,6 +142,7 @@ async function openVerifyForm(no, opts){
     const _ymd=v=>{ const s=String(v==null?'':v); if(!s) return '';
                     return (typeof vmLocalYmd==='function')?(vmLocalYmd(v)||''):s.slice(0,10); };
     VERIFY_DATA={ no:q.quoteNo, client:q.clientName||'', priorCount, storage:_stOn,
+      showMfg:false,   // 2026-10-19 Molly：製造日期欄預設不顯示、也不印；要標示時在表單上勾起來
       /* 抬頭欄的「第一批預設值」：buildVerifyModal 讀這幾個；沒有前一批就是空的＝行為跟以前一樣。
          ⚠ 從留底編輯（vmEditForm）是自己組 VERIFY_DATA、不會有這幾個欄位，而且它本來就會把
          該筆的箱數／PM／日期直接 set 回去，所以不受影響。 */
@@ -244,9 +245,13 @@ function buildVerifyModal(hdrLot){
   const _shipN=d.rows.filter(r=>(parseFloat(r.thisShip)||0)>0).length;
   const _collapse=_shipN>0 && _shipN<d.rows.length;
   const _isOff=r=>_collapse && !((parseFloat(r.thisShip)||0)>0);
+  /* 2026-10-19 Molly：「出貨單製造日期可選不顯示」→ 跟批號欄同一套：預設整欄隱藏，勾了才顯示、也才會印在驗收單上。
+     重印舊留底（vmEditForm 帶 showMfg=true）時照舊顯示並列印，不會讓以前印過製造日期的單重印就少一欄。 */
+  const _showMfg=(d.showMfg===true);
+  const _mfgHas=d.rows.some(r=>String(r.mfg||'').trim()!=='');
   const rowsH=d.rows.map((r,i)=>`<tr class="vf-row"${_isOff(r)?' data-off="1" style="display:none"':''}>
     <td style="font-weight:600;text-align:left;padding-left:6px">${escHtml(r.name)}</td>
-    <td><input type="date" style="${inS};width:130px" data-i="${i}" data-k="mfg" class="vfi" value="${escHtml(r.mfg||'')}"></td>
+    <td class="vf-mfgcol"${_showMfg?'':' style="display:none"'}><input type="date" style="${inS};width:130px" data-i="${i}" data-k="mfg" class="vfi" value="${escHtml(r.mfg||'')}"></td>
     <td class="vf-lotcol" style="display:none"><input style="${inS};width:70px" data-i="${i}" data-k="lot" class="vfi" value="${escHtml(r.lot)}"></td>
     <td style="text-align:center;color:#6B6B63">${escHtml(r.vol)||'—'}</td>
     <td><input type="number" min="0" style="${inS};width:72px" data-i="${i}" data-k="thisShip" data-manual="0" class="vfi" value="${(r.thisShip!==''&&r.thisShip!=null)?r.thisShip:''}" oninput="onThisShipInput(this)"></td>
@@ -264,14 +269,19 @@ function buildVerifyModal(hdrLot){
       <div class="fl"><label>此次配送總箱數</label><input class="fi" type="number" min="0" id="vf-boxes" value="${escAttr(d.defBoxes==null?'':d.defBoxes)}" placeholder="箱數"></div>
       <div class="fl"><label>第幾次出貨（分批用）</label><input class="fi" type="number" min="1" id="vf-shipseq" value="${(d.priorCount||0)+1}"></div>
     </div>
-    <label style="display:inline-flex;align-items:center;gap:6px;margin-top:12px;font-size:12px;color:var(--fg);cursor:pointer">
-      <input type="checkbox" id="vf-showlot" onchange="toggleLotCol()"> 各品項不同批號時，顯示批號欄（預設隱藏，客戶批號仍會印）
-    </label>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px">
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--fg);cursor:pointer">
+        <input type="checkbox" id="vf-showlot" onchange="toggleLotCol()"> 各品項不同批號時，顯示批號欄（預設隱藏，客戶批號仍會印）
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--fg);cursor:pointer">
+        <input type="checkbox" id="vf-showmfg"${_showMfg?' checked':''} onchange="toggleMfgCol()"> 要標示製造日期時，顯示製造日期欄（預設隱藏，不顯示就不會印在驗收單上）${_mfgHas?'<span style="color:var(--gold-deep)">・已帶入前一批的製造日期</span>':''}
+      </label>
+    </div>
     <div style="overflow-x:auto;margin-top:12px">
       <table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr style="background:var(--gold-pale);color:var(--gold-deep)">
           <th style="padding:7px 4px;text-align:left;padding-left:6px">品項</th>
-          <th style="padding:7px 4px">製造日期</th><th class="vf-lotcol" style="padding:7px 4px;display:none">批號</th>
+          <th class="vf-mfgcol" style="padding:7px 4px${_showMfg?'':';display:none'}">製造日期</th><th class="vf-lotcol" style="padding:7px 4px;display:none">批號</th>
           <th style="padding:7px 4px">容量</th><th style="padding:7px 4px">本次出貨數</th>
           <th style="padding:7px 4px">總受訂數</th><th style="padding:7px 4px">已出貨</th>
           <th style="padding:7px 4px">待出貨</th>
@@ -354,6 +364,13 @@ function vfToggleAllRows(){
   const show=!!(on&&on.checked);
   document.querySelectorAll('#vf-body tr.vf-row[data-off="1"]').forEach(el=>{ el.style.display=show?'':'none'; });
 }
+/* 2026-10-19：顯示／隱藏製造日期欄（跟批號欄同一套）。沒顯示＝不印在驗收單上。 */
+function toggleMfgCol(){
+  const on=document.getElementById('vf-showmfg');
+  const show=!!(on&&on.checked);
+  document.querySelectorAll('#vf-body .vf-mfgcol').forEach(el=>{ el.style.display=show?'':'none'; });
+  if(typeof VERIFY_DATA!=='undefined' && VERIFY_DATA) VERIFY_DATA.showMfg=show;
+}
 function toggleLotCol(){
   const on=document.getElementById('vf-showlot');
   const show=!!(on&&on.checked);
@@ -389,6 +406,7 @@ function generateVerifyPdf(mode){
   d.mode=(mode==='partial')?'partial':'full';
   const gvl=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
   d.lot=gvl('vf-lot'); d.shipDate=gvl('vf-shipdate'); d.shipper=gvl('vf-shipper'); d.boxes=gvl('vf-boxes');
+  { const _m=document.getElementById('vf-showmfg'); d.showMfg=!!(_m&&_m.checked); }   // 2026-10-19：沒勾就不印製造日期欄
   vfRememberPm(d.shipper);   // 2026-09-01：記住 PM，下一張自動帶
   d.shipSeq=parseInt(gvl('vf-shipseq'),10)||1; // 「第幾次出貨」改成人工填，不再自動算
   if(!vfKeyReady(d.no)) return;   // 複檢 #2-1：沒有 QR 驗證碼就先別印
@@ -433,7 +451,8 @@ function previewVerifyPdf(mode){
   recalcVerify();
   const d=VERIFY_DATA; if(!d) return;
   const gvl=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
-  const preview={ ...d, mode:(mode==='partial')?'partial':'full', lot:gvl('vf-lot'), shipDate:gvl('vf-shipdate'), shipper:gvl('vf-shipper'), boxes:gvl('vf-boxes'), shipSeq:parseInt(gvl('vf-shipseq'),10)||1 };
+  const preview={ ...d, mode:(mode==='partial')?'partial':'full', lot:gvl('vf-lot'), shipDate:gvl('vf-shipdate'), shipper:gvl('vf-shipper'), boxes:gvl('vf-boxes'), shipSeq:parseInt(gvl('vf-shipseq'),10)||1,
+    showMfg:!!(document.getElementById('vf-showmfg')||{}).checked };
   const w=window.open('','_blank');
   if(!w){ toast('請允許彈出視窗，才能預覽','err'); return; }
   w.document.open(); w.document.write(buildVerifyDocHtml(preview,{preview:true})); w.document.close();
@@ -582,7 +601,10 @@ function buildVerifyDocHtml(d,opts){
   const rows=rowsShip.length?rowsShip:rowsAll;
   /* LOT／製造日期兩欄都是「有輸入才顯示欄位（含抬頭）」，沒人填就整欄不印 */
   const hasLot=rows.some(r=>String(r.lot||'').trim()!=='');
-  const hasMfg=rows.some(r=>String(r.mfg||'').trim()!=='');
+  /* 2026-10-19 Molly：「出貨單製造日期可選不顯示」。showMfg 明確給了就照它（表單上的勾選）；
+     沒給（舊呼叫端）維持原本「有填就印」的行為，重印以前的單不會少一欄。 */
+  const _mfgOn=(d.showMfg===undefined) ? true : !!d.showMfg;
+  const hasMfg=_mfgOn && rows.some(r=>String(r.mfg||'').trim()!=='');
   const qrSvg=verifyQrSvg(verifyQrUrl(d.no,d.lot),4);
   const volMl=v=>{ if(!v) return 0; const s=String(v).toLowerCase(); let m=s.match(/([\d.]+)\s*ml/); if(m) return parseFloat(m[1])||0; m=s.match(/([\d.]+)\s*l/); if(m) return (parseFloat(m[1])||0)*1000; m=s.match(/([\d.]+)/); return m?(parseFloat(m[1])||0):0; };
   const unitOf=r=>volMl(r.vol)>=4000?'桶':'瓶';
