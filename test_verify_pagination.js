@@ -104,9 +104,13 @@ function respond(action, params){
     const pageCount = (html.match(/class="vpage"/g)||[]).length;
     const qrCount = (html.match(/class="qr"/g)||[]).length;
     const pgnoMatches = Array.from(html.matchAll(/第 (\d+) 頁，共 (\d+) 頁/g)).map(m=>[+m[1], +m[2]]);
-    // 檢查所有品項名稱都有出現(沒有遺漏或重複列)
-    const nameOccurrences = d.rows.map(r => (html.split(r.name).length - 1));
-    return { pageCount, qrCount, pgnoMatches, nameOccurrences, rowCount: d.rows.length };
+    /* 檢查所有品項名稱都有出現(沒有遺漏或重複列)
+       2026-10-19 起規則改了（Molly：「我要提領 Lot15，列出了很多別的品項，看起來很凌亂」）：
+       驗收單只印「本次出貨數 > 0」的品項，本次是 0 的（這張大單每 5 項有一項訂購量 0）不印。 */
+    const shipRows = d.rows.filter(r => (parseFloat(r.thisShip)||0) > 0);
+    const nameOccurrences = shipRows.map(r => (html.split(r.name).length - 1));
+    const zeroPrinted = d.rows.filter(r => !((parseFloat(r.thisShip)||0) > 0) && html.indexOf(r.name) >= 0).length;
+    return { pageCount, qrCount, pgnoMatches, nameOccurrences, zeroPrinted, shipCount: shipRows.length, rowCount: d.rows.length };
   });
   check('大單品項數夠多，確實產生超過 1 頁', bigResult.pageCount > 1);
   check('QR code(驗收回報區塊)只出現在最後一頁', bigResult.qrCount === 1);
@@ -114,7 +118,8 @@ function respond(action, params){
     bigResult.pgnoMatches.length === bigResult.pageCount &&
     bigResult.pgnoMatches.every(([idx,total]) => total === bigResult.pageCount) &&
     bigResult.pgnoMatches.map(p=>p[0]).join(',') === Array.from({length:bigResult.pageCount},(_,i)=>i+1).join(','));
-  check('每個品項名稱恰好出現一次（沒有遺漏或重複列）', bigResult.nameOccurrences.every(n => n === 1));
+  check('每個「本次有出貨」的品項名稱恰好出現一次（沒有遺漏或重複列）', bigResult.shipCount>0 && bigResult.nameOccurrences.every(n => n === 1));
+  check('本次出貨 0 的品項不印出來（2026-10-19：只列本次有出貨的）', bigResult.zeroPrinted === 0);
 
   console.log(`\n=== 結果：${results.filter(r=>r[0]==='PASS').length}/${results.length} 通過 ===`);
   results.filter(r=>r[0]==='FAIL').forEach(r=>console.log('FAIL:',r[1]));

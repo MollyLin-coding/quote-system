@@ -93,7 +93,9 @@ function respond(action, body){
   await page.waitForTimeout(700);
   r = await page.evaluate(()=>({ dir:(document.querySelector('input[name="vf-st-dir"]:checked')||{}).value,
                                  note:document.getElementById('vf-st-opts').innerText }));
-  check('客戶寄倉有庫存 → 聰明預設改成「提領」＋顯示剩餘瓶數', r.dir==='out' && /還有/.test(r.note) && /40/.test(r.note));
+  /* 2026-10-19 起寄倉區塊改成分 Lot 顯示（Molly：「寄倉要可以分 LOT 顯示」），
+     文案從「還有 N 瓶」改成逐 Lot 列出「酒款 容量 數量（共 N 瓶）」；這筆舊資料沒有 Lot → 歸「未填 Lot」。 */
+  check('客戶寄倉有庫存 → 聰明預設改成「提領」＋列出這一批的剩餘瓶數', r.dir==='out' && /寄倉庫存/.test(r.note) && /40/.test(r.note));
 
   /* ---- 4. 沒勾寄倉的單：驗收單完全不變 ---- */
   posted.length=0;
