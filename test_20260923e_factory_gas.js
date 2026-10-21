@@ -420,6 +420,38 @@ function syncCtx(o) {
   const n1 = cf.__created.length;
   cf.handleFactorySync_({});
   check('G10f 回填 AI 失敗 → 下一輪認得連結表、不會重複匯入', n1 === 1 && cf.__created.length === 1);
+  // G11（2026-10-21「廠務訂單轉到報價訂單金額有誤」）：廠務有填總金額 → 各款單價依總金額換算，報價單總計＝廠務總金額
+  const P4 = ['蜜香紅茶荔枝琴酒', '芭樂綠茶梅酒', '海鹽西瓜莫奇朵', '泰奶烏龍蘭姆酒'].map(n => [n + '|100ml', n, '', '100ml', 250, '', '', 'Y', '']);
+  const mk11 = (total, items, extra) => syncCtx(Object.assign({ orders: [Object.assign({ orderNo: '261021-002', client: '經銷商－日光貳參', orderType: '自有酒款出貨訂單(有金流)', qsQuoteNo: '', status: '待製作', total: total, createdAt: '2026/10/21 上午11:49:27', orderCreator: 'Molly', shipFee: 250, shipFeePayer: '南坡萬付運費', deliveryDate: '2026-08-17',
+    items: items }, extra || {})], products: P4 }));
+  const four = ['蜜香紅茶荔枝琴酒V2', '芭樂綠茶梅酒', '海鹽西瓜莫奇朵', '泰奶烏龍蘭姆酒'].map(p => ({ product: p, volume: '100ml', qty: 25 }));
+  let c11 = mk11(12750, four); c11.handleFactorySync_({});
+  let q11 = c11.__created[0] || {}, b11 = (q11.items || []).filter(x => x.itemType === 'bottle');
+  const sum11 = b11.reduce((a, x) => a + x.subtotal, 0);
+  check('G11a 日光 12,750／100 瓶 → 單價 127／128 分攤、總計剛好 12,750（不再是牌價 25,000）', b11.length === 4 && sum11 === 12750 && q11.grandTotal === 12750 && q11.itemsSubtotal === 12750 && b11.every(x => x.unitPrice === 127 || x.unitPrice === 128) && b11.every(x => x.subtotal === x.unitPrice * x.qty));
+  check('G11b 公版酒列：原價＝牌價 250、折數換算（前端 round(250×折/10) 要剛好等於單價）', b11.every(x => x.listPrice === 250 && Math.round(250 * parseFloat(x.discount) / 10) === x.unitPrice));
+  check('G11c 備註講明依廠務總金額換算、請確認；南坡萬付運費不加運費列；訂單追蹤總額＝12,750', /依廠務訂單總金額 12750 換算/.test(q11.remark) && /請確認/.test(q11.remark) && !(q11.items || []).some(x => x.itemType === 'extra') && c11.__osUpd.some(x => x[1].grand_total === 12750));
+  c11 = mk11(13500, four); c11.handleFactorySync_({}); q11 = c11.__created[0] || {}; b11 = (q11.items || []).filter(x => x.itemType === 'bottle');
+  check('G11d 13,500／100 瓶 → 每款 135（5.4 折）', b11.every(x => x.unitPrice === 135 && x.discount === '5.4') && q11.grandTotal === 13500);
+  c11 = mk11(25000, four); c11.handleFactorySync_({}); q11 = c11.__created[0] || {}; b11 = (q11.items || []).filter(x => x.itemType === 'bottle');
+  check('G11e 總金額剛好＝牌價合計 → 牌價照用、折數空白、備註說相符', b11.every(x => x.unitPrice === 250 && x.discount === '' && x.listPrice === 250) && /相符/.test(q11.remark));
+  c11 = mk11(0, four, { client: 'OEM-日光貳參' }); c11.handleFactorySync_({}); q11 = c11.__created[0] || {};
+  check('G11f 廠務沒填總金額（非經銷商單）→ 照舊帶牌價、總計 25,000', q11.grandTotal === 25000 && /自動帶牌價，請確認/.test(q11.remark));
+  // 混容量：100ml 牌價 250×20 ＋ 500ml 牌價 1000×5＝10,000；廠務總金額 8,000 → 依牌價比例 8 折：200×20＋800×5＝8,000
+  const P5 = P4.concat([['泰奶烏龍蘭姆酒|500ml', '泰奶烏龍蘭姆酒', '', '500ml', 1000, '', '', 'Y', '']]);
+  c11 = syncCtx({ orders: [{ orderNo: '261021-009', client: '經銷商－日光貳參', orderType: '自有酒款出貨訂單(有金流)', qsQuoteNo: '', status: '待製作', total: 8000, createdAt: '2026/10/21 上午11:49:27', orderCreator: 'Molly',
+    items: [{ product: '泰奶烏龍蘭姆酒', volume: '100ml', qty: 20 }, { product: '泰奶烏龍蘭姆酒', volume: '500ml', qty: 5 }] }], products: P5 });
+  c11.handleFactorySync_({}); q11 = c11.__created[0] || {}; b11 = (q11.items || []).filter(x => x.itemType === 'bottle');
+  check('G11g 混容量 → 依牌價比例分攤（100ml 200、500ml 800）、總計 8,000', b11.length === 2 && b11[0].unitPrice === 200 && b11[1].unitPrice === 800 && b11[0].discount === '8' && b11[1].discount === '8' && q11.grandTotal === 8000);
+  // 零頭：總金額 12,760／100 瓶（4×25）→ 取整後差 10、小於任何一款瓶數 → 留零頭、備註警告、總計照換算後的
+  c11 = mk11(12760, four); c11.handleFactorySync_({}); q11 = c11.__created[0] || {}; b11 = (q11.items || []).filter(x => x.itemType === 'bottle');
+  const sumZ = b11.reduce((a, x) => a + x.subtotal, 0);
+  check('G11h 分不平均的零頭 → 總計＝換算後金額、備註警告差額', Math.abs(sumZ - 12760) < 25 && q11.grandTotal === sumZ && /差 (-)?\d+ 元/.test(q11.remark));
+  // 牌價查不到：每瓶平均、原價欄＝單價
+  c11 = syncCtx({ orders: [{ orderNo: '261021-010', client: '經銷商－日光貳參', orderType: '自有酒款出貨訂單(有金流)', qsQuoteNo: '', status: '待製作', total: 6000, createdAt: '2026/10/21 上午11:49:27', orderCreator: 'Molly',
+    items: [{ product: '沒有牌價的酒', volume: '100ml', qty: 30 }, { product: '泰奶烏龍蘭姆酒', volume: '100ml', qty: 20 }] }], products: P4 });
+  c11.handleFactorySync_({}); q11 = c11.__created[0] || {}; b11 = (q11.items || []).filter(x => x.itemType === 'bottle');
+  check('G11i 有款查不到牌價 → 全部每瓶平均 120、原價欄＝120', b11.every(x => x.unitPrice === 120 && x.listPrice === 120 && x.discount === '') && q11.grandTotal === 6000 && /每瓶平均 120/.test(q11.remark));
 }
 
 // ── H 付款條件 ─────────────────────────────────────
