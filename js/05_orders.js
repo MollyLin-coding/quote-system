@@ -241,18 +241,63 @@ function passOrdFilter(o){
   }
   return true;
 }
+/* 2026-10-21 Molly：訂單追蹤要能依客戶找單。打客戶名、單號或批號（Lot）都比對，
+   跟「報價紀錄」那個搜尋框同一套用法；篩選列上的筆數也跟著搜尋結果走，免得數字對不上看到的列。 */
+function ordKw(){
+  const el=document.getElementById('ord-search');
+  return el ? el.value.trim().toLowerCase() : '';
+}
+function ordPassKw(o, k){
+  if(!k) return true;
+  const lot=(typeof ordCustLot==='function') ? ordCustLot(o) : '';
+  return [o.no, o.client, lot].some(v=>String(v||'').toLowerCase().includes(k));
+}
 function setOrdFilter(f, el){
   ORD_FILTER=f;
   document.querySelectorAll('#ord-filters .fchip').forEach(b=>b.classList.remove('on'));
   if(el) el.classList.add('on');
   renderOrders();
 }
-/* ---- 表頭點擊排序：第一下↑、第二下↓、第三下回預設（報價日新→舊） ---- */
+/* ---- 表頭點擊排序：第一下↑、第二下↓、第三下回預設 ----
+   2026-10-21 Molly：手機版是卡片式、看不到表頭沒得點 → 另外加一個「排序」下拉選單（#ord-sort），
+   兩邊共用同一個 ORD_SORT，點表頭時選單也會跟著跳到對應的項目。 */
 let ORD_SORT={key:'',dir:1};
 function setOrdSort(key){
   if(ORD_SORT.key===key){ ORD_SORT = ORD_SORT.dir===1 ? {key,dir:-1} : {key:'',dir:1}; }
   else ORD_SORT={key,dir:1};
   renderOrders();
+}
+/* 下拉選單 → ORD_SORT（def＝預設的「未出貨在前」） */
+function onOrdSortSel(){
+  const v=(document.getElementById('ord-sort')||{}).value||'def';
+  if(v==='def') ORD_SORT={key:'',dir:1};
+  else { const i=v.lastIndexOf('_'); ORD_SORT={key:v.slice(0,i), dir:(v.slice(i+1)==='asc')?1:-1}; }
+  renderOrders();
+}
+/* ORD_SORT → 下拉選單（點表頭排序時同步） */
+function ordSyncSortSel(){
+  const sel=document.getElementById('ord-sort'); if(!sel) return;
+  const want=ORD_SORT.key ? (ORD_SORT.key+(ORD_SORT.dir===1?'_asc':'_desc')) : 'def';
+  if([...sel.options].some(o=>o.value===want)) sel.value=want;
+}
+/* 預設排序（Molly 2026-10-21 選的「未出貨在前」）：
+   ①還沒出貨、有填預計出貨日 → 依預計日由近到遠排最上面（快要出的先看到）
+   ②已出貨（有實際出貨日）→ 排後面，最近出的在前
+   ③兩個日期都沒填 → 最後，同組內維持報價日新→舊 */
+function ordShipGroup(o){
+  const act=String(o.st&&o.st.ship_date_actual||'').trim();
+  const est=String(o.st&&o.st.ship_date_est||'').trim();
+  if(act) return 1;
+  return est ? 0 : 2;
+}
+function ordDefaultSort(rows){
+  return rows.slice().sort((a,b)=>{
+    const ga=ordShipGroup(a), gb=ordShipGroup(b);
+    if(ga!==gb) return ga-gb;
+    if(ga===0) return String(a.st.ship_date_est).localeCompare(String(b.st.ship_date_est));
+    if(ga===1) return String(b.st.ship_date_actual).localeCompare(String(a.st.ship_date_actual));
+    return String(b.quoteDate||'').localeCompare(String(a.quoteDate||'')) || String(b.no||'').localeCompare(String(a.no||''));
+  });
 }
 function ordSortVal(o,key){
   switch(key){
@@ -264,7 +309,7 @@ function ordSortVal(o,key){
   return '';
 }
 function ordApplySort(rows){
-  if(!ORD_SORT.key) return rows;                      // 預設順序＝buildOrders 排好的（報價日新→舊）
+  if(!ORD_SORT.key) return ordDefaultSort(rows);      // 預設順序＝未出貨在前（見 ordDefaultSort）
   const k=ORD_SORT.key, d=ORD_SORT.dir;
   return rows.slice().sort((a,b)=>{
     const va=ordSortVal(a,k), vb=ordSortVal(b,k);
@@ -284,13 +329,14 @@ function ordPaintSortHeads(){
 function renderOrders(){
   const body=document.getElementById('ord-body'); if(!body||!ORDERS_CACHE) return;
   // 篩選計數
-  const cnt=k=>{ const old=ORD_FILTER; ORD_FILTER=k; const n=ORDERS_CACHE.filter(passOrdFilter).length; ORD_FILTER=old; return n; };
+  const kw=ordKw();
+  const cnt=k=>{ const old=ORD_FILTER; ORD_FILTER=k; const n=ORDERS_CACHE.filter(o=>passOrdFilter(o)&&ordPassKw(o,kw)).length; ORD_FILTER=old; return n; };
   const fs=[['all','全部'],['quoted','報價中'],['production','排產中'],['toship','待出貨'],['toinv','待開發票'],['tofinal','待收尾款'],['done','已結案'],['cancelled','已取消']];
   document.getElementById('ord-filters').innerHTML=fs.map(([k,l])=>
     `<button class="fchip${ORD_FILTER===k?' on':''}" onclick="setOrdFilter('${k}',this)">${l} <b>${cnt(k)}</b></button>`).join('');
-  ordPaintSortHeads();
-  const rows=ordApplySort(ORDERS_CACHE.filter(passOrdFilter));
-  if(!rows.length){ body.innerHTML='<tr><td colspan="6" class="rec-empty">沒有符合的訂單</td></tr>'+(listMaybeMore(ORDERS_CACHE.length)?moreRowHtml(6):''); return; }
+  ordPaintSortHeads(); ordSyncSortSel();
+  const rows=ordApplySort(ORDERS_CACHE.filter(o=>passOrdFilter(o)&&ordPassKw(o,kw)));
+  if(!rows.length){ body.innerHTML='<tr><td colspan="6" class="rec-empty">'+(kw?'沒有符合「'+escHtml(kw)+'」的訂單':'沒有符合的訂單')+'</td></tr>'+(listMaybeMore(ORDERS_CACHE.length)?moreRowHtml(6):''); return; }
   body.innerHTML=rows.map(o=>{
     const note=(o.st?.track_note||'').split('\n')[0];
     const shipD=o.st?.ship_date_actual?`${o.st.ship_date_actual.slice(5)} ✓`:(o.st?.ship_date_est?o.st.ship_date_est.slice(5):'—');
