@@ -942,6 +942,7 @@ function handleFactoryLinkExisting_(params) {
 function fxParsePay_(detail, gt) {
   var s = String(detail || '').replace(/<br\s*\/?>/gi, '\n');
   if (!s) return null;
+  s = s.replace(/\$?[\d,]+(?:\.\d+)?\s*元（未稅）／\s*(\$?[\d,]+(?:\.\d+)?)\s*元（含稅）/g, '$1 元整');   // 2026-10-01：未稅／含稅並列寫法 → 換回含稅金額再讀（同前端 ordPayFromQuote）
   // 複檢 0923：自訂條款（客戶主檔付款習慣帶進來的 Tab3）常見寫法——「無訂金；驗收後 7 天內付尾款 100%」「訂金 50%，尾款 50%」
   //   跟前端 ordDepositPct（05_orders.js）同一套判斷
   if (!/支付訂金|支付(?:全額)?款項新台幣/.test(s)) {

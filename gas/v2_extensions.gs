@@ -430,6 +430,7 @@ function orderPayFromQuote_(quoteNo, gt) {
     }
     if (!detail) return null;
     var s = detail.replace(/<br\s*\/?>/gi, '\n');
+    s = s.replace(/\$?[\d,]+(?:\.\d+)?\s*元（未稅）／\s*(\$?[\d,]+(?:\.\d+)?)\s*元（含稅）/g, '$1 元整');   // 2026-10-01：未稅／含稅並列寫法 → 換回含稅金額再讀（同前端 ordPayFromQuote）
     /* 複檢 2026-08-11 #3：不是每種付款條款都有訂金。
        Tab1（驗收後付款 100%）印「支付款項新台幣 X 元整之 100%」、
        Tab2（月結）印「支付全額款項新台幣 X 元整」——這兩種原本都解不出來，
