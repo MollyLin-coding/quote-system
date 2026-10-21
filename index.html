@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱文南坡萬實業社 · 報價單系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-<link rel="stylesheet" href="assets/app.css?v=20261021a">
-<script src="js/00_qrcode.js?v=20261021a"></script>
+<link rel="stylesheet" href="assets/app.css?v=20261021d">
+<script src="js/00_qrcode.js?v=20261021d"></script>
 </head>
 <body>
 <!-- ===== 登入頁 ===== -->
@@ -726,6 +726,20 @@
 
   <div class="page" id="page-orders">
     <div class="rec-wrap">
+      <!-- 2026-10-21 Molly：訂單追蹤加「依客戶搜尋」與排序選單（手機版看不到表頭，沒得點著排） -->
+      <div class="rec-toolbar" style="margin-bottom:10px">
+        <input class="rec-search" id="ord-search" placeholder="搜尋客戶名稱、單號或批號…" oninput="renderOrders()" onkeydown="if(event.key==='Enter')renderOrders()">
+        <select class="rec-filter" id="ord-sort" onchange="onOrdSortSel()" title="排序方式">
+          <option value="def">排序：未出貨在前（預設）</option>
+          <option value="ship_asc">出貨日 早→晚</option>
+          <option value="ship_desc">出貨日 晚→早</option>
+          <option value="no_desc">單號 新→舊</option>
+          <option value="no_asc">單號 舊→新</option>
+          <option value="total_desc">總計 高→低</option>
+          <option value="total_asc">總計 低→高</option>
+          <option value="stage_asc">進度 前→後</option>
+        </select>
+      </div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center">
         <div id="ord-filters" style="display:flex;flex-wrap:wrap;gap:8px"></div>
         <button class="rec-act-btn" onclick="loadOrders(true)"><i class="ti ti-refresh"></i> 重新整理</button>
@@ -1386,23 +1400,23 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20261021a"></script>
-<script src="js/01_quote_form.js?v=20261021a"></script>
-<script src="js/01b_quote_preview.js?v=20261021a"></script>
-<script src="js/02_core_api.js?v=20261021a"></script>
-<script src="js/03_quote_custom.js?v=20261021a"></script>
-<script src="js/04_company.js?v=20261021a"></script>
-<script src="js/05_orders.js?v=20261021a"></script>
-<script src="js/06_verify_mgmt.js?v=20261021a"></script>
-<script src="js/07_calendar.js?v=20261021a"></script>
-<script src="js/08_ownbrand.js?v=20261021a"></script>
-<script src="js/09_verify_form.js?v=20261021a"></script>
-<script src="js/10_today.js?v=20261021a"></script>
-<script src="js/11_customers.js?v=20261021a"></script>
-<script src="js/12_storage.js?v=20261021a"></script>
-<script src="js/13_factory.js?v=20261021a"></script>
-<script src="js/14_contract.js?v=20261021a"></script>
-<script src="js/15_pricesheet.js?v=20261021a"></script>
-<script src="js/99_boot.js?v=20261021a"></script>
+<script src="js/00_utils.js?v=20261021d"></script>
+<script src="js/01_quote_form.js?v=20261021d"></script>
+<script src="js/01b_quote_preview.js?v=20261021d"></script>
+<script src="js/02_core_api.js?v=20261021d"></script>
+<script src="js/03_quote_custom.js?v=20261021d"></script>
+<script src="js/04_company.js?v=20261021d"></script>
+<script src="js/05_orders.js?v=20261021d"></script>
+<script src="js/06_verify_mgmt.js?v=20261021d"></script>
+<script src="js/07_calendar.js?v=20261021d"></script>
+<script src="js/08_ownbrand.js?v=20261021d"></script>
+<script src="js/09_verify_form.js?v=20261021d"></script>
+<script src="js/10_today.js?v=20261021d"></script>
+<script src="js/11_customers.js?v=20261021d"></script>
+<script src="js/12_storage.js?v=20261021d"></script>
+<script src="js/13_factory.js?v=20261021d"></script>
+<script src="js/14_contract.js?v=20261021d"></script>
+<script src="js/15_pricesheet.js?v=20261021d"></script>
+<script src="js/99_boot.js?v=20261021d"></script>
 </body>
 </html>
