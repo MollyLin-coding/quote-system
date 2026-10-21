@@ -667,6 +667,8 @@ function fxImportOrder_(o, map, customers, priceCtx) {
       flavorList: '', is_oem: 'N', is_label: 'N', listPrice: '', discount: '', noCharge: 'N' });
     extrasTotal = fxShip; grand += fxShip;
   }
+  // 2026-10-21：主表「品項合計／稅額」照前端含稅模式回算（品項合計＝總計÷1.05 取整、稅額＝總計－品項合計）；原本存原始合計＋稅額 0，列表跟打開後的數字對不上
+  var netAll = Math.round(grand / 1.05), taxAmt = Math.round(grand) - netAll;
   var today = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd');
   var quote = {
     quoteType: quoteType, clientName: clientName,
@@ -676,7 +678,7 @@ function fxImportOrder_(o, map, customers, priceCtx) {
     shipContact: o.recvName || (cust && cust.ship_contact) || '', shipPhone: o.recvPhone || (cust && cust.ship_phone) || '',
     shipAddress: o.recvAddr || (cust && cust.ship_address) || '',
     quoteDate: today, expiryDate: '', handler: o.pm || '',
-    itemsSubtotal: sub, taxAmount: 0, extrasTotal: extrasTotal, grandTotal: grand,
+    itemsSubtotal: netAll, taxAmount: taxAmt, extrasTotal: extrasTotal, grandTotal: grand,
     // 2026-09-23 Molly：客戶主檔的付款習慣帶進付款條件（自訂 Tab3）
     priceMode: 'inc', taxRate: 5,
     paymentType: (cust && String(cust.pay_habit || '').trim()) ? '3' : '',
