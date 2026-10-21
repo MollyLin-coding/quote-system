@@ -428,7 +428,7 @@ function syncCtx(o) {
   let c11 = mk11(12750, four); c11.handleFactorySync_({});
   let q11 = c11.__created[0] || {}, b11 = (q11.items || []).filter(x => x.itemType === 'bottle');
   const sum11 = b11.reduce((a, x) => a + x.subtotal, 0);
-  check('G11a 日光 12,750／100 瓶 → 單價 127／128 分攤、總計剛好 12,750（不再是牌價 25,000）', b11.length === 4 && sum11 === 12750 && q11.grandTotal === 12750 && q11.itemsSubtotal === 12750 && b11.every(x => x.unitPrice === 127 || x.unitPrice === 128) && b11.every(x => x.subtotal === x.unitPrice * x.qty));
+  check('G11a 日光 12,750／100 瓶 → 單價 127／128 分攤、總計剛好 12,750（不再是牌價 25,000）', b11.length === 4 && sum11 === 12750 && q11.grandTotal === 12750 && q11.itemsSubtotal === 12143 && q11.taxAmount === 607 && b11.every(x => x.unitPrice === 127 || x.unitPrice === 128) && b11.every(x => x.subtotal === x.unitPrice * x.qty));
   check('G11b 公版酒列：原價＝牌價 250、折數換算（前端 round(250×折/10) 要剛好等於單價）', b11.every(x => x.listPrice === 250 && Math.round(250 * parseFloat(x.discount) / 10) === x.unitPrice));
   check('G11c 備註講明依廠務總金額換算、請確認；南坡萬付運費不加運費列；訂單追蹤總額＝12,750', /依廠務訂單總金額 12750 換算/.test(q11.remark) && /請確認/.test(q11.remark) && !(q11.items || []).some(x => x.itemType === 'extra') && c11.__osUpd.some(x => x[1].grand_total === 12750));
   c11 = mk11(13500, four); c11.handleFactorySync_({}); q11 = c11.__created[0] || {}; b11 = (q11.items || []).filter(x => x.itemType === 'bottle');
