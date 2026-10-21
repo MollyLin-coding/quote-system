@@ -7,6 +7,11 @@ let botItems=[],banFreeItems=[],banAddonItems=[],banG1Items=[],banG2Items=[],ext
    LAST_EXT_POS／LAST_EXT_NEG＝額外費用列拆成正數項（檢驗費、條碼費…）與負數項（運費折抵…）
    LAST_BASE＝rawSub＋額外費用合計（未加稅前的基數）／LAST_GRAND＝總計（含稅），供稅金按比例分攤 */
 let LAST_WINE_SUB=0, LAST_EXT_POS=[], LAST_EXT_NEG=[], LAST_BASE=0, LAST_GRAND=0;
+/* 2026-10-01：Tab0「同時列出未稅／含稅」用——LAST_NET＝合計（未稅，跟總計區印的同一個數字）／LAST_TAXED＝稅率是否大於 0 */
+let LAST_NET=0, LAST_TAXED=false;
+/* 2026-10-21：印未稅價時並列是強制的，這裡記住使用者自己勾的狀態，切回含稅顯示就還原 */
+let DUAL_USER_PREF=null;
+function dualPrefReset(){ DUAL_USER_PREF=null; }
 let customItems=[],previewKind='std';
 let colDed=false, colLogo=false, colLot=false, colMark=false, colOwn=false, colGift=false;
 
@@ -39,6 +44,9 @@ function onTaxDisplayChange(){
   const v=(document.getElementById('f-taxdisplay')||{}).value||'';
   const h=document.getElementById('taxdisp-hint');
   if(h) h.textContent = v==='excl' ? (taxMode==='inc'?'輸入的是含稅價：印出時會自動換算成未稅價':'') : '';
+  /* 2026-10-21：印未稅價的單，付款條件一律並列未稅／含稅（不然條款的含稅金額跟品項表的未稅價對不起來）
+     → 切換當下就重算，勾選框與條款立刻跟著變，不必等下一次改金額 */
+  if(typeof calc==='function') calc(); else if(typeof calcPay==='function') calcPay();
 }
 
 /* 訂金比例預設值：瓶裝／OEM代工／公版買斷／公版客製標／寄售一律 50%（酒款對半拆），宴會等其他類型維持 30% */
@@ -749,6 +757,7 @@ function calc(){
   document.getElementById('t-ext').textContent=(extTotal<0?'-$':'$')+Math.round(Math.abs(extTotal)).toLocaleString();
   document.getElementById('t-tot').textContent='$'+Math.round(grandTotal).toLocaleString();
   LAST_BASE = base; LAST_GRAND = grandTotal;   // 付款條件 Tab0 用：稅金按 訂金/尾款 佔比分攤，確保兩者相加＝總計
+  LAST_NET = Math.round(netAll); LAST_TAXED = rate>0;   // 2026-10-01：未稅／含稅並列用（未稅訂金＋未稅尾款＝合計（未稅））
   syncLoadedPayDetail();   // 載入舊單後若金額被改動 → 解除付款文字凍結、重新計算（見該函式說明）
   try{ updateObMoqWarn(); }catch(e){}
   calcPay();
@@ -778,6 +787,7 @@ function setPay(n){
   document.querySelectorAll('.ptab').forEach((b,i)=>b.classList.toggle('on',i===n));
   document.querySelectorAll('.pay-panel').forEach((p,i)=>p.classList.toggle('on',i===n));
   estPayDay();
+  if(typeof updateCustomPayWarn==='function') updateCustomPayWarn();
 }
 
 /* 付款條件 Tab0「比例訂金＋尾款」（2026-08-05 依 Molly 指示改版，全單型適用）：
@@ -812,8 +822,50 @@ function payBreakdown(){
   const negExShown=negEx.map(e=>({n:cleanFeeName(e.n), a:scale(Math.abs(e.a))}));
   const depWineShown=dep-posExShown.reduce((s,e)=>s+e.a,0);
   const balWineShown=bal+negExShown.reduce((s,e)=>s+e.a,0);
+  /* 2026-10-01（Molly）：條款可同時列出未稅／含稅。未稅訂金用同一個比例從「合計（未稅）」切，
+     未稅尾款＝合計（未稅）−未稅訂金，所以 未稅訂金＋未稅尾款＝合計（未稅）、含稅訂金＋含稅尾款＝總計，兩組都對得上。 */
+  const net=Math.round(LAST_NET||0);
+  let depNet=0, balNet=0;
+  if(base!==0){ depNet=Math.round(net*(depBase/base)); balNet=net-depNet; }
+  if(clamped){ depNet=net; balNet=0; }
+  /* 2026-10-21 Molly：「為什麼金額是錯的（內含 SGS 檢驗費 $8,400、GS1條碼登記費 $3,150）」
+     ——未稅報價單的品項表印 $8,000／$3,000（輸入值），條款卻印換算後的含稅值，同一筆費用兩個數字。
+     並列寫法要逐項都給得出未稅金額，所以這裡把每一筆費用、以及「酒水那一塊」的未稅金額一起算出來：
+     用同一個 net/base 比例換算，未稅各項加總＝未稅訂金、含稅各項加總＝含稅訂金，兩邊括號都對得起來。 */
+  const scaleNet=n=>base!==0?Math.round(net*(n/base)):0;
+  const posExNet=posEx.map(e=>({n:cleanFeeName(e.n), a:scaleNet(e.a)}));
+  const negExNet=negEx.map(e=>({n:cleanFeeName(e.n), a:scaleNet(Math.abs(e.a))}));
+  const depWineNet=depNet-posExNet.reduce((s,e)=>s+e.a,0);
+  const balWineNet=balNet+negExNet.reduce((s,e)=>s+e.a,0);
   return {pctNum, wine, posEx, negEx, posTotal, negTotal, depWine, depBase, dep, bal, clamped,
-          posExShown, negExShown, depWineShown, balWineShown};
+          posExShown, negExShown, depWineShown, balWineShown, net, depNet, balNet,
+          posExNet, negExNet, depWineNet, balWineNet};
+}
+/* 2026-10-21 Molly：「未稅價」的報價單，條款裡的費用被換成含稅（SGS 8,000→8,400）→ 同一頁兩個數字。
+   只要這張單「報價單上看到的是未稅」（未稅輸入，或選了未稅價顯示），條款一律並列，不必記得勾；
+   含稅輸入＋含稅顯示時條款數字本來就跟品項表一樣，維持原本的勾選制。 */
+function payDualAuto(){
+  if(!LAST_TAXED) return false;
+  return (document.getElementById('f-taxdisplay')?.value||'')==='excl';
+}
+/* 逐項費用（SGS、條碼費、運費折抵…）要不要並列：看「品項表上印的那個數字」跟條款的含稅值是不是同一個。
+   ・未稅輸入 → 品項表印輸入值（未稅），條款換算成含稅 → 不並列就會同一筆兩個數字
+   ・含稅輸入＋未稅價顯示 → 品項表印 ÷1.05 的未稅值，條款印輸入值（含稅）→ 同樣對不起來
+   ・含稅輸入＋含稅顯示 → 兩邊都是輸入值，本來就一致，維持原本寫法（總額並列仍可用勾選） */
+function payFeeDual(){
+  if(!LAST_TAXED) return false;
+  const disp=document.getElementById('f-taxdisplay')?.value||'';
+  return (typeof taxMode!=='undefined' && taxMode==='exc') || disp==='excl';
+}
+/* 「條款同時列出未稅／含稅金額」是否生效：自動並列，或有勾；而且這張單有稅（稅率 0 時未稅＝含稅，並列沒有意義） */
+function payDualOn(){
+  const c=document.getElementById('dep-dual');
+  return !!(LAST_TAXED && (payDualAuto() || (c && c.checked)));
+}
+function onDepDualChange(){
+  FORM_DIRTY=true;
+  LOADED_PAY_DETAIL=null; LOADED_PAY_SIG=null;   // 跟其他付款欄位一樣：動到就解除「沿用已存文字」，條款即時重寫
+  if(typeof calc==='function') calc(); else calcPay();
 }
 /* 額外費用名稱在品項表會帶「（1款 × $4,000）」這種數量註記，合約條款只要品名，去掉尾巴的括號 */
 function cleanFeeName(n){ return String(n||'').replace(/[（(][^（()）]*[)）]\s*$/,'').trim()||String(n||''); }
@@ -829,8 +881,12 @@ function cleanFeeName(n){ return String(n||'').replace(/[（(][^（()）]*[)）]
 let LOADED_PAY_SIG=null;
 function payAmountSignature(){
   const amt=e=>Math.round(e.a);
-  return [Math.round(LAST_GRAND||0), Math.round(LAST_WINE_SUB||0),
-          (LAST_EXT_POS||[]).map(amt).join(','), (LAST_EXT_NEG||[]).map(amt).join(',')].join('|');
+  const sig=[Math.round(LAST_GRAND||0), Math.round(LAST_WINE_SUB||0),
+          (LAST_EXT_POS||[]).map(amt).join(','), (LAST_EXT_NEG||[]).map(amt).join(',')];
+  /* 2026-10-01 複檢：條款有並列未稅金額時，含稅輸入下只改稅率（總計不變、未稅金額變了）也要算「金額有異動」，
+     否則條款會停在舊的未稅數字；稅率改成 0 時也要重寫成單一金額。沒勾並列的單簽章不變、行為照舊。 */
+  if(typeof payDualOn==='function' && payDualOn()) sig.push('net'+Math.round(LAST_NET||0)+(LAST_TAXED?'t':'z'));
+  return sig.join('|');
 }
 function syncLoadedPayDetail(){
   if(LOADED_PAY_DETAIL==null){ LOADED_PAY_SIG=null; return; }
@@ -839,7 +895,13 @@ function syncLoadedPayDetail(){
   if(sig===LOADED_PAY_SIG) return;                          // 金額沒變 → 維持沿用原文
   restorePayFieldsFromText(LOADED_PAY_DETAIL);
   LOADED_PAY_DETAIL=null; LOADED_PAY_SIG=null;
-  try{ toast('金額有異動，付款條件已重新計算（天數與比例沿用原單設定，請確認一次）','ok'); }catch(e){}
+  /* 2026-10-01：自訂條款（Tab3）的金額是手打的字，系統不會也沒辦法重算；原本一律跳「已重新計算」，
+     好野吧 20260812-01 就是這樣漏改（總計變了、條款尾款還是舊數字）。改成明講要手動改。
+     「不顯示此欄位」（Tab4）沒有條款，不用提示。 */
+  try{
+    if(payTab===3) toast('金額有異動：這張單的付款條件是「自訂」文字，裡面的金額不會自動更新，請到付款條件手動修改','err');
+    else if(payTab!==4) toast('金額有異動，付款條件已重新計算（天數與比例沿用原單設定，請確認一次）','ok');
+  }catch(e){}
 }
 /* 把已存的付款文字裡的天數/比例/備註解析回輸入欄，讓重算出來的條款盡量貼近原單設定。
    解析不到就維持欄位現值（HTML 預設 50%／15／7／30）。新舊兩種條款寫法都吃。 */
@@ -865,6 +927,8 @@ function restorePayFieldsFromText(txt){
       const b=document.getElementById('dep-fday'); if(b) b.value=mm[2];
     } else if(fmEl && /日內支付(?:尾款|全額款項)/.test(s)) fmEl.value='days';
     if(/支付全額款項/.test(s) && !/支付訂金/.test(s)){ const e=document.getElementById('dep-pct'); if(e) e.value='0'; }   // 全額型＝不收訂金
+    /* 2026-10-01：條款是「$X 元（未稅）／$Y 元（含稅）」並列寫法 → 還原勾選；不是就取消（免得沿用上一張單的勾選） */
+    { const dd=document.getElementById('dep-dual'); if(dd) dd.checked=/元（未稅）／\s*-?\$?[\d,]+(?:\.\d+)?\s*元（含稅）/.test(s); }
     if(typeof depFModeSync==='function') depFModeSync();
     put('dep-ded', note);
   } else if(payTab===1){
@@ -900,7 +964,74 @@ function calcPay(){
   const b=payBreakdown();
   const da=document.getElementById('dep-amt'); if(da) da.textContent='$'+b.dep.toLocaleString();
   const db=document.getElementById('dep-bal'); if(db) db.textContent='$'+b.bal.toLocaleString();
+  /* 2026-10-01：勾「同時列出未稅／含稅」→ 兩個金額框下面多一行未稅金額，框名標「（含稅）」 */
+  const dual=payDualOn();
+  const sub=(id,v)=>{ const e=document.getElementById(id); if(!e) return; e.style.display=dual?'block':'none'; e.textContent=dual?('未稅 $'+v.toLocaleString()):''; };
+  sub('dep-amt-net', b.depNet); sub('dep-bal-net', b.balNet);
+  ['dep-amt-tag','dep-bal-tag'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=dual?'（含稅）':''; });
+  { const h=document.getElementById('dep-dual-hint'); const c=document.getElementById('dep-dual');
+    const auto=(typeof payDualAuto==='function') && payDualAuto();
+    /* 印未稅價的單一律並列，勾選鎖住免得被關掉又印出對不起來的數字；
+       使用者原本的選擇記在 DUAL_USER_PREF，切回含稅顯示再還原 */
+    if(c){
+      if(auto){ if(DUAL_USER_PREF===null) DUAL_USER_PREF=c.checked; c.checked=true; c.disabled=true; }
+      else { if(DUAL_USER_PREF!==null){ c.checked=DUAL_USER_PREF; DUAL_USER_PREF=null; } c.disabled=false; }
+    }
+    const feeOnly=!auto && (typeof payFeeDual==='function') && payFeeDual();
+    if(h) h.textContent = auto ? '　（這張單印未稅價，條款一律並列，數字才跟品項表對得起來）'
+                               : (feeOnly ? '　（未稅輸入：條款裡的費用會並列「未稅／含稅」，跟品項表對得起來）'
+                               : ((c&&c.checked&&!LAST_TAXED)?'　⚠ 這張單稅率是 0，未稅＝含稅，條款只會寫一個金額':'')); }
+  if(typeof updateCustomPayWarn==='function') updateCustomPayWarn();
 }
+
+/* ── 2026-10-01：自訂條款（Tab3）相關 ─────────────────────────────────────────────
+   ①存檔時自訂條款會跳脫＋把換行轉成 <br>（2026-09-11），載入時卻原樣塞回 textarea
+     → 欄位裡看到 <br> 字樣，改完再存就變 &lt;br&gt; 印在報價單上。payHtmlToPlain 把它還原成原本打的字。
+   ②自訂條款裡的金額是手打的，改了品項金額不會跟著變。customPayAmounts 盡量從文字裡讀出訂金／尾款，
+     updateCustomPayWarn 發現「訂金＋尾款≠總計」就在欄位下方提醒（只提醒、不擋存檔；讀不出來就不出聲）。 */
+function payHtmlToPlain(h){
+  return String(h==null?'':h).replace(/<br\s*\/?>/gi,'\n').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
+}
+function customPayAmounts(txt){
+  let s=String(txt||'');
+  try{ s=s.normalize('NFKC'); }catch(e){}   // 從 PDF 貼過來的字常是康熙部首（⾦⽀⽅…）或全形數字，先正規化再比對
+  s=s.replace(/\s+/g,'');
+  const di=s.search(/訂金|定金/); if(di<0) return null;
+  const rest=s.slice(di);
+  const bi=rest.search(/尾款|餘款/); if(bi<0) return null;
+  const pick=seg=>{
+    const re=/(\d{1,3}(?:,\d{3})+|\d{4,})(?:\.\d+)?元整?(?:[(（](含稅|未稅)[)）])?/g;
+    let m, first=null, inc=null, anyNet=false;
+    while((m=re.exec(seg))){
+      const v=Math.round(parseFloat(m[1].replace(/,/g,''))||0);
+      if(m[2]==='含稅'){ if(inc==null) inc=v; }
+      else if(m[2]==='未稅') anyNet=true;
+      else if(first==null) first=v;
+    }
+    if(inc!=null) return inc;          // 有標（含稅）的優先
+    if(anyNet && first==null) return null;   // 只寫了未稅金額：沒辦法跟含稅總計比，不猜
+    return first;
+  };
+  const dep=pick(rest.slice(0,bi)), bal=pick(rest.slice(bi));
+  if(dep==null || bal==null) return null;
+  return {dep, bal};
+}
+function updateCustomPayWarn(){
+  const box=document.getElementById('p3-warn'); if(!box) return;
+  let msg='';
+  if(payTab===3){
+    const ta=document.getElementById('p3-txt');
+    const a=customPayAmounts(ta?ta.value:'');
+    const gt=Math.round(LAST_GRAND||0), net=Math.round(LAST_NET||0);
+    // 加起來等於總計（含稅）或合計（未稅）都算對得上——有些自訂條款整段是寫未稅金額
+    if(a && gt>0 && a.dep+a.bal!==gt && a.dep+a.bal!==net){
+      const f=n=>'$'+Math.abs(n).toLocaleString();
+      msg=`⚠ 條款裡寫的訂金 ${f(a.dep)}＋尾款 ${f(a.bal)}＝${f(a.dep+a.bal)}，跟總計 ${f(gt)} 差 ${f(gt-a.dep-a.bal)}。自訂條款的金額不會自動更新，請確認；若有折抵或另有約定可忽略。`;
+    }
+  }
+  box.textContent=msg; box.style.display=msg?'block':'none';
+}
+document.addEventListener('input',e=>{ if(e.target && e.target.id==='p3-txt') updateCustomPayWarn(); });
 
 function estPayDay(){
   const dt=document.getElementById('f-dt').value; if(!dt) return;
@@ -1174,6 +1305,7 @@ function resetAll(skipConfirm){
   });
   botItems=[]; banFreeItems=[]; banAddonItems=[]; banG1Items=[]; banG2Items=[]; extras=[]; imgs=[]; rowId=0;
   { const h=document.getElementById('f-hidetotals'); if(h) h.checked=false; const e=document.getElementById('f-imgsize'); if(e) e.value='m'; } // 文件顯示設定回到預設
+  { const dd=document.getElementById('dep-dual'); if(dd){ dd.checked=false; dd.disabled=false; } dualPrefReset(); }   // 2026-10-01：未稅／含稅並列回預設不勾
   // 2026-08-28：本單級距回標準、寄倉勾選取消（tier/條款輸入欄上面的迴圈已清空，這裡補回標準值與勾選狀態）
   { const st=document.getElementById('ob-storage'); if(st) st.checked=false; const ta=document.getElementById('ob-storage-terms'); if(ta) ta.style.display='none'; }
   { const qo=document.getElementById('f-quoteonly'); if(qo) qo.checked=false; const h=document.getElementById('taxdisp-hint'); if(h) h.textContent='';
@@ -1227,12 +1359,33 @@ function getPayTerms(){
     const money=n=>{const v=Math.round(n);return (v<0?'-$':'$')+Math.abs(v).toLocaleString();};   // 負數印 -$1,000 而非 $-1,000
     /* 條款格式依 Molly 2026-08-05 指定：訂金支付／驗收與尾款兩段，括號內逐項列出其他費用，
        其餘為「酒水總價 X% 之訂金」。括號裡的數字加總必等於括號外的訂金總額。 */
-    const fees=b.posExShown.length ? `內含${b.posExShown.map(e=>`${esc(e.n)} ${money(e.a)}`).join('、')}，及` : '';
+
+    /* 2026-10-01（Molly）：勾「條款同時列出未稅／含稅金額」→ 訂金、尾款、全額三種金額都寫成
+       「$未稅 元（未稅）／$含稅 元（含稅）」（跟她日富一日那張手打的寫法一樣，未稅在前）。
+       括號裡的說明：沒有其他費用時只留比例（金額已並列在前面）；有其他費用或折抵時，逐項也並列（2026-10-21 改）。
+       沒勾＝一字不差照舊。訂單追蹤與後端讀金額時會先把這種寫法換回含稅金額
+       （前端 ordPayFromQuote、後端 orderPayFromQuote_／fxParsePay_，三邊同一條規則）。 */
+    const dual=(typeof payDualOn==='function') && payDualOn();
+    const amt=(shown,net,inc)=> dual ? `${money(net)} 元（未稅）／${money(inc)} 元（含稅）` : `${shown} 元整`;
+    /* 2026-10-21 Molly：並列時「逐項費用」也要兩個數字，否則未稅單的品項表印 $8,000、條款印 $8,400，
+       同一筆 SGS 在同一頁出現兩個金額。逐項用「$未稅／$含稅」的短寫法（句末統一說明斜線的意思），
+       不然一句話裡會出現五組「元（未稅）／元（含稅）」，客戶讀不下去。 */
+    const feeDual=(typeof payFeeDual==='function') && payFeeDual();
+    const pair=(netv,inc)=>`${money(netv)}／${money(inc)}`;
+    const slashNote=feeDual?'，斜線前為未稅、後為含稅':'';
+    const taxTag=(dual&&!feeDual)?'（含稅）':'';   // 含稅輸入＋勾並列：沿用 20261001a 的寫法，逐項標含稅
+    const feeList=(shownArr,netArr,tag)=>shownArr.map((e,i)=>`${esc(e.n)} ${feeDual?pair((netArr[i]||{}).a,e.a):(money(e.a)+tag)}`).join('、');
+    const negList=()=>feeList(b.negExShown,b.negExNet,taxTag);
+    const fees=b.posExShown.length ? `內含${feeList(b.posExShown,b.posExNet,'')}，及` : '';
+    const innerPair=!!fees && feeDual;   // 括號裡的「酒水那一塊」要不要也並列（有逐項費用時才需要，數字才加得起來）
     if(b.clamped){
       /* 折抵超過尾款額度（複檢 #12）：尾款封頂 $0，改寫成「無須另付尾款」的版本，
          不能印出負數尾款，也不能再宣稱「X% 之訂金」（封頂後百分比已對不上） */
-      const dedTxt=b.negExShown.length? b.negExShown.map(e=>`${esc(e.n)} ${money(e.a)}`).join('、') : '折抵項目';
-      let tc=`訂金支付：甲方於乙方製造前 ${d1} 日內，支付訂金總計新台幣 ${dep} 元整（${fees}酒水款項 ${money(b.depWineShown)} 元整），作為乙方啟動生產之依據。`;
+      const dedTxt=b.negExShown.length? negList() : '折抵項目';
+      const depNoteC = innerPair ? `${fees}酒水款項 ${pair(b.depWineNet,b.depWineShown)}${slashNote}`
+        : (dual ? (fees ? `含稅金額${fees}酒水款項 ${money(b.depWineShown)} 元整` : `酒水款項`)
+                : `${fees}酒水款項 ${money(b.depWineShown)} 元整`);
+      let tc=`訂金支付：甲方於乙方製造前 ${d1} 日內，支付訂金總計新台幣 ${amt(dep,b.depNet,b.dep)}（${depNoteC}），作為乙方啟動生產之依據。`;
       tc+=`<br>驗收與尾款：乙方完成商品製作並全數交付後，甲方應於到貨後 ${vd} 日內完成驗收。驗收無誤後無須另付尾款（酒水總價剩餘款項已由${dedTxt}全數抵銷）。`;
       if(note) tc+=`<br>付款條件備註：${note}`;
       return tc;
@@ -1241,15 +1394,18 @@ function getPayTerms(){
        原「隔月指定日付款」就是用這個寫法（0%＋隔 N 月 N 號）。字樣「支付全額款項新台幣…元整」
        訂單追蹤 ordPayFromQuote 認得（訂金 0、尾款＝全額）。 */
     if(b.dep===0){
-      let tf=`驗收與付款：乙方完成商品製作並全數交付後，甲方應於到貨後 ${vd} 日內完成驗收。驗收無誤後，甲方應於${when}支付全額款項新台幣 ${bal} 元整`;
-      if(b.negExShown.length) tf+=`（已減去${b.negExShown.map(e=>`${esc(e.n)} ${money(e.a)}`).join('、')}）`;
+      let tf=`驗收與付款：乙方完成商品製作並全數交付後，甲方應於到貨後 ${vd} 日內完成驗收。驗收無誤後，甲方應於${when}支付全額款項新台幣 ${amt(bal,b.balNet,b.bal)}`;
+      if(b.negExShown.length) tf+=`（已減去${negList()}${slashNote}）`;
       tf+=`。`;
       if(note) tf+=`<br>付款條件備註：${note}`;
       return tf;
     }
-    let t=`訂金支付：甲方於乙方製造前 ${d1} 日內，支付訂金總計新台幣 ${dep} 元整（${fees}酒水總價 ${pct}% 之訂金 ${money(b.depWineShown)} 元整），作為乙方啟動生產之依據。`;
-    t+=`<br>驗收與尾款：乙方完成商品製作並全數交付後，甲方應於到貨後 ${vd} 日內完成驗收。驗收無誤後，甲方應於${when}支付尾款新台幣 ${bal} 元整（即酒水總價剩餘之 ${100-pct}%`;
-    if(b.negExShown.length) t+=`，減去${b.negExShown.map(e=>`${esc(e.n)} ${money(e.a)}`).join('、')}`;
+    const depNote = innerPair ? `${fees}酒水總價 ${pct}% 之訂金 ${pair(b.depWineNet,b.depWineShown)}${slashNote}`
+      : (dual ? (fees ? `含稅金額${fees}酒水總價 ${pct}% 之訂金 ${money(b.depWineShown)} 元整` : `酒水總價 ${pct}% 之訂金`)
+              : `${fees}酒水總價 ${pct}% 之訂金 ${money(b.depWineShown)} 元整`);
+    let t=`訂金支付：甲方於乙方製造前 ${d1} 日內，支付訂金總計新台幣 ${amt(dep,b.depNet,b.dep)}（${depNote}），作為乙方啟動生產之依據。`;
+    t+=`<br>驗收與尾款：乙方完成商品製作並全數交付後，甲方應於到貨後 ${vd} 日內完成驗收。驗收無誤後，甲方應於${when}支付尾款新台幣 ${amt(bal,b.balNet,b.bal)}（即酒水總價剩餘之 ${100-pct}%`;
+    if(b.negExShown.length) t+=`，減去${negList()}${slashNote}`;
     t+=`）。`;
     if(note) t+=`<br>付款條件備註：${note}`;
     return t;

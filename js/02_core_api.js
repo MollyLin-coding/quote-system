@@ -1167,8 +1167,10 @@ function loadQuoteIntoForm(q){
   let pt=parseInt(q.paymentType)||0; if(pt<0||pt>4) pt=0;
   // 2026-09-24：「隔月指定日付款」已併進 Tab0（0%＋隔 N 月 N 號）；舊單的月數／日期由下方 restorePayFieldsFromText 從原文解回
   if(pt===2) pt=0;
+  { const dd=document.getElementById('dep-dual'); if(dd) dd.checked=false; if(typeof dualPrefReset==='function') dualPrefReset(); }   // 2026-10-01：先取消，下面 restorePayFieldsFromText 看條款寫法再決定要不要勾回來
   setPay(pt);
-  if(pt===3 && q.paymentDetail){ const e=document.getElementById('p3-txt'); if(e)e.value=q.paymentDetail; }
+  /* 2026-10-01：自訂條款存檔時會跳脫並把換行轉成 <br>，載入要轉回來，否則欄位裡看到 <br>、再存一次就印出 &lt;br&gt;（好野吧 20260812-01） */
+  if(pt===3 && q.paymentDetail){ const e=document.getElementById('p3-txt'); if(e)e.value=(typeof payHtmlToPlain==='function')?payHtmlToPlain(q.paymentDetail):q.paymentDetail; }
   // 沿用存檔當下算好的付款文字，避免重載重算改掉客戶看到的條件（setPay 已把 LOADED_PAY_DETAIL 清為 null，這裡在其後設定）
   LOADED_PAY_DETAIL=(q.paymentDetail!=null&&q.paymentDetail!=='')?q.paymentDetail:null;
   /* 複檢 2026-08-06 #1：載入當下就把原單的比例/天數/備註從凍結文字解析回付款欄位。

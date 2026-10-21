@@ -395,8 +395,12 @@ function openOrdEdit(no){
    不管付款方式怎麼改、將來條款算法再變，這裡都會跟著對。
    讀不到（自訂條款、舊單沒存、金額對不上總額）就退回原本的比例算法。 */
 function ordPayFromQuote(o, gt){
-  const s=String((o&&o.payDetail)||'').replace(/<br\s*\/?>/gi,'\n');
+  let s=String((o&&o.payDetail)||'').replace(/<br\s*\/?>/gi,'\n');
   if(!s) return null;
+  /* 2026-10-01：Tab0 勾「同時列出未稅／含稅」時金額寫成「$126,750 元（未稅）／$133,088 元（含稅）」。
+     訂單追蹤記的是實際要收的含稅金額 → 先把這種寫法換回「$133,088 元整」，下面照原規則讀。
+     後端 orderPayFromQuote_（v2_extensions）與 fxParsePay_（v5_factory）是同一條規則，三邊要一起改。 */
+  s=s.replace(/\$?[\d,]+(?:\.\d+)?\s*元（未稅）／\s*(\$?[\d,]+(?:\.\d+)?)\s*元（含稅）/g,'$1 元整');
   const num=m=>m?Math.round(parseFloat(String(m[1]).replace(/[$,]/g,''))||0):null;
   /* 複檢 2026-08-11 #3：全額型條款（Tab1 驗收後付 100%／Tab2 月結全額）沒有「訂金」這個字，
      原本一律解不出來就退回「總額×比例」，尾款被算成一半、還多掛一筆不會收的訂金。
