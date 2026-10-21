@@ -653,7 +653,13 @@ function fxImportOrder_(o, map, customers, priceCtx) {
   });
   if (!items.length) return { ok: false, error: '沒有可匯入的酒款' };
   var total = Number(o.total) || 0;
-  var grand = total > 0 ? total : sub;
+  // 2026-10-21 Molly：「廠務訂單轉到報價訂單金額有誤」——廠務「總金額」是實際成交金額（同仁手填），牌價只是參考。
+  //   原本各款單價帶牌價、總計卻直接存廠務總金額（日光貳參 261021-002：品項 25,000／總計 12,750），報價單一打開重算就變成牌價總額。
+  //   現在：有廠務總金額時，各款單價依總金額換算（照牌價比例分攤、取整、餘數逐瓶補到剛好），報價單總計＝廠務總金額；備註講明請確認各款單價。
+  var pricing = fxImportPricing_(items, total);
+  sub = pricing.sub;
+  var priceNote = pricing.note;
+  var grand = sub;
   // 複檢 0923：廠務「運費金額」（客戶付的；南坡萬付運費＝成本不進報價單）→ 報價單加一列運費，總計含運費（跟推單時的算法對稱）
   var fxShip = fxNum_(o.shipFee), extrasTotal = 0;
   if (fxShip !== '' && fxShip > 0 && String(o.shipFeePayer || '').trim() !== FX_PAYER_CO) {
@@ -675,7 +681,7 @@ function fxImportOrder_(o, map, customers, priceCtx) {
     priceMode: 'inc', taxRate: 5,
     paymentType: (cust && String(cust.pay_habit || '').trim()) ? '3' : '',
     paymentDetail: (cust && String(cust.pay_habit || '').trim()) || '',
-    remark: '由廠務訂單 ' + o.orderNo + ' 自動帶入（' + (o.orderCreator || '') + '）' + (o.orderNote ? '｜' + o.orderNote : '') + '；單價為系統自動帶牌價，請確認',
+    remark: '由廠務訂單 ' + o.orderNo + ' 自動帶入（' + (o.orderCreator || '') + '）' + (o.orderNote ? '｜' + o.orderNote : '') + '；' + priceNote,
     status: '草稿', expectedShipDate: o.deliveryDate || '', showShipDate: (o.deliveryDate ? 'Y' : 'N'),
     items: items
   };
@@ -703,6 +709,49 @@ function fxImportOrder_(o, map, customers, priceCtx) {
   if (o.shipDateConfirmed && o.actualDeliveryDate && o.status === '已出貨') fields.ship_date_actual = o.actualDeliveryDate;
   try { handleUpdateOrderStatus_({ quote_no: quoteNo, fields: fields }); } catch (e) {}
   return { ok: true, quoteNo: quoteNo, clientName: clientName };
+}
+// 匯入時的單價：廠務有填「總金額」就以它為準。lines＝瓶裝品項（unitPrice＝查到的牌價，查不到＝0）；會直接改 lines 的 unitPrice／subtotal／listPrice／discount。
+//   ・牌價合計剛好＝總金額 → 牌價照用
+//   ・不等 → 每款單價＝牌價×（總金額÷牌價合計）取整；牌價查不到（或全部查不到）→ 每瓶平均；
+//     取整後的餘數從瓶數最多的款開始每瓶 ±1 補到剛好（餘數小於任何一款瓶數時才會留下零頭，備註會寫出來）
+//   ・公版酒（ownbrand／ownlabel）列：原價欄＝牌價、折數欄＝換算折數（前端計價＝round(原價×折數/10)，要剛好等於單價才用，否則原價欄直接放單價）
+//   回 { sub: 各款小計合計, note: 備註文字, residual: 零頭 }
+function fxImportPricing_(lines, total) {
+  total = Math.round(Number(total) || 0);
+  var listSum = 0, qtyTotal = 0, missing = false;
+  lines.forEach(function (it) { var p = fxNum_(it.unitPrice); if (p === '' || !(p > 0)) missing = true; else listSum += p * it.qty; qtyTotal += it.qty; });
+  var keepList = function () { lines.forEach(function (it) { var p = fxNum_(it.unitPrice); it.listPrice = (p !== '' && p > 0) ? p : ''; it.discount = ''; }); };
+  if (!(total > 0)) { keepList(); return { sub: missing ? lines.reduce(function (a, it) { return a + (Number(it.subtotal) || 0); }, 0) : listSum, note: '單價為系統自動帶牌價，請確認', residual: 0 }; }
+  if (!missing && Math.round(listSum) === total) { keepList(); return { sub: listSum, note: '單價為系統自動帶牌價（與廠務總金額 ' + total + ' 相符）', residual: 0 }; }
+  var uniform = missing || !(listSum > 0) || !(qtyTotal > 0);
+  var baseSum = uniform ? qtyTotal : listSum;
+  var ratio = baseSum > 0 ? total / baseSum : 0;
+  lines.forEach(function (it) { it._list = uniform ? '' : fxNum_(it.unitPrice); it._unit = Math.max(0, Math.round((uniform ? 1 : it._list) * ratio)); });
+  var r = total - lines.reduce(function (a, it) { return a + it._unit * it.qty; }, 0);
+  var order = lines.slice().sort(function (a, b) { return b.qty - a.qty; });
+  for (var pass = 0; pass < 50 && r !== 0; pass++) {
+    var moved = false;
+    for (var i = 0; i < order.length && r !== 0; i++) {
+      var it = order[i], sgn = r > 0 ? 1 : -1;
+      if (it.qty > 0 && Math.abs(r) >= it.qty && (sgn > 0 || it._unit > 0)) { it._unit += sgn; r -= sgn * it.qty; moved = true; }
+    }
+    if (!moved) break;
+  }
+  var sub = 0;
+  lines.forEach(function (it) {
+    it.unitPrice = it._unit; it.subtotal = it._unit * it.qty; sub += it.subtotal;
+    var lp = it._list;
+    if (lp !== '' && lp > 0 && it._unit !== lp) {
+      var disc = Math.round(it._unit * 1000 / lp) / 100;   // 折數（6＝6折），留兩位
+      if (disc > 0 && disc <= 10 && Math.round(lp * disc / 10) === it._unit) { it.listPrice = lp; it.discount = String(disc); }
+      else { it.listPrice = it._unit; it.discount = ''; }
+    } else { it.listPrice = (lp !== '' && lp > 0) ? lp : it._unit; it.discount = ''; }
+    delete it._list; delete it._unit;
+  });
+  var avg = qtyTotal > 0 ? Math.round(total / qtyTotal * 100) / 100 : 0;
+  var note = '單價依廠務訂單總金額 ' + total + ' 換算（' + (uniform ? '每瓶平均 ' + avg : '牌價合計 ' + Math.round(listSum) + '，每瓶平均 ' + avg) + '），各款實際單價請確認後修改'
+    + (r !== 0 ? '；⚠ 換算後總計 ' + sub + ' 與廠務總金額差 ' + r + ' 元（瓶數分不平均），請調整單價' : '');
+  return { sub: sub, note: note, residual: r };
 }
 // 牌價查找：公版 ownbrand_products（名稱＋容量）→ 代工客戶 products（公司名＋品名＋規格）→ ''
 function fxPriceCtx_() {
