@@ -185,7 +185,7 @@ function rebuildBotHeader(){
   cols.push('60px','88px');
   if(colMark) cols.push('52px');
   if(colGift) cols.push('44px');
-  cols.push('44px');
+  cols.push('62px');   // 2026-10-19：操作欄多一顆「複製這一列」，加寬一點
   document.getElementById('ith-bot').style.gridTemplateColumns = cols.join(' ');
   { const e=document.getElementById('th-gift'); if(e) e.style.display=colGift?'':'none'; }
   { const e=document.getElementById('ctg-gift'); if(e) e.classList.toggle('on',colGift); }
@@ -248,7 +248,7 @@ function addBotRow(prefill){
   cols.push('60px','88px');
   if(colMark) cols.push('52px');
   if(colGift) cols.push('44px');
-  cols.push('44px');
+  cols.push('62px');   // 2026-10-19：操作欄多一顆「複製這一列」，跟 rebuildBotHeader 要一致
   div.className='itr'+((prefill&&prefill.gift)?' gift':'');
   div.style.gridTemplateColumns = cols.join(' ');
   let lotVal = (prefill && prefill.lot) ? prefill.lot : '';
@@ -278,7 +278,7 @@ function addBotRow(prefill){
   if(colMark) h += `<div style="display:flex;align-items:center;justify-content:center"><input type="checkbox" data-f="mark" title="標記為 OEM／貼牌" onchange="onMarkChange(${id})" style="width:16px;height:16px;cursor:pointer" ${prefill&&prefill.mark?'checked':''}></div>`;
   if(colGift) h += `<div style="display:flex;align-items:center;justify-content:center"><input type="checkbox" data-f="gift" title="此列不計價（顯示金額、贈送）" onchange="onGiftChange(${id})" style="width:16px;height:16px;cursor:pointer" ${prefill&&prefill.gift?'checked':''}></div>`;
   h += `
-    <div class="rowact"><span class="ordcol"><button type="button" class="ordb" title="上移" onclick="moveBotRow(${id},-1)">▲</button><button type="button" class="ordb" title="下移" onclick="moveBotRow(${id},1)">▼</button></span><button class="del" onclick="delBotRow(${id})">✕</button></div>`;
+    <div class="rowact"><span class="ordcol"><button type="button" class="ordb" title="上移" onclick="moveBotRow(${id},-1)">▲</button><button type="button" class="ordb" title="下移" onclick="moveBotRow(${id},1)">▼</button></span><button type="button" class="del" title="複製這一列（同酒款另一種價格；瓶數留空）" onclick="copyBotRow(${id})" style="font-size:13px">⧉</button><button class="del" onclick="delBotRow(${id})">✕</button></div>`;
   div.innerHTML = h;
   document.getElementById('itbody-bot').appendChild(div);
   botItems.push(id);
@@ -388,6 +388,44 @@ function handleNamePaste(ev,id){
   nameInput.value=lines[0];
   for(let i=1;i<lines.length;i++){ addBotRow({name:lines[i]}); }
   calc();
+}
+/* 2026-10-19 Molly：「報價單新增同酒款但要同時有原價×瓶數及折價×瓶數」
+   → 每一列多一顆「複製」：在這一列正下方複製一列一模一樣的（品名／容量／單價／前標費／LOGO／
+     批次／贈品、公版酒的原價與折數、公司報價檔的關聯 pid 都帶著），**只有瓶數留空**——
+     一按就把總瓶數、總金額變兩倍太危險，填進這一段的數量、改掉單價就是同一款酒的另一種價格。
+     兩列是各自獨立的品項列：報價單上各印一行，訂單追蹤的總受訂數、驗收單、寄倉都會把
+     同品名同容量的加在一起算（驗收單的「已出貨」是依序分配給同鍵的列，見 09_verify_form.js）。 */
+function copyBotRow(id){
+  const row=document.getElementById(`r-${id}`); if(!row) return;
+  const el=k=>row.querySelector(`[data-f="${k}"]`);
+  const val=k=>{ const e=el(k); return e?e.value:''; };
+  const priceEl=el('price'), diEl=el('disc'), lotEl=el('lot'), dedEl=el('ded'), logoEl=el('logo'), giftEl=el('gift'), markEl=el('mark');
+  addBotRow({
+    name:val('name'), vol:val('vol'), price:val('price'), qty:'',          // ← 瓶數留空
+    lot:lotEl?lotEl.value:(botLotCache[id]||''),
+    ded:dedEl?dedEl.value:(botDedCache[id]||''),
+    logo:logoEl?logoEl.value:(botLogoCache[id]||''),
+    lp:val('lp'), disc:diEl?diEl.value:'', discManual:(diEl&&diEl.dataset.manual==='1')?1:0,
+    gift:(giftEl?(giftEl.checked?1:0):(botGiftCache[id]||0)), mark:(markEl&&markEl.checked)?1:0,
+    pid:row.dataset.pid||'', sku:row.dataset.sku||'', listprice:row.dataset.listprice||'',
+    tierBaseQty:(row.dataset.tierBaseQty!=null?row.dataset.tierBaseQty:''),
+    priceSrc:(priceEl&&priceEl.dataset.src!=null)?priceEl.dataset.src:'',
+    manual:(priceEl&&priceEl.dataset.manual==='1')?1:0
+  });
+  /* 新列先被加在最後面，搬到原列正下方（botItems 是報價單、PDF、存檔的順序來源） */
+  const nid=botItems[botItems.length-1];
+  botItems.pop();
+  botItems.splice(botItems.indexOf(id)+1, 0, nid);
+  reorderBotDom();
+  /* 欄位被收起來時值只存在快取裡，複製的那列也要有自己的一份（欄位開著就以畫面上的值為準） */
+  botDedCache[nid]=dedEl?dedEl.value:(botDedCache[id]||'');
+  botLogoCache[nid]=logoEl?logoEl.value:(botLogoCache[id]||'');
+  botLotCache[nid]=lotEl?lotEl.value:(botLotCache[id]||'');
+  botGiftCache[nid]=giftEl?(giftEl.checked?1:0):(botGiftCache[id]||0);
+  calc();
+  const q=document.querySelector(`#r-${nid} [data-f="qty"]`); if(q) q.focus();
+  const nm=String(val('name')||'').split('\n')[0].trim();
+  toast('已複製'+(nm?('「'+nm+'」'):'這一列')+'：瓶數留空，填這一段的數量、改單價就是另一種價格','ok');
 }
 function delBotRow(id){
   const el=document.getElementById(`r-${id}`); if(el) el.remove();
