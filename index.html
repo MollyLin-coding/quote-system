@@ -499,14 +499,14 @@
           <label style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;font-weight:400;font-size:12.5px;margin:-4px 0 14px;line-height:1.5"><input type="checkbox" id="dep-dual" style="width:auto;margin:3px 0 0" onchange="onDepDualChange()"> <span>條款同時列出未稅／含稅金額<span style="color:var(--hint)">（訂金、尾款都寫成「$未稅 元（未稅）／$含稅 元（含稅）」）</span><span id="dep-dual-hint" style="color:#8A2F2C"></span></span></label>
           <div class="fg fg3" style="margin-bottom:14px">
             <div class="fl"><label>製造前幾日內付訂金</label><input class="fi" id="dep-days1" type="number" value="15" min="0" oninput="calcPay()"></div>
-            <div class="fl"><label>到貨後幾日內驗收</label><input class="fi" id="dep-days" type="number" value="7" min="0" oninput="calcPay()"></div>
+            <div class="fl"><label>到貨後幾日內驗收</label><input class="fi" id="dep-days" type="number" value="3" min="0" oninput="calcPay()"></div>
             <div class="fl"><label>尾款付款時間</label>
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                 <select class="fi" id="dep-fmode" style="width:auto;flex:0 0 auto" onchange="depFModeSync();calcPay()">
                   <option value="days">驗收後幾日內</option>
                   <option value="month">隔幾月幾號</option>
                 </select>
-                <span id="dep-fm-days" style="display:flex;align-items:center;gap:6px"><input class="fi" id="dep-fdays" type="number" value="30" min="0" style="width:70px" oninput="calcPay()"><span style="color:var(--hint);font-size:13px">日內</span></span>
+                <span id="dep-fm-days" style="display:flex;align-items:center;gap:6px"><input class="fi" id="dep-fdays" type="number" value="7" min="0" style="width:70px" oninput="calcPay()"><span style="color:var(--hint);font-size:13px">日內</span></span>
                 <span id="dep-fm-month" style="display:none;align-items:center;gap:6px"><span style="color:var(--hint);font-size:13px">隔</span><input class="fi" id="dep-fmon" type="number" value="1" min="1" style="width:58px" oninput="calcPay()"><span style="color:var(--hint);font-size:13px">月</span><input class="fi" id="dep-fday" type="number" value="10" min="1" max="31" style="width:62px" oninput="calcPay()"><span style="color:var(--hint);font-size:13px">號</span></span>
               </div>
             </div>
@@ -1401,7 +1401,7 @@
 </div>
 
 <script src="js/00_utils.js?v=20261021d"></script>
-<script src="js/01_quote_form.js?v=20261021d"></script>
+<script src="js/01_quote_form.js?v=20261112c"></script>
 <script src="js/01b_quote_preview.js?v=20261112b"></script>
 <script src="js/02_core_api.js?v=20261021d"></script>
 <script src="js/03_quote_custom.js?v=20261021d"></script>
