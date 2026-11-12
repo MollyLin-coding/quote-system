@@ -1245,7 +1245,31 @@ function buildExportFilename(){
   else if(cli) parts.push(cli);
   if(tagLot) parts.push(tagLot);
   parts.push('報價單_凱文南坡萬實業社');
+  parts.push(exportDateStr(document.getElementById('f-dt')?.value));
   return sanitizeFilename(parts.join('_'));
+}
+
+/* 2026-11-12 Molly：匯出檔名＝客戶[_Lot]_報價單_凱文南坡萬實業社_報價日期_vN
+   N＝同一張單第幾次匯出，由後端 export_log 跨帳號共用編號；後端連不上時退回這台電腦自己的計數 */
+function exportDateStr(v){
+  const m=String(v||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return m[1]+m[2]+m[3];
+  const d=new Date(); const z=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+z(d.getMonth()+1)+z(d.getDate());
+}
+async function nextExportVer(key, base, meta){
+  meta=meta||{};
+  try{
+    const r=await apiCall({action:'nextExportVer', token:AUTH_TOKEN, key, filename:base+'_{VER}', quote_no:meta.quote_no||'', client:meta.client||''});
+    if(r && r.ok && Number(r.ver)>0) return 'v'+Number(r.ver);
+  }catch(e){}
+  let n=1;
+  try{
+    const lk='export_ver_'+key;
+    n=(parseInt(localStorage.getItem(lk)||'0',10)||0)+1;
+    localStorage.setItem(lk,String(n));
+  }catch(e){}
+  return 'v'+n;
 }
 
 /* ---- 標準模式：PDF 匯出（瀏覽器列印；每頁固定 A4，與預覽分頁完全一致）---- */
@@ -1273,7 +1297,13 @@ function exportPDF(){
   const pages = buildStdPagesHtml();
   const w=window.open('','_blank');
   if(!w){ toast('瀏覽器擋住了新視窗，請允許本站彈出視窗後再匯出','err'); return; }
-  const fname=buildExportFilename();
+  try{ w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>產生中…</title></head><body style="font-family:sans-serif;padding:40px;color:#555">PDF 產生中，請稍候…</body></html>'); }catch(e){}
+  const base=buildExportFilename();
+  const qno=editingQuoteNo || document.getElementById('f-no')?.value.trim() || '';
+  const key='std|'+(qno || base);
+  nextExportVer(key, base, {quote_no:qno, client:document.getElementById('f-cli')?.value.trim()||''}).then(ver=>{
+  const fname=sanitizeFilename(base+'_'+ver);
+  w.document.open();
   w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${fname}</title>
     <style>
       @page{size:A4;margin:10mm}
@@ -1285,5 +1315,6 @@ function exportPDF(){
     </head><body>${pages}</body></html>`);
   w.document.close();
   setTimeout(()=>{ w.print(); }, 500);
+  });
 }
 
