@@ -43,7 +43,10 @@ function buildStdDocParts(){
     let headCols = `<th style="padding:10px 12px;text-align:left;color:#6B6B63;font-weight:600;font-size:10.5px;letter-spacing:.3px;border-bottom:1.5px solid #22241F">品名</th>`;
     const showLotDoc = colLot && !colOwn;   // 自有品牌批號為內部記錄用，不顯示給客戶
     if(showLotDoc) headCols += `<th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">批次</th>`;
-    headCols += `<th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">容量</th>
+    /* 2026-11-12 Molly：「禮盒不需顯示容量」→ 沒填容量的品項（禮盒組等）容量格留白；整張都沒有容量就連「容量」欄都不印 */
+    const anyVol = botItems.some(id=>{ const r=document.getElementById(`r-${id}`); return r && gv(r,'vol'); });
+    if(anyVol) headCols += `<th style="padding:10px 8px;text-align:center;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">容量</th>`;
+    headCols += `
       <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">單價${taxTag}</th>`;
     if(colDed) headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">前標費</th>`;
     if(colLogo) headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">LOGO</th>`;
@@ -57,7 +60,7 @@ function buildStdDocParts(){
     theadStr = `<thead><tr>${headCols}</tr></thead>`;
     let cols = '<col>';
     if(showLotDoc) cols += '<col style="width:64px">';
-    cols += '<col style="width:70px"><col style="width:84px">';
+    cols += (anyVol?'<col style="width:70px">':'') + '<col style="width:84px">';
     if(colDed) cols += '<col style="width:70px">';
     if(colLogo) cols += '<col style="width:72px">';
     cols += `<col style="width:${mixedUnit?70:58}px"><col style="width:104px">`;
@@ -73,7 +76,8 @@ function buildStdDocParts(){
       const _mkTag = _mkLabel ? ` <span style="display:inline-block;font-size:10px;font-weight:700;color:#7A5A1E;background:#F3ECDD;border-radius:4px;padding:1px 6px;margin-left:4px;vertical-align:1px">${_mkLabel}</span>` : '';
       let cells = `<td style="padding:11px 12px;font-weight:600;color:#22241F">${n||'—'}${_mkTag}</td>`;
       if(showLotDoc) cells += `<td style="padding:11px 8px;text-align:center;color:#6B6B63">${lot}</td>`;
-      cells += `<td style="padding:11px 8px;text-align:center;color:#6B6B63">${vol?vol+'ml':'—'}</td>
+      if(anyVol) cells += `<td style="padding:11px 8px;text-align:center;color:#6B6B63">${vol?vol+'ml':''}</td>`;
+      cells += `
         <td style="padding:11px 8px;text-align:right;color:#6B6B63">${p?'$'+cvP(p).toLocaleString():'—'}</td>`;
       /* 2026-09-01 複檢：未稅顯示時前標費／LOGO 這兩欄原本印含稅原值，
          但單價與小計都已換算成未稅 → 客戶自己把「單價＋前標費＋LOGO」×瓶數 加不出小計。
@@ -89,7 +93,7 @@ function buildStdDocParts(){
       rows.push(`<tr style="border-bottom:1px solid #EEEDE6">${cells}</tr>`);
     });
     if(extras.length){
-      const colspan = 4 + (showLotDoc?1:0) + (colDed?1:0) + (colLogo?1:0);
+      const colspan = 3 + (anyVol?1:0) + (showLotDoc?1:0) + (colDed?1:0) + (colLogo?1:0);
       extras.forEach(e=>{
         rows.push(`<tr style="border-bottom:1px solid #EEEDE6">
           <td colspan="${colspan}" style="padding:9px 12px;color:#A6824A;font-style:italic;font-size:12px">${escHtml(e.n)}</td>
