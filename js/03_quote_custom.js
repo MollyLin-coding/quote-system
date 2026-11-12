@@ -342,18 +342,27 @@ function previewSecondaryAction(){
 }
 
 /* ---- 自訂模式：檔名 ---- */
+/* 2026-11-12 Molly：客戶_報價單_凱文南坡萬實業社_報價日期（版本 _vN 由 customExportName 接上） */
 function buildCustomExportFilename(){
   const cli = document.getElementById('c-cli').value.trim() || '客戶';
-  const no = document.getElementById('c-no').value.trim() || '單號';
-  return sanitizeFilename(`${cli}_${no}_報價單_凱文南坡萬實業社`);
+  const dt = exportDateStr(document.getElementById('c-dt')?.value);
+  return sanitizeFilename(`${cli}_報價單_凱文南坡萬實業社_${dt}`);
+}
+async function customExportName(){
+  const base = buildCustomExportFilename();
+  const no = document.getElementById('c-no').value.trim();
+  const ver = await nextExportVer('custom|'+(no || base), base, {quote_no:no, client:document.getElementById('c-cli').value.trim()});
+  return sanitizeFilename(base+'_'+ver);
 }
 
 /* ---- 自訂模式：PDF 匯出（瀏覽器列印；每頁固定 A4，與預覽分頁完全一致）---- */
 function exportCustomPDF(){
   const pages = buildCustomPagesHtml();
-  const fname = buildCustomExportFilename();
   const w = window.open('', '_blank');
   if(!w){ toast('瀏覽器擋住了新視窗，請允許本站彈出視窗後再匯出','err'); return; }
+  try{ w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>產生中…</title></head><body style="font-family:sans-serif;padding:40px;color:#555">PDF 產生中，請稍候…</body></html>'); }catch(e){}
+  customExportName().then(fname=>{
+  w.document.open();
   w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${fname}</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -366,16 +375,17 @@ function exportCustomPDF(){
     </head><body>${pages}</body></html>`);
   w.document.close();
   setTimeout(()=>{ w.print(); }, 700);
+  });
 }
 
 /* ---- 自訂模式：Word 匯出（純前端，MS Office HTML 格式，不動 GAS）---- */
 function exportCustomWord(){
   calcCustom();
-  setTimeout(()=>{
+  setTimeout(async ()=>{
     /* Word 用連續排版（Word 會自行分頁），不用固定高度的頁面切割 */
     const P = buildCustomDocParts();
     const pcon = `<div style="font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;color:#22241F">${P.header}${P.client}${P.mkTable(P.thead+'<tbody>'+P.rows.join('')+'</tbody>')}${P.totals}${P.terms}</div>`;
-    const fname = buildCustomExportFilename();
+    const fname = await customExportName();
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
     <head><meta charset="UTF-8"><title>${fname}</title>
     <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->
