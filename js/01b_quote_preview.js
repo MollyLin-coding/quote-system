@@ -47,7 +47,12 @@ function buildStdDocParts(){
       <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">單價${taxTag}</th>`;
     if(colDed) headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">前標費</th>`;
     if(colLogo) headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">LOGO</th>`;
-    headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">瓶數</th>
+    /* 2026-11-12 Molly：品項有禮盒組這類「沒有容量」的東西時，表頭「瓶數」改「數量」，每列數量後面標單位（瓶／盒…）；
+       整張都是酒（每列都有容量）就維持「瓶數」、不標單位。單位看品名：有容量＝瓶；品名含盒＝盒、組＝組、杯＝個。 */
+    const qtyUnit=(row)=>{ const v=gv(row,'vol'), nm=String(gs(row,'name')||'');
+      if(v) return '瓶'; if(/盒/.test(nm)) return '盒'; if(/組/.test(nm)) return '組'; if(/杯/.test(nm)) return '個'; return ''; };
+    const mixedUnit = botItems.some(id=>{ const r=document.getElementById(`r-${id}`); return r && String(gs(r,'name')||'').trim() && !gv(r,'vol'); });
+    headCols += `<th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">${mixedUnit?'數量':'瓶數'}</th>
       <th style="padding:10px 8px;text-align:right;color:#6B6B63;font-weight:600;font-size:10.5px;border-bottom:1.5px solid #22241F">小計</th>`;
     theadStr = `<thead><tr>${headCols}</tr></thead>`;
     let cols = '<col>';
@@ -55,7 +60,7 @@ function buildStdDocParts(){
     cols += '<col style="width:70px"><col style="width:84px">';
     if(colDed) cols += '<col style="width:70px">';
     if(colLogo) cols += '<col style="width:72px">';
-    cols += '<col style="width:58px"><col style="width:104px">';
+    cols += `<col style="width:${mixedUnit?70:58}px"><col style="width:104px">`;
     colgroup = `<colgroup>${cols}</colgroup>`;
     botItems.forEach(id=>{
       const row=document.getElementById(`r-${id}`); if(!row) return;
@@ -78,7 +83,8 @@ function buildStdDocParts(){
       const subCell = _gift
         ? `<span style="text-decoration:line-through;color:#9a968c">$${Math.round(cvA(sub)).toLocaleString()}</span> <span style="color:#A6824A;font-weight:700">贈</span>`
         : `$${Math.round(cvA(sub)).toLocaleString()}`;
-      cells += `<td style="padding:11px 8px;text-align:right;color:#6B6B63">${q}</td>
+      const _u = mixedUnit ? qtyUnit(row) : '';
+      cells += `<td style="padding:11px 8px;text-align:right;color:#6B6B63;white-space:nowrap">${q}${_u?' '+_u:''}</td>
         <td style="padding:11px 8px;text-align:right;font-weight:700;color:#22241F">${subCell}</td>`;
       rows.push(`<tr style="border-bottom:1px solid #EEEDE6">${cells}</tr>`);
     });
