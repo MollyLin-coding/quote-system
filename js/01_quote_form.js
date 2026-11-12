@@ -957,7 +957,7 @@ function depFWhen(){
     const day=Math.min(31, Math.max(1, parseInt(document.getElementById('dep-fday')?.value)||10));
     return `驗收後第 ${mon} 個月 ${day} 號`;
   }
-  return ` ${document.getElementById('dep-fdays')?.value||'30'} 日內`;   // 前面留空白：「應於 30 日內」跟舊條款一字不差
+  return ` ${document.getElementById('dep-fdays')?.value||'7'} 日內`;   // 前面留空白：「應於 30 日內」跟舊條款一字不差
 }
 if(typeof onHook==='function') onHook('afterReset', depFModeSync);
 function calcPay(){
@@ -1294,8 +1294,8 @@ function resetAll(skipConfirm){
     else if(el.type==='number'&&el.id==='taxrate') el.value='5';
     else if(el.type==='number'&&el.id==='p2-mon') el.value='1';
     else if(el.id==='dep-days1') el.value='15';
-    else if(el.id==='dep-days') el.value='7';
-    else if(el.id==='dep-fdays') el.value='30';
+    else if(el.id==='dep-days') el.value='3';    // 2026-11-12 Molly：預設改 到貨後 3 日內驗收
+    else if(el.id==='dep-fdays') el.value='7';   // 2026-11-12 Molly：預設改 驗收後 7 日內付尾款
     else if(el.id==='dep-fmode') el.value='days';   // 2026-09-24 尾款時間回預設「驗收後幾日內」
     else if(el.id==='dep-fmon') el.value='1';
     else if(el.id==='dep-fday') el.value='10';
@@ -1349,7 +1349,7 @@ function getPayTerms(){
     const dep=document.getElementById('dep-amt')?.textContent||'—';
     const bal=document.getElementById('dep-bal')?.textContent||'—';
     const d1=document.getElementById('dep-days1')?.value||'15';   // 製造前幾日內付訂金
-    const vd=document.getElementById('dep-days')?.value||'7';     // 到貨後幾日內驗收
+    const vd=document.getElementById('dep-days')?.value||'3';     // 到貨後幾日內驗收
     const when=depFWhen();   // 尾款時間：「30 日內」或「隔月 10 號」（2026-09-24）
     /* 複檢 2026-08-06 #15：備註與費用名稱都是使用者輸入，條款字串會以 innerHTML 塞進
        預覽/列印，沒跳脫的話輸入「<」開頭的內容會被當標籤吃掉（或被注入）。這裡統一跳脫。
