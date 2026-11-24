@@ -20,11 +20,18 @@ async function loadOwnbrandData(force){
 function ownbrandProductLabel(p){
   return `${p.name}（${p.volume}）｜建議零售 ${money(p.list_price)}`;
 }
+/* 2026-11-24（20261124b）：一次性採購級距改以「每款公升數」計（瓶數×容量÷1000）。
+   後台 ownbrand_tiers.min_qty 仍是 100ml 瓶數（200/500/1000），這裡 ÷10 換成公升（20/50/100）；
+   日後後台若加 min_liters 欄會優先使用。跟通路報價單 15_pricesheet.js 同一套換算。 */
 function buyoutTiers(){
   return (OWNBRAND_TIERS||[]).filter(t=>String(t.channel)==='buyout')
-    .map(t=>({min:parseFloat(t.min_qty)||0, disc:parseFloat(t.discount)||1}))
+    .map(t=>{ const L=parseFloat(t.min_liters); return {min:(L>0?L:(parseFloat(t.min_qty)||0)/10), disc:parseFloat(t.discount)||1}; })
     .sort((a,b)=>a.min-b.min);
 }
+/* 一列的公升數：瓶數×容量(ml)÷1000；容量沒填就當 100ml（等於舊的瓶數規則：200 瓶＝20 公升） */
+function obRowVolMl(row){ const v=parseFloat(String(row?gs(row,'vol'):'').replace(/[^\d.]/g,'')); return v>0?v:100; }
+function obLiters(qty, volMl){ return (Number(qty)||0)*((Number(volMl)>0?Number(volMl):100))/1000; }
+function obFmtL(x){ return String(Math.round(x*100)/100); }
 /* ============================================================
    2026-08-28：一次性採購 量價級距（MOQ）每張單可調
    ・ob-tieredit 三組「門檻＋折數」欄位，預設帶後端標準級距（getOwnbrandTiers channel=buyout）
@@ -79,12 +86,14 @@ function obResetTiers(){
   applyOwnbrandTiers(); calc();
   toast('已還原標準級距','ok');
 }
-/* 依「每款瓶數」回傳折率；未達最低級距回傳 1（建議零售）。
-   2026-08-28 起：一次性採購先看本單級距編輯欄，沒有自訂才用後端標準。 */
-function buyoutDiscountForQty(qty){
+/* 依「每款公升數」回傳折率；未達最低級距回傳 1（建議零售）。
+   2026-08-28 起：一次性採購先看本單級距編輯欄，沒有自訂才用後端標準。
+   2026-11-24：門檻單位改公升，volMl＝該列容量（沒給當 100ml）。 */
+function buyoutDiscountForQty(qty, volMl){
   const ts=((typeof qType!=='undefined'&&qType==='ownbrand')?obCurrentTiers():null)||buyoutTiers();
+  const L=obLiters(qty, volMl);
   let d=1;
-  ts.forEach(t=>{ if(qty>=t.min && t.min>0) d=t.disc; });
+  ts.forEach(t=>{ if(t.min>0 && L+1e-9>=t.min) d=t.disc; });
   return d;
 }
 /* ---- 開放客戶寄倉（一次性採購限定）：勾選＋條款文字，印在報價單上、存 docopts ---- */
@@ -108,7 +117,7 @@ async function loadOwnbrandProducts(){
     const ts=buyoutTiers();
     /* 2026-08-28：一次性採購改用下方「本單可調」級距編輯欄，靜態說明行只留給客製標模式 */
     info.innerHTML=(qType!=='ownbrand' && ts.length)
-      ? 'ℹ️ 量價級距（每款瓶數）：'+ts.filter(t=>t.min>0).map(t=>`${t.min}瓶↑ ${(t.disc*10)}折`).join('　·　')+'　·　未達最低量為建議零售價；皆免運'
+      ? 'ℹ️ 量價級距（每款公升數）：'+ts.filter(t=>t.min>0).map(t=>`${obFmtL(t.min)}公升↑ ${(t.disc*10)}折`).join('　·　')+'　·　未達最低量為建議零售價；皆免運'
       : '';
   }
   if(qType==='ownbrand') obFillTiers(null,false);   // 編輯欄還空著才帶標準級距（載入舊單的自訂值不會被蓋）
@@ -163,7 +172,7 @@ function autoDiscForRow(id, force){
   if(!force && (!auto || !auto.checked)){ recalcOwnRow(id); return; }
   if(!force && di.dataset.manual==='1'){ recalcOwnRow(id); return; }
   const q=gv(row,'qty');
-  const d01=q>0?(qType==='ownlabel'?labelDiscountForQty(q):buyoutDiscountForQty(q)):1;
+  const d01=q>0?(qType==='ownlabel'?labelDiscountForQty(q):buyoutDiscountForQty(q, obRowVolMl(row))):1;
   di.value = d01>=1 ? '' : +(d01*10).toFixed(2);   // ×1（原價）→ 折欄留空；否則填折數（6/5.5/5）
   if(force) delete di.dataset.manual;
   recalcOwnRow(id);
