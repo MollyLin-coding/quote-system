@@ -133,7 +133,8 @@ function psBuildModel(products, tiers, terms, now, opts){
     caseText: vols.map(v=>`${v}ml ${PS_CASE[v]}瓶/箱`).join('・'),
     foq, ship: String(terms.ship_note||'運費買方負擔').replace(/^運費/,'')||'買方負擔',
     exchange: `${exMonths}個月內（外觀完好）`,
-    dateText: ym, fileName:`通路報價單_凱文南坡萬實業社_${ymTag}`+(consignDisc!==stdConsign?`_寄售${psConsignText(consignDisc)}`:''),
+    /* 2026-11-24：PDF 檔名＝「凱文南坡萬實業社 · 通路報價單 2026年11月」；選了非標準寄售折數再加「（寄售7折）」 */
+    dateText: ym, fileName:`凱文南坡萬實業社 · 通路報價單 ${now.getFullYear()}年${now.getMonth()+1}月`+(consignDisc!==stdConsign?`（寄售${psConsignText(consignDisc)}）`:''),
     stdConsign, email: opts.email||PS_DEFAULT_EMAIL,
     uniform: groups.length===1
   };
@@ -256,8 +257,15 @@ function psFit(){
 function psDownload(){
   const fr=document.getElementById('ps-frame');
   if(!PS_MODEL||!fr||!fr.contentWindow){ toast('報價單還沒載入完成','err'); return; }
-  try{ fr.contentWindow.focus(); fr.contentWindow.print(); }
+  /* 另存 PDF 的預設檔名取自頁面標題：列印期間把系統頁標題也換成報價單檔名，印完還原 */
+  const oldTitle=document.title;
+  try{
+    try{ fr.contentDocument.title=PS_MODEL.fileName; }catch(_){}
+    document.title=PS_MODEL.fileName;
+    fr.contentWindow.focus(); fr.contentWindow.print();
+  }
   catch(e){ toast('無法開啟列印：'+(e.message||e),'err'); }
+  finally{ setTimeout(()=>{ document.title=oldTitle; }, 1000); }
 }
 if(typeof window!=='undefined') window.addEventListener('resize',()=>{ if(typeof currentPage!=='undefined' && currentPage==='pricesheet') psFit(); });
 
