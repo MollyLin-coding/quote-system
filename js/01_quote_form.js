@@ -129,7 +129,7 @@ function setType(t){
   { const e=document.getElementById('storage-card'); if(e) e.style.display=(t==='bottle'||isOwnCat)?'block':'none'; }
   { const note=document.getElementById('ob-modenote'); if(note) note.textContent = isOwnLabel
       ? '每列有原價・折數・計價三欄：帶公版原價，某款達 300 瓶↑自動填 6 折（折數可手改），計價＝原價×折自動算；PDF 標〔客製標〕、原廠批號不對客戶顯示、MOQ 300／款提示。'
-      : '每列有原價・折數・計價三欄：帶公版原價，依每款瓶數自動填折數（6/5.5/5＝200/500/1000），折數可手改，計價＝原價×折自動算；原廠批號不對客戶顯示。'; }
+      : '每列有原價・折數・計價三欄：帶公版原價，依每款公升數（瓶數×容量）自動填折數（20／50／100 公升＝6／5.5／5 折；例 100ml 200 瓶、500ml 40 瓶、1000ml 20 瓶＝20 公升），折數可手改，計價＝原價×折自動算；原廠批號不對客戶顯示。'; }
   // OEM 標記欄：只有標準（瓶裝）＝OEM 逐列勾選；公版客製標＝整張單皆客製標（不用逐列勾）；寄售/宴會/一次性採購不顯示
   { const newMark=false; const newOwn=(t==='ownbrand'||t==='ownlabel');   // OEM 逐列勾選欄已移除（Molly 2026-07-24）
     const changed=(newMark!==colMark)||(newOwn!==colOwn); colMark=newMark; colOwn=newOwn;
@@ -341,14 +341,17 @@ function updateObMoqWarn(){
   /* 2026-08-28：一次性採購也提醒「未達本單最低級距門檻」（門檻可在本單調整；僅提示、不擋單） */
   if(qType==='ownbrand'){
     const ts=(typeof obCurrentTiers==='function'?obCurrentTiers():null)||(typeof buyoutTiers==='function'?buyoutTiers().filter(t=>t.min>0):[]);
-    const minTh=ts.length?ts[0].min:0;
+    const minTh=ts.length?ts[0].min:0;   // 2026-11-24：單位＝公升（每款瓶數×容量）
     const warns=[];
     if(minTh>0) botItems.forEach(id=>{
       const row=document.getElementById(`r-${id}`); if(!row) return;
       const q=gv(row,'qty');
-      if(q>0 && q<minTh){
+      const vol=(typeof obRowVolMl==='function')?obRowVolMl(row):100;
+      const L=(typeof obLiters==='function')?obLiters(q,vol):q*vol/1000;
+      if(q>0 && L+1e-9<minTh){
         const nm=gs(row,'name')||'該品項';
-        warns.push(`⚠ ${escHtml(nm)} 未達本單最低量價門檻 ${minTh} 瓶（目前 ${q} 瓶），以原價計 — 提醒用，照樣可出單`);
+        const need=Math.ceil(minTh*1000/vol-1e-9);
+        warns.push(`⚠ ${escHtml(nm)} 未達本單最低量價門檻 ${typeof obFmtL==='function'?obFmtL(minTh):minTh} 公升（${vol}ml 需 ${need} 瓶，目前 ${q} 瓶），以原價計 — 提醒用，照樣可出單`);
       }
     });
     el.innerHTML=warns.map(w=>`<div class="moq-warn">${w}</div>`).join('');
@@ -1229,7 +1232,7 @@ function buildDocOptsItem(){
     // 本單級距跟標準不一樣才存（moqTiers：[[門檻,折數(折)],…]）——僅一次性採購
     if(typeof obCurrentTiers==='function' && typeof obTiersAreDefault==='function' && !obTiersAreDefault()){
       const ct=obCurrentTiers();
-      if(ct){ o.moqTiers=ct.map(t=>[t.min, +(t.disc*10).toFixed(2)]); extra=true; }
+      if(ct){ o.moqTiers=ct.map(t=>[t.min, +(t.disc*10).toFixed(2)]); o.moqUnit='L'; extra=true; }   // 2026-11-24：門檻單位＝公升
     }
   }
   // 開放寄倉：代工／一次性採購／客製標 三種單型（2026-08-28 下午擴充）
@@ -1264,7 +1267,9 @@ function applyDocOpts(q){
   /* 2026-08-28：一次性採購 本單自訂級距＋開放寄倉 還原（其他單型把欄位清回預設，避免殘留到下一張單） */
   if(typeof obFillTiers==='function'){
     if(Array.isArray(o.moqTiers)&&o.moqTiers.length){
-      obFillTiers(o.moqTiers.map(t=>({min:parseFloat(t[0])||0, disc:(parseFloat(t[1])||10)/10})).filter(t=>t.min>0), true);
+      /* 2026-11-24 前存的自訂級距是「瓶數」（沒有 moqUnit）→ ÷10 換成公升（100ml 基準，跟舊規則同結果） */
+      const toL=o.moqUnit==='L'?1:0.1;
+      obFillTiers(o.moqTiers.map(t=>({min:Math.round((parseFloat(t[0])||0)*toL*100)/100, disc:(parseFloat(t[1])||10)/10})).filter(t=>t.min>0), true);
     } else {
       obFillTiers(null,true);   // 沒存自訂＝這張單用標準級距（後端 tiers 還沒載入時會先清空，載入後自動補）
     }
