@@ -170,10 +170,10 @@
               <button class="btn btn-gold" style="white-space:nowrap" onclick="quickAddOwnbrand()">帶入</button>
             </div>
           </div>
-          <div class="fl"><label>量價級距（每款瓶數）</label>
+          <div class="fl"><label>量價級距</label>
             <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--sub);cursor:pointer;padding-top:9px">
               <input type="checkbox" id="ob-autotier" checked onchange="applyOwnbrandTiers()" style="width:15px;height:15px">
-              依每款瓶數自動套折（可再手改單價）
+              依每款數量自動套折（可再手改單價）
             </label>
           </div>
         </div>
@@ -185,25 +185,25 @@
         <div id="ob-tierinfo" class="prodinfo"></div>
         <!-- 2026-08-28：一次性採購 量價級距（MOQ）每張單可調；預設帶標準級距，改了只影響這張單，存檔跟著單走 -->
         <div id="ob-tieredit" style="display:none;margin-top:8px;padding:10px 12px;border:1px solid var(--bd);border-radius:8px">
-          <div style="font-size:12px;color:var(--sub);margin-bottom:7px">量價級距（本單可調）：每款瓶數達門檻自動套該折數；未達最低門檻以原價計。改這裡只影響這張單。</div>
+          <div style="font-size:12px;color:var(--sub);margin-bottom:7px">量價級距（本單可調）：每款公升數（瓶數×容量）達門檻自動套該折數，例 20 公升＝100ml 200 瓶／500ml 40 瓶／1000ml 20 瓶；未達最低門檻以原價計。改這裡只影響這張單。</div>
           <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
             <span style="display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--ink)">
-              <input class="fi" type="number" id="ob-t1-min" min="1" step="1" style="width:76px;padding:5px 7px" oninput="obTierEdited()">瓶↑
+              <input class="fi" type="number" id="ob-t1-min" min="0.1" step="0.1" style="width:76px;padding:5px 7px" oninput="obTierEdited()">公升↑
               <input class="fi" type="number" id="ob-t1-disc" min="0.1" max="10" step="0.1" style="width:58px;padding:5px 7px" oninput="obTierEdited()">折
             </span>
             <span style="display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--ink)">
-              <input class="fi" type="number" id="ob-t2-min" min="1" step="1" style="width:76px;padding:5px 7px" oninput="obTierEdited()">瓶↑
+              <input class="fi" type="number" id="ob-t2-min" min="0.1" step="0.1" style="width:76px;padding:5px 7px" oninput="obTierEdited()">公升↑
               <input class="fi" type="number" id="ob-t2-disc" min="0.1" max="10" step="0.1" style="width:58px;padding:5px 7px" oninput="obTierEdited()">折
             </span>
             <span style="display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--ink)">
-              <input class="fi" type="number" id="ob-t3-min" min="1" step="1" style="width:76px;padding:5px 7px" oninput="obTierEdited()">瓶↑
+              <input class="fi" type="number" id="ob-t3-min" min="0.1" step="0.1" style="width:76px;padding:5px 7px" oninput="obTierEdited()">公升↑
               <input class="fi" type="number" id="ob-t3-disc" min="0.1" max="10" step="0.1" style="width:58px;padding:5px 7px" oninput="obTierEdited()">折
             </span>
             <button type="button" class="rec-act-btn" onclick="obResetTiers()">還原標準級距</button>
           </div>
         </div>
         <div id="ob-moqwarn"></div>
-        <div class="ch-opt" id="ob-modenote" style="margin-top:6px;padding:0">依每款瓶數自動套 6/5.5/5 折（200/500/1000），帶入後每格單價仍可改。</div>
+        <div class="ch-opt" id="ob-modenote" style="margin-top:6px;padding:0">依每款公升數自動套 6/5.5/5 折（20/50/100 公升），帶入後每格單價仍可改。</div>
       </div>
     </div>
 
@@ -1401,7 +1401,7 @@
 </div>
 
 <script src="js/00_utils.js?v=20261021d"></script>
-<script src="js/01_quote_form.js?v=20261112c"></script>
+<script src="js/01_quote_form.js?v=20261124b"></script>
 <script src="js/01b_quote_preview.js?v=20261112b"></script>
 <script src="js/02_core_api.js?v=20261112d"></script>
 <script src="js/03_quote_custom.js?v=20261112d"></script>
@@ -1409,7 +1409,7 @@
 <script src="js/05_orders.js?v=20261021d"></script>
 <script src="js/06_verify_mgmt.js?v=20261021d"></script>
 <script src="js/07_calendar.js?v=20261021d"></script>
-<script src="js/08_ownbrand.js?v=20261021d"></script>
+<script src="js/08_ownbrand.js?v=20261124b"></script>
 <script src="js/09_verify_form.js?v=20261021d"></script>
 <script src="js/10_today.js?v=20261021d"></script>
 <script src="js/11_customers.js?v=20261021d"></script>
