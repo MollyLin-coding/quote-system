@@ -8,9 +8,12 @@
      後端 legacy_prices 存漲價前的牌價，consign_customers.price_basis='old' 標記；
      報價單「公版酒帶入」依客戶名稱自動勾「舊價客戶」，帶入時用舊價當原價（可手動取消）。
    ============================================================ */
-const PS_VOLS=[100,500,700];
-const PS_CASE={100:50, 500:12, 700:12};          // 整箱出貨瓶數（主檔沒有這欄，固定值）
-const PS_FOQ_DEFAULT={100:25, 500:12, 700:12};   // consign_terms 沒填時的寄售 FOQ
+/* 2026-11-24：700ml 改 1000ml（定價 1800）；一次性採購 MOQ 改以公升計（20L 6折／50L 5.5折／100L 5折），
+   各容量起訂瓶數＝公升×1000÷容量，標在價格下方「N 瓶起」。寄售 FOQ 100ml 50／500ml 12／1000ml 12、同容量口味可混搭。 */
+const PS_VOLS=[100,500,1000];
+const PS_CASE={100:50, 500:12, 1000:12};         // 整箱出貨瓶數（主檔沒有這欄，固定值；1000ml 12 瓶/箱 2026-11-24 Molly 確認）
+const PS_FOQ_DEFAULT={100:50, 500:12, 1000:12};  // consign_terms 沒填時的寄售 FOQ
+function psMoqBottles(liters, vol){ return Math.ceil(liters*1000/vol); }
 /* 酒款順序與風味短句（主檔沒有風味欄；新酒款沒寫到的會排在最後、風味留白） */
 const PS_FLAVOR=[
   ['蜜香紅茶荔枝琴酒','花蜜尾韻・輕盈果香'],
@@ -39,7 +42,7 @@ const PS_DISPLAY_NAME={'泰奶烏龍蘭姆酒':'泰奶焙火烏龍蘭姆酒'};
 const PS_BADGES=[
   ['🏨','五星飯店供應商','嘉佩樂・遠東香格里拉'],
   ['🏆','2024 賽事優勝','台灣水果調飲大賽'],
-  ['🍸','誠品書店通路','2026 年 11 月進駐'],
+  ['🍸','誠品書店通路','全台 5 間門市上架'],
   ['🌏','備戰國際賽事','正積極備戰中']
 ];
 /* 圖：書法字用系統既有的 assets/logo.png；人像小圖內嵌（免另外上傳圖檔） */
@@ -104,7 +107,9 @@ function psBuildModel(products, tiers, terms, now, opts){
 
   /* 級距 */
   const buy=(tiers||[]).filter(t=>String(t.channel)==='buyout')
-    .map(t=>({min:psNum(t.min_qty)||0, disc:psNum(t.discount)}))
+    .map(t=>({min:(psNum(t.min_liters)>0?psNum(t.min_liters):(psNum(t.min_qty)||0)/10), disc:psNum(t.discount)}))
+    /* min 單位＝公升。後台 ownbrand_tiers.min_qty 仍是「100ml 瓶數」（報價單表單自動套折在用，不能改），
+       這裡換算：200 瓶×100ml＝20 公升／500→50／1000→100。日後後台若加 min_liters 欄會優先使用。 */
     .filter(t=>t.min>0 && t.disc>0 && t.disc<=1).sort((a,b)=>a.min-b.min);
   const cs=(tiers||[]).find(t=>String(t.channel)==='consign');
   const stdConsign=(cs && psNum(cs.discount)>0 && psNum(cs.discount)<=1)?psNum(cs.discount):0.75;
@@ -113,14 +118,13 @@ function psBuildModel(products, tiers, terms, now, opts){
   groups.forEach(g=>{
     g.rows=vols.map(v=>{
       const lp=g.prices[v];
-      if(lp==null) return {vol:v, lp:null, buy:buy.map(()=>null), consign:null};
-      return {vol:v, lp, buy:buy.map(t=>Math.round(lp*t.disc)), consign:Math.round(lp*consignDisc)};
+      if(lp==null) return {vol:v, lp:null, buy:buy.map(()=>null), buyQty:buy.map(()=>null), consign:null};
+      return {vol:v, lp, buy:buy.map(t=>Math.round(lp*t.disc)), buyQty:buy.map(t=>psMoqBottles(t.min,v)), consign:Math.round(lp*consignDisc)};
     });
   });
 
-  const foq=vols.slice().reverse().map(v=>{
-    const t=psNum(terms['foq_'+v+'ml']); return `${v}ml 每款${t!=null&&t>0?t:PS_FOQ_DEFAULT[v]}瓶`;
-  }).join('／');
+  /* FOQ：每次進貨量，逐容量列出（同容量口味可混搭，另列一行說明） */
+  const foq=vols.map(v=>{ const t=psNum(terms['foq_'+v+'ml']); return `${v}ml ${(t!=null&&t>0)?t:PS_FOQ_DEFAULT[v]}瓶`; }).join('・');
   const exMonths=psNum(terms.exchange_months)||6;
   const ym=`${now.getFullYear()} 年 ${now.getMonth()+1} 月`;
   const ymTag=`${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}`;
@@ -152,13 +156,13 @@ body{font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif;color:#333;-webk
 .sec-title{display:flex;align-items:center;gap:5px;font-size:10pt;font-weight:700;color:var(--green);margin:2mm 0}
 .sec-title::before{content:"";width:3px;height:12px;background:var(--green);display:inline-block}
 table.ptab{width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:1mm}
-table.ptab td{text-align:center;padding:7px 4px}
+table.ptab td{text-align:center;padding:6px 4px}
 .ptab thead .h1 td{color:#fff;font-weight:700;font-size:9pt}
 .ptab thead .cA{background:var(--green-dk)}.ptab thead .cB{background:var(--green)}.ptab thead .cC{background:var(--brown)}
 .ptab thead .h2 td{color:#fff;font-size:6.8pt;padding:2px}
 .ptab .srow td{background:var(--beige);text-align:left;font-weight:700;font-size:8.5pt;color:var(--green);padding:4px 8px}
 .ptab td.sp{font-weight:700;color:#333;background:#fafaf6}.ptab td.rsp{color:#999;background:#fafafa}
-.ptab td.buy{font-weight:700;color:#2a2a2a;background:#eef4ee}.ptab td.cons{font-weight:700;color:var(--brown);background:#f6efe7}
+.ptab td.buy{font-weight:700;color:#2a2a2a;background:#eef4ee}.ptab td.buy .q{display:block;font-weight:400;font-size:6.8pt;color:#6b7a5e;margin-top:1px}.ptab td.cons{font-weight:700;color:var(--brown);background:#f6efe7}
 .ptab tbody td{border-top:1px solid #eee}
 .plist{display:flex;gap:5mm;margin-top:1.5mm}
 .pcol{flex:1;border:1px solid #e6dfce;border-radius:5px;overflow:hidden}
@@ -171,8 +175,8 @@ table.ptab td{text-align:center;padding:7px 4px}
 .panel .phead{color:#fff;font-weight:700;font-size:9pt;padding:3mm 4mm}.panel.left .phead{background:var(--green)}.panel.right .phead{background:var(--brown)}
 .panel .pbody{background:var(--cream)}
 table.summary{width:100%;border-collapse:collapse;table-layout:fixed}
-table.summary td{height:7.4mm;vertical-align:middle;font-size:7.6pt;padding:0 3.5mm;white-space:nowrap}
-table.summary td.lbl{text-align:left;color:var(--gray);width:30%}
+table.summary td{height:6.5mm;vertical-align:middle;font-size:7.6pt;padding:0 3.5mm;white-space:nowrap}
+table.summary td.lbl{text-align:left;color:var(--gray);width:34%}
 table.summary td.val{text-align:right;color:var(--gold);font-weight:700}table.summary td.val.tight{font-size:6.6pt;letter-spacing:-.2px}
 .note{background:var(--cream);border-left:4px solid #c8a951;padding:2.2mm 4mm;margin-top:2.8mm;font-size:7.6pt;color:#555;line-height:1.55}.note b{color:#333}
 .footer{display:flex;justify-content:space-between;margin-top:2.5mm;font-size:7.5pt;color:#999;border-top:1px solid #eee;padding-top:2mm}
@@ -190,21 +194,21 @@ function psSheetHtml(m, base){
   const head=`<thead><tr class="h1"><td class="cA" rowspan="2">規格</td><td class="cB" rowspan="2">建議零售<br>參考</td>`+
     (nB?`<td class="cB" colspan="${nB}">一次性採購（免運）</td>`:'')+
     `<td class="cC" rowspan="2">合作寄售<br><span style="font-size:6.8pt;font-weight:400">${psConsignText(m.consignDisc)}</span></td></tr>`+
-    `<tr class="h2">${m.buy.map(t=>`<td class="cB">MOQ ${psFmt(t.min)}瓶・${psDiscText(t.disc)}</td>`).join('')}</tr></thead>`;
+    `<tr class="h2">${m.buy.map(t=>`<td class="cB">MOQ ${psFmt(t.min)} 公升・${psDiscText(t.disc)}</td>`).join('')}</tr></thead>`;
   const body=m.groups.map(g=>`<tr class="srow"><td colspan="${cols}">▸ ${psEsc(g.label)}</td></tr>`+
-    g.rows.map(r=>`<tr><td class="sp">${r.vol}ml</td><td class="rsp">${r.lp==null?'—':r.lp}</td>`+
-      r.buy.map(b=>`<td class="buy">${b==null?'—':b}</td>`).join('')+
-      `<td class="cons">${r.consign==null?'—':r.consign}</td></tr>`).join('')).join('');
+    g.rows.map(r=>`<tr><td class="sp">${r.vol}ml</td><td class="rsp">${r.lp==null?'—':psFmt(r.lp)}</td>`+
+      r.buy.map((b,i)=>`<td class="buy">${b==null?'—':psFmt(b)+`<span class="q">${psFmt(r.buyQty[i])} 瓶起</span>`}</td>`).join('')+
+      `<td class="cons">${r.consign==null?'—':psFmt(r.consign)}</td></tr>`).join('')).join('');
   const plist=m.series.map(s=>`<div class="pcol${s.key==='premium'?' pm':''}"><div class="ph">${s.label} ABV ${psEsc(s.abv)}・${s.items.length} 款</div><table>`+
     s.items.map(it=>`<tr><td class="nm">${psEsc(it.display)}</td><td class="fl">${psEsc(it.flavor)}</td></tr>`).join('')+'</table></div>').join('');
-  const buyRows=m.buy.map((t,i)=>`<tr><td class="lbl">MOQ 每款${psFmt(t.min)}瓶${i===nB-1?'+':''}</td><td class="val">${psDiscText(t.disc)}・免運</td></tr>`).join('');
+  const buyRows=m.buy.map((t,i)=>`<tr><td class="lbl">MOQ 每款 ${psFmt(t.min)} 公升${i===nB-1?'+':''}</td><td class="val">${psDiscText(t.disc)}・免運</td></tr>`).join('');
   return `<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8"><title>${psEsc(m.fileName)}</title><style>${PS_CSS}</style></head><body><div class="page">
 <div class="top-eyebrow">K E V I N N U M B E R 1 . &nbsp; E S T . &nbsp; 2 0 2 3 . &nbsp; T A I W A N</div>
 <div class="header"><div><div class="brand"><img class="calli" src="${psAsset('logo',base)}"><img class="fig" src="${psAsset('fig',base)}"></div>
 <div class="tagline">台灣茶調酒自有品牌・工藝自製・調製到裝瓶全程自主</div></div>
 <div class="title-box"><div class="t">報　價　單</div><div class="meta">報價日期：${m.dateText}<br>有效期限：90 日<br>統一編號：92719710</div></div></div>
 <div class="badges">${PS_BADGES.map(b=>`<div class="badge"><div class="bi">${b[0]}</div><div class="b1">${b[1]}</div><div class="b2">${b[2]}</div></div>`).join('')}</div>
-<div class="sec-title">價格一覽（NT$，含稅）— ${m.uniform?`全系列 ${m.items.length} 款售價統一`:'同系列各款售價一致'}</div>
+<div class="sec-title">價格一覽（NT$，含稅）— ${m.uniform?`全系列 ${m.items.length} 款售價統一`:'同系列各款售價一致'}<span style="font-weight:400;font-size:7.5pt;color:#888;margin-left:6px">一次性採購 MOQ 以每款公升數計，價格下方為各容量起訂瓶數</span></div>
 <table class="ptab">${colg}${head}<tbody>${body}</tbody></table>
 <div class="sec-title">酒款清單（共 ${m.items.length} 款）</div>
 <div class="plist">${plist}</div>
@@ -212,7 +216,8 @@ function psSheetHtml(m, base){
 <div class="panel left"><div class="phead">一次性採購</div><div class="pbody"><table class="summary">${buyRows}
 <tr><td class="lbl">整箱出貨</td><td class="val tight">${m.caseText}</td></tr></table></div></div>
 <div class="panel right"><div class="phead">合作寄售</div><div class="pbody"><table class="summary">
-<tr><td class="lbl">FOQ</td><td class="val tight">${psEsc(m.foq)}</td></tr>
+<tr><td class="lbl">FOQ（每次進貨）</td><td class="val tight">${psEsc(m.foq)}</td></tr>
+<tr><td class="lbl">口味搭配</td><td class="val">同容量內 10 款可自由混搭</td></tr>
 <tr><td class="lbl">運費</td><td class="val">${psEsc(m.ship)}</td></tr>
 <tr><td class="lbl">結算</td><td class="val">月結（每月5日對帳）</td></tr>
 <tr><td class="lbl">換貨期限</td><td class="val">${psEsc(m.exchange)}</td></tr></table></div></div></div>
@@ -232,7 +237,7 @@ async function loadPriceSheet(force){
     const sel=document.getElementById('ps-consign'); const cd=sel?parseFloat(sel.value):NaN;
     PS_MODEL=psBuildModel(OWNBRAND_PRODUCTS, OWNBRAND_TIERS, CONSIGN_TERMS, new Date(), {consignDisc:cd>0?cd:null, email:psUserEmail(typeof USER_NAME!=='undefined'?USER_NAME:'')});
     if(sel && !sel.dataset.init){ sel.dataset.init='1'; sel.options[0].text=`標準 ${psConsignText(PS_MODEL.stdConsign)}`; }
-    if(!PS_MODEL.items.length) throw new Error('公版酒主檔沒有 100／500／700ml 的價格');
+    if(!PS_MODEL.items.length) throw new Error('公版酒主檔沒有 100／500／1000ml 的價格');
     const fr=document.getElementById('ps-frame');
     const base=location.href.replace(/[#?].*$/,'').replace(/[^/]*$/,'');
     fr.srcdoc=psSheetHtml(PS_MODEL, base);
