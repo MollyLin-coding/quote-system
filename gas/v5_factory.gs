@@ -120,6 +120,20 @@ function handleSaveFactoryMap_(params) {
   rows.forEach(function (r) {
     var kind = String(r.kind || 'client'), qs = String(r.qs_name || '').trim(), fx = String(r.factory_name || '').trim();
     if (!qs) return;
+    // 2026-11-26 Molly：誠品在廠務拆成 6 個門市經銷商，報價系統維持一個客戶 → 寄售客戶可對多家廠務經銷商。
+    //   帶 factory_names（陣列）＝把這位客戶的 consign_client 對照整組換掉：[]＝清掉（回到名字自動配）、['-']＝不連結、['鍵1','鍵2',…]＝多家都對到這位客戶
+    if (kind === 'consign_client' && r.factory_names !== undefined) {
+      var names = r.factory_names;
+      if (typeof names === 'string') { try { names = JSON.parse(names); } catch (e) { names = String(names).split(/[\n,，、]/); } }
+      var seen = {}, list = [];
+      (names || []).forEach(function (n) { n = String(n || '').trim(); if (n && !seen[n]) { seen[n] = 1; list.push(n); } });
+      if (list.indexOf(FXC_NO_LINK) >= 0) list = [FXC_NO_LINK];
+      for (var j = all.length - 1; j >= 0; j--) {
+        if (String(all[j].kind) === 'consign_client' && fxKey_(all[j].qs_name) === fxKey_(qs)) { sh.deleteRow(j + 2); all.splice(j, 1); removed++; }
+      }
+      list.forEach(function (n) { sh.appendRow([kind, qs, n, String(r.note || ''), now]); all.push({ kind: kind, qs_name: qs, factory_name: n }); saved++; });
+      return;
+    }
     var idx = -1;
     for (var i = 0; i < all.length; i++) { if (String(all[i].kind) === kind && fxKey_(all[i].qs_name) === fxKey_(qs)) { idx = i; break; } }
     if (!fx) { if (idx >= 0) { sh.deleteRow(idx + 2); all.splice(idx, 1); removed++; } return; }
@@ -1135,6 +1149,16 @@ function fxcLastSync_() { try { return String(PropertiesService.getScriptPropert
 function fxcTagOf_(note) { var m = String(note || '').match(FXC_TAG_RE); return m ? m[1] : ''; }
 // 名字比對用的鍵：去經銷商前綴、去空白、小寫、參→叁、只留中英數
 function fxcNameKey_(s) { return fxKey_(String(s || '').replace(FX_CLIENT_PREFIX_RE, '')).replace(/參/g, '叁').replace(/[^0-9a-z一-鿿]/g, ''); }
+// 一位客戶對多家廠務經銷商時，備註要標的分店名：「經銷商－誠品生活_南西店」→「南西店」（去經銷商前綴；「客戶名_」或「客戶名」開頭也去掉；剩空白就用整個名字）
+function fxcBranchLabel_(label, customers, cid) {
+  var s = String(label || '').replace(FX_CLIENT_PREFIX_RE, '').trim();
+  var cname = '';
+  (customers || []).some(function (c) { if (String(c.customer_id) === String(cid)) { cname = String(c.name || '').trim(); return true; } return false; });
+  var t = s;
+  if (t.indexOf('_') > 0) t = t.slice(t.indexOf('_') + 1).trim();
+  else if (cname && t.indexOf(cname) === 0 && t.length > cname.length) t = t.slice(cname.length).replace(/^[\s_\-－／/]+/, '').trim();
+  return t || s;
+}
 function fxcDays_(a, b) { var ta = Date.parse(String(a).slice(0, 10) + 'T00:00:00Z'), tb = Date.parse(String(b).slice(0, 10) + 'T00:00:00Z'); if (isNaN(ta) || isNaN(tb)) return 9999; return Math.round((tb - ta) / 86400000); }
 // 廠務「建立時間」（yyyy-MM-dd HH:mm:ss，台北）→ consign_ledger.created_at 的格式（yyyy-MM-ddTHH:mm:ss+08:00）
 function fxcIso_(s) {
@@ -1172,7 +1196,7 @@ function fxcDealerMap_(map, dealers, customers) {
     if (idList.length !== 1) { if (idList.length > 1) ambiguous[key] = '名字同時像 ' + idList.map(function (i) { return ids[i]; }).join('／') + '，請到客戶設定手動指定'; return; }
     var id = idList[0];
     if (idCount[id] > 1) { ambiguous[key] = '客戶代碼 ' + id + ' 在 consign_customers 重複了（' + ids[id] + '），先把代碼改成不重複再同步'; return; }
-    if (usedId[id]) { ambiguous[key] = '客戶「' + ids[id] + '」已對到廠務「' + usedId[id] + '」'; return; }
+    if (usedId[id]) { ambiguous[key] = '客戶「' + ids[id] + '」已對到廠務「' + usedId[id] + '」；如果這也是同一家（分店／物流中心），到客戶設定把它一起勾進去'; return; }
     out[key] = id; usedId[id] = key;
     auto.push({ kind: 'consign_client', qs_name: id, factory_name: key, note: '自動配對：' + ids[id] });
   });
@@ -1212,6 +1236,10 @@ function handleFactoryConsignSync_(params) {
       var customers = v2ReadAll_(SHEET_CONSIGN_CUSTOMERS, CONSIGN_CUSTOMERS_HEADERS);
       var dm = fxcDealerMap_(fxMapAll_(), dealers, customers);
       var map = fxMapAll_();   // 自動配對可能剛寫了新列，重讀
+      // 2026-11-26：一位客戶對多家廠務經銷商（誠品 6 個門市）→ 進帳的備註標門市，明細才看得出是哪一店
+      var dealerCount = {}; Object.keys(dm.map).forEach(function (k) { var c0 = String(dm.map[k]); dealerCount[c0] = (dealerCount[c0] || 0) + 1; });
+      var dealerLabel = {}; dealers.forEach(function (d) { dealerLabel[String(d.key || '')] = String(d.label || d.key || ''); });
+      var moneyAdj = [];   // 廠務「異動」＝金額調整（運費扣抵、代墊…）：不是庫存，不進 consign_ledger；列在摘要給 Molly 月結時手動加減
       var products = {}; v2ReadAll_(SHEET_OWNBRAND_PRODUCTS, OWNBRAND_PRODUCTS_HEADERS).forEach(function (p) { products[String(p.sku_id)] = p; });
       var sh = v2Sheet_(SHEET_CONSIGN_LEDGER, CONSIGN_LEDGER_HEADERS);
       var ledger = v2ReadAll_(SHEET_CONSIGN_LEDGER, CONSIGN_LEDGER_HEADERS);   // 陣列位置＝表列順序（列號＝i+2）
@@ -1221,10 +1249,17 @@ function handleFactoryConsignSync_(params) {
       rows.sort(function (a, b) { return String(a.createdAt || '').localeCompare(String(b.createdAt || '')) || String(a.id || '').localeCompare(String(b.id || '')); });
       rows.forEach(function (fr) {
         var id = String(fr.id || '').trim(); if (!id || have[id]) return;
-        var type = FXC_TYPE_MAP[String(fr.type || '').trim()];
-        if (!type) { skipped.push(id + '：不認得的類型「' + fr.type + '」'); return; }
         var dealerKey = String(fr.dealer || '').trim();
         var cid = dm.map[dealerKey];
+        var typeRaw = String(fr.type || '').trim();
+        if (typeRaw === '異動') {
+          var aq = Number(fr.qty) || 0, ap = Number(fr.price) || 0;
+          moneyAdj.push({ id: id, date: String(fr.date || '').slice(0, 10), dealer: dealerLabel[dealerKey] || dealerKey.replace(FX_CLIENT_PREFIX_RE, ''), customer_id: cid ? String(cid) : '',
+            name: String(fr.product || ''), qty: aq, price: ap, amount: Math.round(aq * ap), note: String(fr.note || ''), operator: String(fr.operator || '') });
+          return;
+        }
+        var type = FXC_TYPE_MAP[typeRaw];
+        if (!type) { skipped.push(id + '：不認得的類型「' + fr.type + '」'); return; }
         if (!cid) {
           if (dm.blockedDealers && dm.blockedDealers[dealerKey]) ignoredDealers[dealerKey] = (ignoredDealers[dealerKey] || 0) + 1;
           else unmappedDealers[dealerKey] = (unmappedDealers[dealerKey] || 0) + 1;
@@ -1238,7 +1273,8 @@ function handleFactoryConsignSync_(params) {
         var date = String(fr.date || '').slice(0, 10);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { skipped.push(id + '：日期格式不對「' + fr.date + '」'); return; }
         var tag = '[FXC:' + id + (fr.orderNo ? '|' + String(fr.orderNo) + '#' + String(fr.seq || '') : '') + ']';
-        var noteBody = '廠務' + (fr.orderNo ? ' ' + fr.orderNo + (fr.seq ? ' 第' + fr.seq + '次' : '') : '') + (fr.operator ? '／' + fr.operator : '') + (fr.note ? '：' + fr.note : '');
+        var branch = (dealerCount[String(cid)] > 1) ? fxcBranchLabel_(dealerLabel[dealerKey] || dealerKey, customers, cid) : '';
+        var noteBody = (branch ? '【' + branch + '】' : '') + '廠務' + (fr.orderNo ? ' ' + fr.orderNo + (fr.seq ? ' 第' + fr.seq + '次' : '') : '') + (fr.operator ? '／' + fr.operator : '') + (fr.note ? '：' + fr.note : '');
         // 過渡期保險（複檢 0923 收緊）：只拿「上線前」的手動列來抵；鋪貨容許 ±3 天、其他類型要同一天；
         //   挑日期最接近的一筆，同樣接近的有兩筆以上就不猜（照常新增，列進 possibleDup 讓 Molly 看）
         var best = -1, bestDiff = 99, tie = false, maxDiff = (type === 'in') ? 3 : 0;   // tie＝有另一筆「一樣接近、但不同天」的手動列
@@ -1292,7 +1328,8 @@ function handleFactoryConsignSync_(params) {
     } finally { lock.releaseLock(); }
     var now = tpeNow_();
     var summary = { at: now, inserted: inserted.length, linked: linked.length, unmappedDealers: unmappedDealers, unmappedProducts: unmappedProducts, ignoredDealers: ignoredDealers,
-      ambiguous: dm.ambiguous, possibleDup: possibleDup.slice(0, 20), priceFallback: priceFallback.slice(0, 20), priceDiff: priceDiff.slice(0, 20), skipped: skipped.slice(0, 10) };
+      ambiguous: dm.ambiguous, possibleDup: possibleDup.slice(0, 20), priceFallback: priceFallback.slice(0, 20), priceDiff: priceDiff.slice(0, 20), skipped: skipped.slice(0, 10),
+      moneyAdj: moneyAdj.slice(0, 40) };
     try {
       var pr = PropertiesService.getScriptProperties();
       pr.setProperty('FACTORY_CONSIGN_LAST_SYNC', now);
@@ -1303,7 +1340,7 @@ function handleFactoryConsignSync_(params) {
     }
     return { ok: true, inserted: inserted, linked: linked, skipped: skipped, unmappedDealers: unmappedDealers, unmappedProducts: unmappedProducts, ignoredDealers: ignoredDealers,
       ambiguous: dm.ambiguous, autoMapped: dm.auto, dealerMap: dm.map, dealers: dealers, possibleDup: possibleDup, priceFallback: priceFallback, priceDiff: priceDiff,
-      since: since, goLive: goLive, at: now, factoryRows: rows.length };
+      moneyAdj: moneyAdj, since: since, goLive: goLive, at: now, factoryRows: rows.length };
   } finally { fxSyncEnd_('FXC_SYNC_BUSY'); }
 }
 // action: getFactoryConsignDealers {} → 廠務經銷商清單＋目前對照（給寄售頁客戶設定的下拉；只讀，不同步）
