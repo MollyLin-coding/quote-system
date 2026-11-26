@@ -216,6 +216,69 @@ function factory(body) {
     check('M3f 分店名：「誠品生活_南西店」→南西店、「誠品生活」→誠品生活、「誠品生活 南西」→南西', c.fxcBranchLabel_('誠品生活_南西店', [{ customer_id: 6, name: '誠品生活' }], 6) === '南西店' && c.fxcBranchLabel_('誠品生活', [{ customer_id: 6, name: '誠品生活' }], 6) === '誠品生活' && c.fxcBranchLabel_('經銷商－誠品生活 南西', [{ customer_id: 6, name: '誠品生活' }], 6) === '南西');
   }
 
+  // ── N 2026-11-26「待出貨也能先開驗收單」：getFactoryConsignPending（廠務還沒出完貨的寄售鋪貨單）──────────
+  {
+    const calls = (ctx0, a) => ctx0.__calls.filter(x => x.action === a);
+    const SHIP = '自有酒款出貨訂單(有金流)';
+    const ORDERS_N = [
+      // 誠品平鎮：寄售、待製作、還沒出貨 → 要回（酒名去 V2、對到公版酒）
+      { orderNo: '261123-001', client: '經銷商－誠品生活_平鎮物流中心', orderType: SHIP, status: '待製作', total: 0, depositStatus: '寄售', deliveryDate: '2026-11-27', actualDeliveryDate: '2026-11-27', shipBatches: 0, pm: 'Molly', lot: '',
+        items: [{ product: '茉莉香片脆梅琴酒V2', volume: '100ml', qty: 10, shipped: 0 }, { product: '泰奶烏龍蘭姆酒', volume: '100ml', qty: 11, shipped: 0 }, { product: '沒有在公版酒主檔的酒V2', volume: '100ml', qty: 3, shipped: 0 }] },
+      // 島羽：分批出貨、出了一趟 → 只回還沒出的瓶數、nextSeq 2；全部出完的那一款不回
+      { orderNo: '261120-002', client: '經銷商－島羽', orderType: SHIP, status: '製作中', total: 0, depositStatus: '寄售', deliveryDate: '2026-11-25', shipBatches: 1, pm: 'Vic', lot: 'Lot 7',
+        items: [{ product: '蜜香紅茶荔枝琴酒V2', volume: '100ml', qty: 20, shipped: 12 }, { product: '包種茶青梅甜酒V2', volume: '100ml', qty: 5, shipped: 5 }] },
+      // 已出貨的寄售單 → 不回
+      { orderNo: '261119-004', client: '經銷商－誠品生活_平鎮物流中心', orderType: SHIP, status: '已出貨', total: 0, depositStatus: '寄售', deliveryDate: '2026-11-23', shipBatches: 1, items: [{ product: '泰奶烏龍蘭姆酒', volume: '100ml', qty: 6, shipped: 6 }] },
+      // 有金流的一般出貨單（買斷）→ 不是寄售、不回
+      { orderNo: '261118-001', client: '散客-葉雨昕', orderType: SHIP, status: '待製作', total: 1000, depositStatus: '已收訂', deliveryDate: '2026-11-24', shipBatches: 0, items: [{ product: '泰奶烏龍蘭姆酒', volume: '100ml', qty: 4, shipped: 0 }] },
+      // 月結認列單 → 不是鋪貨、不回
+      { orderNo: '261101-009', client: '經銷商－島羽', orderType: '經銷商寄售月結認列單', status: '待製作', total: 3000, depositStatus: '寄售', deliveryDate: '2026-11-01', items: [{ product: '泰奶烏龍蘭姆酒', volume: '100ml', qty: 4, shipped: 0 }] },
+      // 還沒對到客戶的經銷商 → 不回、列進 unmapped
+      { orderNo: '261122-003', client: '經銷商－神秘店', orderType: SHIP, status: '待製作', total: 0, depositStatus: '寄售', deliveryDate: '2026-11-28', shipBatches: 0, items: [{ product: '泰奶烏龍蘭姆酒', volume: '100ml', qty: 2, shipped: 0 }] },
+      // 「不連結廠務」的客戶 → 不回（也算沒對到）
+      { orderNo: '261122-004', client: '經銷商－日光貳參', orderType: SHIP, status: '待製作', total: 0, depositStatus: '寄售', deliveryDate: '2026-11-28', shipBatches: 0, items: [{ product: '泰奶烏龍蘭姆酒', volume: '100ml', qty: 2, shipped: 0 }] },
+    ];
+    const SHIPS_N = [{ orderNo: '261120-002', seq: 1, product: '蜜香紅茶荔枝琴酒V2', qty: 12 }, { orderNo: '261120-002', seq: 3, product: '包種茶青梅甜酒V2', qty: 5 }];
+    let lastBody = null;
+    const factoryN = body => {
+      if (body.key !== 'k'.repeat(24)) return { ok: false, error: 'key' };
+      if (body.action === 'extGetOrders') { lastBody = body; return { ok: true, orders: ORDERS_N, shipments: SHIPS_N }; }
+      return { ok: false, error: 'unknown ' + body.action };
+    };
+    const MAP_N = [['consign_client', '6', '經銷商－誠品生活', '', ''], ['consign_client', '6', '經銷商－誠品生活_平鎮物流中心', '', ''], ['consign_client', '4', '經銷商－島羽', '', ''], ['consign_client', '1', '-', '', '']];
+    const SEED_N = { consign_customers: CUSTOMERS, ownbrand_products: PRODUCTS, consign_ledger: [], factory_map: MAP_N };
+    const c = mkCtx({ factory: factoryN, seed: SEED_N });
+    const r = c.handleGetFactoryConsignPending_({});
+    // 沒寫任何表：碰過的每一張表，內容都跟種子資料一模一樣（沒種的表＝空的）
+    const untouched = Object.keys(c.__sheets).every(n => JSON.stringify(c.__sheets[n].rows) === JSON.stringify(SEED_N[n] || []));
+    const by = no => (r.orders || []).find(o => o.orderNo === no);
+    check('N1 只回「寄售、還沒出完貨、對得到客戶」的鋪貨單（2 張），照預計出貨日排', r.ok && r.configured && r.orders.length === 2 && r.orders[0].orderNo === '261120-002' && r.orders[1].orderNo === '261123-001');
+    const p1 = by('261123-001') || { items: [] };
+    check('N2 誠品平鎮那張歸到客戶 6、帶經銷商鍵／預計出貨日／nextSeq 1', p1.customer_id === '6' && p1.dealer === '經銷商－誠品生活_平鎮物流中心' && p1.deliveryDate === '2026-11-27' && p1.nextSeq === 1 && p1.status === '待製作' && p1.pm === 'Molly');
+    check('N3 品項：酒名去 V2 對到公版酒（sku_id）、公版酒主檔沒有的酒照樣列（sku 空、名字去 V2）', p1.items.length === 3 && p1.items[0].sku_id === '茉莉香片脆梅琴酒|100ml' && p1.items[0].name === '茉莉香片脆梅琴酒' && p1.items[0].vol === '100ml' && p1.items[0].qty === 10 && p1.items[2].sku_id === '' && p1.items[2].name === '沒有在公版酒主檔的酒' && p1.items[2].qty === 3);
+    const p2 = by('261120-002') || { items: [] };
+    check('N4 分批出貨：只回還沒出的瓶數（20−12＝8）、出完的那款不回、nextSeq＝出貨紀錄最大批次＋1（3→4）、Lot 取數字', p2.customer_id === '4' && p2.items.length === 1 && p2.items[0].qty === 8 && p2.items[0].ordered === 20 && p2.items[0].shipped === 12 && p2.nextSeq === 4 && p2.lot === '7');
+    check('N5 已出貨／買斷單／月結認列單不回；沒對到客戶與「不連結」的經銷商列進 unmapped', !by('261119-004') && !by('261118-001') && !by('261101-009') && !by('261122-003') && r.unmapped['經銷商－神秘店'] === 1 && r.unmapped['經銷商－日光貳參'] === 1);
+    check('N6 只打一次 extGetOrders（帶 types 只要出貨單）、不寫任何表', calls(c, 'extGetOrders').length === 1 && c.__calls.length === 1 && /自有酒款出貨訂單/.test(String(lastBody.types)) && untouched);
+    const c0 = mkCtx({ factory: factoryN, seed: {} });
+    vm.runInContext('fxConfigured_ = function () { return false; };', c0);
+    const r0 = c0.handleGetFactoryConsignPending_({});
+    check('N7 廠務沒設定 → configured false、不打廠務', r0.ok && r0.configured === false && r0.orders.length === 0 && calls(c0, 'extGetOrders').length === 0);
+    const cErr = mkCtx({ factory: () => ({ ok: false, error: '廠務掛了' }), seed: {} });
+    const rErr = cErr.handleGetFactoryConsignPending_({});
+    check('N8 廠務讀取失敗 → ok false、講原因', rErr.ok === false && /廠務掛了/.test(rErr.error));
+    // 日期格式：一律整理成 yyyy-MM-dd（前端要跟今天比、塞進日期欄）；認不得的回空字串、排最後
+    const ORDERS_D = [
+      { orderNo: '261124-002', client: '經銷商－島羽', orderType: SHIP, status: '待製作', total: 0, depositStatus: '寄售', deliveryDate: '待定', actualDeliveryDate: '', shipBatches: 0, items: [{ product: '泰奶烏龍蘭姆酒', volume: '100ml', qty: 2, shipped: 0 }] },
+      { orderNo: '261124-001', client: '經銷商－島羽', orderType: SHIP, status: '待製作', total: 0, depositStatus: '寄售', deliveryDate: '2026/11/9', actualDeliveryDate: 'Fri Nov 27 2026 00:00:00 GMT+0800 (台北標準時間)', shipBatches: 0, items: [{ product: '泰奶烏龍蘭姆酒', volume: '100ml', qty: 2, shipped: 0 }] },
+      { orderNo: '261124-003', client: '經銷商－島羽', orderType: SHIP, status: '待製作', total: 0, depositStatus: '寄售', deliveryDate: '2026-11-30T16:00:00.000Z', actualDeliveryDate: '2026-12-02 09:30',  shipBatches: 0, items: [{ product: '泰奶烏龍蘭姆酒', volume: '100ml', qty: 2, shipped: 0 }] },
+    ];
+    const cD = mkCtx({ factory: body => (body.action === 'extGetOrders' ? { ok: true, orders: ORDERS_D, shipments: [] } : { ok: false, error: 'x' }), seed: SEED_N });
+    const rD = cD.handleGetFactoryConsignPending_({});
+    const dOf = no => { const o = (rD.orders || []).find(x => x.orderNo === no) || {}; return o.deliveryDate + '|' + o.actualDeliveryDate; };
+    check('N9 日期整理成 yyyy-MM-dd（2026/11/9、Date 字串、UTC 時間戳換算成台北日期、日期＋時間）；認不得的回空字串、排最後', rD.ok && rD.orders.length === 3 && dOf('261124-001') === '2026-11-09|2026-11-27' && dOf('261124-003') === '2026-12-01|2026-12-02' && dOf('261124-002') === '|' && rD.orders.map(o => o.orderNo).join(',') === '261124-001,261124-003,261124-002');
+  }
+
   results.forEach(r => console.log(r[0], r[1]));
   const fails = results.filter(r => r[0] === 'FAIL').length;
   console.log(`\n${results.length - fails}/${results.length} PASS${fails ? ' — ' + fails + ' FAIL' : ''}`);
