@@ -3,6 +3,8 @@
    ============================================================ */
 let OWNBRAND_PRODUCTS=null, OWNBRAND_TIERS=null, CONSIGN_TERMS=null;
 let OWNBRAND_LEGACY=[];   // 2026-10-12：舊價客戶名稱（consign_customers.price_basis='old'，後端 getOwnbrandTiers 帶回）
+/* 2026-11-26 Molly：寄售客戶價格會有兩種的原因——第一批的客戶，酒款價格依酒精濃度有價格之分；後來才改成均一價 250。
+   （所以第一批客戶 price_basis='old' 走 legacy_prices；廠務 APP 的牌價表也還是第一批那套分級價） */
 let OWNBRAND_USER_EMAILS={};   // 2026-10-12b：{ 帳號名稱: email }，後端 users 分頁 email 欄＋OWNER_EMAIL
 
 async function loadOwnbrandData(force){
@@ -203,6 +205,8 @@ async function initConsignPage(force){
     csFxLoad(force).catch(()=>{})  // 2026-09-23：廠務經銷商對照（走讀取快取；廠務沒設定就靜靜略過）
   ]);
   csFxRenderStatus();
+  if(CS_FX.configured) csFxLoadPending(force);   // 2026-11-26 廠務待出貨的鋪貨單：背景抓（要等廠務回，約 3～6 秒），不擋畫面
+  else csFxRenderPending();
 }
 /* ============================================================
    2026-09-23 寄售 × 廠務（Molly 決議「以廠務為主，報價系統自動跟」）
@@ -327,12 +331,127 @@ async function csFxSyncNow(btn){
     await csFxLoad(true).catch(()=>{});   // 自動配對可能寫了新對照
     CS_FX.lastResult=r;
     csFxRenderStatus();
+    csFxLoadPending(true);   // 2026-11-26 待出貨的鋪貨單也重抓（剛出貨的那張會從待出貨消失、變成明細裡的一批）
     /* 寫入 API 會清掉讀取快取（公版酒清單也被清成 null）→ 先把公版酒抓回來再重畫，不然明細的酒名會變成 sku 代碼 */
     await loadOwnbrandData(true).catch(()=>{});
     if(CS_CUR){ csClearMonthly(); loadConsignInventory(); loadConsignLedger(); }
   }catch(e){ toast(e.message||'同步失敗','err'); }
   finally{ if(btn) btnBusy(btn, false); }
 }
+/* ============================================================
+   2026-11-26 Molly：「待出貨也能先開驗收單」
+   廠務還沒出貨的寄售鋪貨單（訂金狀態＝寄售、金額 0）不會變報價單，寄售帳也要等廠務按「出貨」才有進貨異動。
+   客戶明細多一張「廠務待出貨」卡：預計出貨日／廠務單號／門市／各款數量，出貨前就能先開隨貨的驗收單。
+     ・只讀廠務（getFactoryConsignPending），不寫寄售帳、不動庫存；沒有待出貨就整張卡不顯示
+     ・先開的驗收單單號＝csFxPendingVfNo（同一張廠務單同一趟永遠同一號）
+       → 出貨進帳後，明細那一批用同一個號對回這張留底（loadConsignLedger 的 b.alt＋csLedAssignVf 的 altOf），鈕直接是「查看驗收單」
+   ============================================================ */
+let CS_FX_PENDING={ loaded:false, orders:[], at:'', err:'' };
+/* 單號：CS-<客戶代碼>-<20YYMMDD><9><廠務單流水 3 碼><第幾趟 2 碼>（例：客戶 6、廠務單 261123-001 第 1 趟 → CS-6-20261123900101）
+   ・格式跟其他寄售驗收單一樣（14 碼數字、含日期 → QR 驗證碼照常要）
+   ・時間那段第一碼固定 9（不可能是真的時間）：不會跟「用建檔時間推的單號」撞號，也不會被「同一天 15 分鐘內」的舊留底配對認走
+   ・廠務單號不是 YYMMDD-流水號的格式 → 回空字串（不給先開，免得編出對不回來的號） */
+function csFxPendingVfNo(cid, orderNo, seq){
+  const m=String(orderNo||'').trim().match(/^(\d{6})-(\d{1,3})$/); if(!m) return '';
+  const q=Math.max(1, Math.min(99, parseInt(seq,10)||1));
+  return 'CS-'+String(cid||'').replace(/[^A-Za-z0-9]/g,'')+'-20'+m[1]+'9'+m[2].padStart(3,'0')+String(q).padStart(2,'0');
+}
+/* 這位客戶對到多家廠務經銷商時的門市名（跟後端 fxcBranchLabel_ 同一套）：「誠品生活_南西店（B085）」→「南西店（B085）」；只對一家＝不用標 → '' */
+function csFxBranchOf(cid, dealerKey){
+  if(csFxDealersOf(cid).length<=1) return '';
+  const s=String(csFxDealerLabel(dealerKey)||'').replace(/^(OEM-|全客製-|換前標-|經銷商[－-]|經銷商)/,'').trim();
+  const c=(CS_CUSTOMERS||[]).find(x=>String(x.customer_id)===String(cid)); const cn=String((c&&c.name)||'').trim();
+  let t=s;
+  if(t.indexOf('_')>0) t=t.slice(t.indexOf('_')+1).trim();
+  else if(cn&&t.indexOf(cn)===0&&t.length>cn.length) t=t.slice(cn.length).replace(/^[\s_\-－／/]+/,'').trim();
+  return t||s;
+}
+/* 明細那一批（廠務同步進來的）備註開頭的【門市】→ 補開驗收單時帶進備註；沒有就 '' */
+function csFxBranchFromNote(note){ const m=csFxNoteBody(note).match(/^【([^】]+)】/); return m?m[1]:''; }
+async function csFxLoadPending(force){
+  if(!AUTH_TOKEN) return;
+  try{
+    const d=await readCall({action:'getFactoryConsignPending', token:AUTH_TOKEN}, force);
+    if(!d||!d.ok) throw new Error((d&&d.error)||'讀取廠務待出貨失敗');
+    CS_FX_PENDING={ loaded:true, orders:d.orders||[], at:d.at||'', err:'' };
+  }catch(e){ CS_FX_PENDING={ loaded:true, orders:[], at:'', err:String((e&&e.message)||e||'讀取廠務待出貨失敗') }; }
+  csFxRenderPending();
+}
+function csFxPendingFor(cid){ return (CS_FX_PENDING.orders||[]).filter(o=>String(o.customer_id)===String(cid)); }
+/* 這張待出貨單「預計哪天出」：還沒出過 → 廠務的實際出貨日（同仁有先填）不然表訂出貨日；
+   已經出過幾趟 → 一律看表訂出貨日（那時的實際出貨日是「上一趟」的日期，不是下一趟） */
+function csFxPendingDate(o){
+  const seq=parseInt(o&&o.nextSeq,10)||1;
+  return String((seq>1?((o&&o.deliveryDate)||''):((o&&o.actualDeliveryDate)||(o&&o.deliveryDate)||''))||'').slice(0,10);
+}
+function csFxRenderPending(){
+  const card=document.getElementById('cs-fxpending-card'), body=document.getElementById('cs-fxpending-body'); if(!card||!body) return;
+  const list=CS_CUR?csFxPendingFor(CS_CUR):[];
+  const linked=!!(CS_CUR&&csFxDealersOf(CS_CUR).length);
+  const loading=!CS_FX_PENDING.loaded;   // 第一次還在等廠務回（約 5 秒）
+  // 沒選客戶／廠務沒設定／這位客戶沒有待出貨 → 整張卡不顯示；「還在問廠務」「讀取失敗」只對有連結廠務的客戶講一聲
+  if(!CS_CUR||!CS_FX.configured||(!list.length&&!(linked&&(loading||CS_FX_PENDING.err)))){ card.style.display='none'; body.innerHTML=''; return; }
+  card.style.display='';
+  if(!list.length&&loading){ body.innerHTML='<tr><td colspan="6" class="rec-empty">正在問廠務有沒有還沒出貨的鋪貨單…</td></tr>'; return; }
+  if(!list.length){ body.innerHTML='<tr><td colspan="6" class="rec-empty">讀不到廠務的待出貨清單：'+escHtml(CS_FX_PENDING.err)+'（按上面的「同步廠務」再試一次）</td></tr>'; return; }
+  body.innerHTML=list.map((o,i)=>{
+    const branch=csFxBranchOf(CS_CUR, o.dealer);
+    const total=(o.items||[]).reduce((a,it)=>a+(parseFloat(it.qty)||0),0);
+    const partial=(o.items||[]).some(it=>(parseFloat(it.shipped)||0)>0)||(parseInt(o.nextSeq,10)||1)>1;
+    const itemsH=(o.items||[]).map(it=>escHtml(it.name||'')+(it.vol?'（'+escHtml(it.vol)+'）':'')+' ×'+(parseFloat(it.qty)||0)).join('、');
+    const no=csFxPendingVfNo(CS_CUR, o.orderNo, o.nextSeq);
+    const act=no?`<button class="rec-act-btn primary cs-pvfbtn" data-i="${i}" data-no="${escAttr(no)}" onclick="csFxPendingVerify(this.dataset.i)">先開驗收單</button>`
+                :'<span style="font-size:11px;color:var(--hint)">單號格式不認得，出貨後再開</span>';
+    const d0=csFxPendingDate(o), late=!!d0&&d0<todayStr();
+    return `<tr><td class="mc-main" style="white-space:nowrap">${escHtml(d0||'未排')}${late?'<div style="font-size:10.5px;color:#B4472E;font-weight:400">已過預計日</div>':''}</td>
+      <td data-l="廠務單號"><span style="white-space:nowrap">${escHtml(o.orderNo||'')}</span><div style="font-size:10.5px;color:var(--hint)">${escHtml(o.status||'')}${partial?'・第 '+(parseInt(o.nextSeq,10)||1)+' 趟（只列還沒出的）':''}</div></td>
+      <td data-l="門市">${escHtml(branch||'—')}</td>
+      <td data-l="品項" style="font-size:11.5px;line-height:1.6;white-space:normal">${itemsH}</td>
+      <td data-l="瓶數" style="text-align:right">${total.toLocaleString()}</td>
+      <td class="rec-actions" data-l="操作">${act}</td></tr>`;
+  }).join('');
+  csFxPendingMarkVerified();
+}
+/* 哪幾張已經先開過了：有留底的那顆改成「查看驗收單」 */
+function csFxPendingMarkVerified(){
+  if(!AUTH_TOKEN) return;
+  const btns=Array.from(document.querySelectorAll('#cs-fxpending-body .cs-pvfbtn')); if(!btns.length) return;
+  readCall({action:'listVerifyForms', token:AUTH_TOKEN, filters:{}}).then(d=>{
+    const has={}; ((d&&d.records)||[]).forEach(f=>{ has[String(f.no||'').trim()]=1; });
+    btns.forEach(b=>{ const h=!!has[b.dataset.no]; b.textContent=h?'查看驗收單':'先開驗收單'; b.classList.toggle('primary', !h); });
+  }).catch(()=>{});
+}
+/* ⚠ 值一律走 data-*＋this.dataset（同 csReopenVerify） */
+async function csFxPendingVerify(i){
+  const o=csFxPendingFor(CS_CUR)[+i];
+  if(!o||!(o.items&&o.items.length)){ toast('待出貨清單已經重新載入過，請重選一次客戶再試','err'); return; }
+  const c=curConsignCustomer();
+  const no=csFxPendingVfNo(CS_CUR, o.orderNo, o.nextSeq);
+  if(!no){ toast('這張廠務單的單號格式不認得，沒辦法先開驗收單；等廠務出貨、同步進來後再從明細開','err'); return; }
+  // 驗收單日期預設：預計出貨日還沒到 → 用它；已經過了或沒排 → 今天（貨還沒出，不會是過去的日期；視窗裡可以再改）
+  const d0=csFxPendingDate(o), today=todayStr();
+  let editId=null, shipDate=(d0&&d0>=today)?d0:today, handler=o.pm||'', note=csFxBranchOf(CS_CUR, o.dealer);
+  let rows=(o.items||[]).map(it=>({ name:it.name||'', vol:it.vol||'', qty:parseFloat(it.qty)||0 }));
+  try{
+    const d=await readCall({action:'listVerifyForms', token:AUTH_TOKEN, filters:{}});
+    const f=((d&&d.records)||[]).find(x=>String(x.no||'').trim()===no);
+    if(f){
+      editId=String(f.id);
+      const items=Array.isArray(f.items)?f.items:parseJsonSafe(f.items_json,[]);
+      if(Array.isArray(items)&&items.length){
+        rows=items.map(it=>({ name:it.name||'', vol:it.vol||'',
+          qty:(it.thisShip!=null&&it.thisShip!=='')?it.thisShip:(it.ordered||0),
+          taster:!!(it.taster&&String(it.taster)!=='0') }));
+      }
+      shipDate=(typeof vmLocalYmd==='function'?vmLocalYmd(f.ship_date):String(f.ship_date||'').slice(0,10))||shipDate;
+      handler=f.pm||handler;
+      toast('這張已經先開過驗收單，已帶回留底的那一張；只要列印按「預覽」就好，按「產生驗收單」會用新版取代舊留底','ok');
+    }
+  }catch(_){}
+  if(!shipDate) shipDate=today;
+  openConsignVerifyForm({ no, client:(c&&c.name)||CS_CUR, shipDate, handler, note, rows }, editId);
+}
+
 /* 客戶設定裡的「對應廠務經銷商」：勾選清單（2026-11-26 起一位客戶可勾多家——誠品 6 個門市都對到「誠品生活」）
    容器 #cs-f-fxdealer：第一格「不連結廠務」（勾了其他都不能勾）＋每家廠務經銷商一格；全部不勾＝未指定（同步時用名字自動配） */
 function csFxSelected(){
@@ -423,6 +542,7 @@ function onSelectConsignCustomer(){
   if(!document.getElementById('cs-month').value){ const n=new Date(); document.getElementById('cs-month').value=n.getFullYear()+'-'+s2(n.getMonth()+1); }
   csClearMonthly();   // 換客戶＝上一個客戶的月結作廢，避免匯出/轉單用到別人的資料
   loadConsignInventory(); loadConsignLedger();
+  csFxRenderPending();   // 2026-11-26 廠務待出貨（已抓過就直接畫；還沒抓到的話抓到會自己補畫）
 }
 /* 月結暫存作廢（換客戶／換月份時呼叫；匯出與轉報價單前也會再比對一次） */
 function csClearMonthly(){
@@ -470,10 +590,12 @@ let CS_LED_VF={};           // 批次單號(csLedBatchNo) -> {no:留底實際單
    csLedAssignVf(records, nos) → { 批次單號: {no, id} }（沒配到的批次不會有 key）。 */
 function csVfStamp(no){ const m=String(no||'').match(/^CS-([A-Za-z0-9]*)-(\d{14})$/); return m?{cid:m[1],ts:m[2]}:null; }
 function csVfStampSec(ts){ return Date.UTC(+ts.slice(0,4),+ts.slice(4,6)-1,+ts.slice(6,8),+ts.slice(8,10),+ts.slice(10,12),+ts.slice(12,14))/1000; }
-function csLedAssignVf(records, nos){
+function csLedAssignVf(records, nos, altOf){
   const list=(records||[]).filter(f=>String(f.no||'').indexOf('CS-')===0)
     .map(f=>({no:String(f.no||'').trim(), id:String(f.id), st:csVfStamp(String(f.no||'').trim())}));
   const out={}, used={};
+  // 2026-11-26：出貨前先開過驗收單的那一批（廠務單號＋第幾趟推出來的 alt 單號）最優先——隨貨出去的就是那一張
+  (nos||[]).forEach(no=>{ const alt=altOf&&altOf[no]; if(!alt||out[no]) return; const e=list.find(f=>f.no===alt&&!used[f.no]); if(e){ out[no]={no:e.no,id:e.id}; used[e.no]=1; } });
   (nos||[]).forEach(no=>{ if(out[no]) return; const e=list.find(f=>f.no===no&&!used[f.no]); if(e){ out[no]={no:e.no,id:e.id}; used[e.no]=1; } });
   const pend=(nos||[]).filter(no=>!out[no]).map(no=>({no, st:csVfStamp(no)})).filter(x=>x.st);
   list.forEach(f=>{
@@ -488,6 +610,8 @@ function csLedAssignVf(records, nos){
   });
   return out;
 }
+/* 每一批的 alt 單號（只有廠務同步進來、知道是哪張廠務單第幾趟的那幾批才有）：{ 批次單號: 先開驗收單時會用的單號 } */
+function csLedAltMap(){ const m={}; (CS_LED_BATCHES||[]).forEach(b=>{ if(b&&b.alt) m[b.no]=b.alt; }); return m; }
 function csLedBatchNo(cid, r){
   const ts=String(r.created_at||'').replace(/[^0-9]/g,'').slice(0,14)
         || (String(r.date||'').replace(/[^0-9]/g,'').slice(0,8)+'000000');
@@ -505,7 +629,7 @@ function csLedMarkVerified(){
   readCall({action:'listVerifyForms', token:AUTH_TOKEN, filters:{}}).then(d=>{
     // 每一批（每顆鈕）找自己的留底：單號相同優先，找不到才退回「同一天最接近」的舊留底；一張留底只配一批
     const btns=Array.from(document.querySelectorAll('#cs-ledger-body .cs-vfbtn'));
-    CS_LED_VF=csLedAssignVf((d&&d.records)||[], btns.map(b=>b.dataset.no));
+    CS_LED_VF=csLedAssignVf((d&&d.records)||[], btns.map(b=>b.dataset.no), csLedAltMap());
     btns.forEach(b=>{
       const has=!!CS_LED_VF[b.dataset.no];
       b.textContent=has?'查看驗收單':'補開驗收單';
@@ -523,7 +647,7 @@ async function csReopenVerify(i){
     const d=await readCall({action:'listVerifyForms', token:AUTH_TOKEN, filters:{}});
     // 用「最新的留底清單」對全部批次重新配對一次（跟明細鈕同一套算法、同樣的輸入＝同樣的結果；
     // 不能只算這一批，會把別批的舊留底搶過來）
-    hit=csLedAssignVf((d&&d.records)||[], CS_LED_BATCHES.map(x=>x.no))[b.no]||null;
+    hit=csLedAssignVf((d&&d.records)||[], CS_LED_BATCHES.map(x=>x.no), csLedAltMap())[b.no]||null;
     const f=hit?((d&&d.records)||[]).find(x=>String(x.id)===hit.id):null;
     if(f){
       editId=String(f.id);
@@ -564,7 +688,9 @@ async function loadConsignLedger(){
       const gkey=(fx&&fx.orderNo)?('FXO|'+fx.orderNo+'|'+(fx.seq||String(r.date||'').slice(0,10))):('TS|'+String(r.created_at||r.date||''));
       if(bidx[gkey]==null){ bidx[gkey]=CS_LED_BATCHES.length;
         // 廠務那批的備註是廠務內部摘要（單號／經手人），不印到給客戶的驗收單上
-        CS_LED_BATCHES.push({ no:csLedBatchNo(CS_CUR, r), date:String(r.date||'').slice(0,10), note:fx?'':csFxNoteBody(r.note), rows:[], _ca:String(r.created_at||''), fxOrder:fx?fx.orderNo:'' }); }
+        // 2026-11-26：多門市的客戶（誠品）→ 備註帶門市名（後端同步時標在備註開頭的【門市】）；alt＝出貨前先開驗收單時用的單號
+        CS_LED_BATCHES.push({ no:csLedBatchNo(CS_CUR, r), date:String(r.date||'').slice(0,10), note:fx?csFxBranchFromNote(r.note):csFxNoteBody(r.note), rows:[], _ca:String(r.created_at||''), fxOrder:fx?fx.orderNo:'',
+          alt:(fx&&fx.orderNo&&fx.seq)?csFxPendingVfNo(CS_CUR, fx.orderNo, fx.seq):'' }); }
       const b=CS_LED_BATCHES[bidx[gkey]];
       if(String(r.created_at||'')<b._ca||!b._ca){ b._ca=String(r.created_at||''); b.no=csLedBatchNo(CS_CUR, r); if(String(r.date||'').slice(0,10)<b.date) b.date=String(r.date||'').slice(0,10); }
       b.rows.push(csLedRowItem(r));
