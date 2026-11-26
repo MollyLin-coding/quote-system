@@ -441,6 +441,7 @@ async function csFxPendingVerify(i){
       if(Array.isArray(items)&&items.length){
         rows=items.map(it=>({ name:it.name||'', vol:it.vol||'',
           qty:(it.thisShip!=null&&it.thisShip!=='')?it.thisShip:(it.ordered||0),
+          lot:it.lot||'', mfg:it.mfg||'',   // 2026-11-26 批號／製造日期跟著留底帶回
           taster:!!(it.taster&&String(it.taster)!=='0') }));
       }
       shipDate=(typeof vmLocalYmd==='function'?vmLocalYmd(f.ship_date):String(f.ship_date||'').slice(0,10))||shipDate;
@@ -655,6 +656,7 @@ async function csReopenVerify(i){
       if(Array.isArray(items)&&items.length){
         rows=items.map(it=>({ name:it.name||'', vol:it.vol||'',
           qty:(it.thisShip!=null&&it.thisShip!=='')?it.thisShip:(it.ordered||0),
+          lot:it.lot||'', mfg:it.mfg||'',   // 2026-11-26 批號／製造日期跟著留底帶回
           taster:!!(it.taster&&String(it.taster)!=='0') }));
       }
       shipDate=(typeof vmLocalYmd==='function'?vmLocalYmd(f.ship_date):String(f.ship_date||'').slice(0,10))||b.date;
