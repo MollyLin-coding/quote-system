@@ -957,6 +957,17 @@
           <div style="font-size:11px;color:var(--hint);margin-top:8px">登記類型：鋪貨/補貨（進客戶端）、銷售（客戶賣出）、退貨（退回我方）、盤點調整。已連結廠務的客戶，進貨／售出／退貨由廠務自動同步進來（標「廠務」）。</div>
         </div></div>
 
+        <!-- 2026-11-26 廠務還沒出貨的寄售鋪貨單：出貨前先開驗收單（沒有待出貨就整張卡不顯示） -->
+        <div class="card" id="cs-fxpending-card" style="display:none">
+          <div class="ch"><i class="ti ti-truck-delivery"></i><span>廠務待出貨</span><span class="ch-opt">廠務還沒出貨的鋪貨單：出貨後才進庫存，可以先開隨貨的驗收單</span></div>
+          <div class="tbl-scroll">
+            <table class="rec-table mcard">
+              <thead><tr><th style="white-space:nowrap">預計出貨</th><th>廠務單號</th><th>門市</th><th>品項（還沒出的）</th><th style="text-align:right;white-space:nowrap">瓶數</th><th>操作</th></tr></thead>
+              <tbody id="cs-fxpending-body"></tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="card">
           <div class="ch"><i class="ti ti-packages"></i><span>目前庫存</span><span class="ch-opt">實體庫存＝進−銷−退±盤點</span></div>
           <div class="tbl-scroll">
@@ -1329,7 +1340,9 @@
       <div class="fl" style="grid-column:span 2"><label>鋪貨/出貨地址 <span class="opt">選填</span></label><input class="fi" id="cs-f-addr"></div>
       <div class="fl" style="grid-column:span 2"><label>備註 <span class="opt">選填</span></label><input class="fi" id="cs-f-note"></div>
       <div class="fl"><label>狀態</label><select class="fi" id="cs-f-active"><option value="Y">啟用中</option><option value="N">已終止/停用</option></select></div>
-      <div class="fl"><label>價格基準 <span class="opt">售出單價＝牌價×折數</span></label><select class="fi" id="cs-f-pricebasis"><option value="">新價（主檔現行牌價）</option><option value="old">舊價客戶（用漲價前牌價）</option></select></div>
+      <div class="fl"><label>價格基準 <span class="opt">售出單價＝牌價×折數</span></label><select class="fi" id="cs-f-pricebasis"><option value="">新價（主檔現行牌價，均一價）</option><option value="old">舊價客戶（第一批客戶，依酒精濃度分價）</option></select>
+        <!-- 2026-11-26 Molly：記下寄售客戶價格有兩種的原因 -->
+        <div style="font-size:11px;color:var(--hint);margin-top:3px">為什麼有兩種價：第一批合作的客戶，酒款價格依酒精濃度有分；後來才改成均一價（100ml 250）。</div></div>
       <div class="fl" style="grid-column:span 2"><label>對應廠務經銷商 <span class="opt">連結後，廠務的進貨／售出／退貨會自動同步到這位客戶的寄售帳</span></label>
         <div id="cs-f-fxdealer" style="display:flex;flex-wrap:wrap;align-items:center;min-height:34px;padding:4px 8px;border:1px solid var(--bd);border-radius:8px;background:var(--card,#fff)"><span style="color:var(--hint);font-size:12px">（載入中…）</span></div>
         <div id="cs-f-fxdealer-hint" style="font-size:11px;color:var(--hint);margin-top:3px"></div></div>
@@ -1400,7 +1413,7 @@
   </div>
 </div>
 
-<script src="js/00_utils.js?v=20261021d"></script>
+<script src="js/00_utils.js?v=20261126b"></script>
 <script src="js/01_quote_form.js?v=20261124b"></script>
 <script src="js/01b_quote_preview.js?v=20261112b"></script>
 <script src="js/02_core_api.js?v=20261112d"></script>
@@ -1409,8 +1422,8 @@
 <script src="js/05_orders.js?v=20261021d"></script>
 <script src="js/06_verify_mgmt.js?v=20261021d"></script>
 <script src="js/07_calendar.js?v=20261021d"></script>
-<script src="js/08_ownbrand.js?v=20261126a"></script>
-<script src="js/09_verify_form.js?v=20261021d"></script>
+<script src="js/08_ownbrand.js?v=20261126b"></script>
+<script src="js/09_verify_form.js?v=20261126b"></script>
 <script src="js/10_today.js?v=20261021d"></script>
 <script src="js/11_customers.js?v=20261021d"></script>
 <script src="js/12_storage.js?v=20261021d"></script>
