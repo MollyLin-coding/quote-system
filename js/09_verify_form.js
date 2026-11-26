@@ -904,6 +904,15 @@ function generateConsignVerifyPdf(){
 /* 存留底：跟報價單那套一樣存進「驗收單紀錄」（saveVerifyForm），額外多存 client 欄
    （報價單那套的客戶是靠單號查報價單歸戶，寄售這批沒有報價單可查，直接存客戶名）。
    編輯模式（CONSIGN_VF_EDIT_ID 有值）＝取代：先存新的，成功後刪舊的那筆。 */
+/* 2026-11-26：留底存好後，寄售頁上的鈕跟著更新（明細的「補開／查看驗收單」、廠務待出貨的「先開／查看驗收單」）；
+   畫面上沒有那些鈕（人在別頁）就不多打一次 API */
+function csVfAfterSaved(){
+  try{
+    if(!document.querySelector('#cs-ledger-body .cs-vfbtn, #cs-fxpending-body .cs-pvfbtn')) return;
+    if(typeof csLedMarkVerified==='function') csLedMarkVerified();
+    if(typeof csFxPendingMarkVerified==='function') csFxPendingMarkVerified();
+  }catch(_){}
+}
 function saveConsignVerifyFormRecord(d){
   try{
     if(!AUTH_TOKEN){   // 2026-09-11 複檢：比照報價單那套，沒登入不能靜默不留底（試飲瓶紀錄只存在留底裡）
@@ -919,11 +928,11 @@ function saveConsignVerifyFormRecord(d){
        下次開驗收單就算不到這批，「已出貨」歸零、「本次出貨」又帶成全部數量。改成明確提示。 */
     apiCall({action:'saveVerifyForm', token:AUTH_TOKEN, record}).then(res=>{
       if(!(res&&res.ok)){ toast('⚠ 這批的驗收單留底沒有存成功，下次開驗收單不會算到這批出貨量，請再產生一次','err'); return; }
-      if(!editId) return;
+      if(!editId){ csVfAfterSaved(); return; }
       return apiCall({action:'deleteVerifyForm', token:AUTH_TOKEN, id:editId})
         .then(()=>{ toast('驗收單留底已更新（新版已取代舊紀錄）','ok'); })
         .catch(()=>{ toast('新留底已存，但舊紀錄刪除失敗，請到「驗收單留底」手動刪掉舊的那筆','err'); })
-        .then(()=>{ try{ if(typeof loadVerifyMgmt==='function') loadVerifyMgmt(true); }catch(_){} });
+        .then(()=>{ try{ if(typeof loadVerifyMgmt==='function') loadVerifyMgmt(true); }catch(_){} csVfAfterSaved(); });
     }).catch(()=>{
       toast('⚠ 這批的驗收單留底沒有存成功（連線問題），下次開驗收單不會算到這批出貨量，請確認後再產生一次','err');
     });
