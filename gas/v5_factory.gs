@@ -1355,3 +1355,60 @@ function handleGetFactoryConsignDealers_() {
   var stmts = (r.statements || []).map(function (x) { return { dealer: x.dealer, period: x.period, status: x.status, amount: x.amount, paidDate: x.paidDate || '', orderNo: x.orderNo || '' }; });
   return { ok: true, configured: true, dealers: r.dealers || [], map: map, lastSync: fxcLastSync_(), since: fxcSince_(), lastResult: last, statements: stmts };
 }
+
+// ═══ 2026-11-26 Molly：「待出貨也能先開驗收單」═══════════════════════════════════
+// action: getFactoryConsignPending {} → 廠務「還沒出完貨」的寄售鋪貨單（寄售頁「廠務待出貨」用）。只讀廠務訂單，不寫寄售帳、不動庫存。
+//   ・寄售鋪貨單＝fxIsConsignOrder_（訂金狀態寄售／叫貨放行／0 元的經銷商出貨單）；月結認列單不是鋪貨，不列
+//   ・客戶＝factory_map 的 consign_client 對照（一位客戶可對多家）；還沒對到客戶的經銷商另外回 unmapped（張數）
+//   ・每款只回「還沒出貨的瓶數」（訂單數量 − 已出貨）；全部出完的單不回
+//   ・nextSeq＝下一趟是第幾次出貨：先開的驗收單用「廠務單號＋第幾趟」編號，出貨進帳後明細那一批對回同一張留底
+// 廠務訂單的日期 → yyyy-MM-dd（前端要拿去跟今天比、塞進日期欄）；認不得的格式回 ''
+function fxcYmd_(s) {
+  var str = String(s == null ? '' : s).trim();
+  if (!str) return '';
+  var m = str.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})(?![\dT])/);   // 純日期（或後面接空白＋時間）直接用
+  if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+  var t = Date.parse(str);   // 時間戳（…T16:00:00.000Z）／Date 字串 → 換算成台北的日期
+  if (isNaN(t)) return '';
+  return Utilities.formatDate(new Date(t), 'Asia/Taipei', 'yyyy-MM-dd');
+}
+function handleGetFactoryConsignPending_(params) {
+  if (!fxConfigured_()) return { ok: true, configured: false, orders: [], unmapped: {} };
+  var r = fxCall_('extGetOrders', { fresh: '1', types: JSON.stringify([FX_TYPE_SHIP, '自有酒款庫存出貨訂單']) });
+  if (!r || !r.ok) return { ok: false, error: '讀取廠務失敗：' + ((r && r.error) || '無回應') };
+  var map = fxMapAll_();
+  var byDealer = {};
+  map.forEach(function (m) {
+    if (String(m.kind) !== 'consign_client' || !m.qs_name) return;
+    var fn = String(m.factory_name || '').trim();
+    if (fn && fn !== FXC_NO_LINK) byDealer[fn] = String(m.qs_name).trim();
+  });
+  var products = {};
+  try { v2ReadAll_(SHEET_OWNBRAND_PRODUCTS, OWNBRAND_PRODUCTS_HEADERS).forEach(function (p) { products[String(p.sku_id)] = p; }); } catch (e) {}
+  var maxSeq = {};
+  (r.shipments || []).forEach(function (s) { var k = String(s.orderNo || ''), q = Math.floor(Number(s.seq)) || 0; if (k && q > (maxSeq[k] || 0)) maxSeq[k] = q; });
+  var out = [], unmapped = {};
+  (r.orders || []).forEach(function (o) {
+    if (!o || String(o.orderType || '') === FX_TYPE_CONSIGN_SETTLE || !fxIsConsignOrder_(o)) return;
+    var st = String(o.status || '').trim();
+    if (st === '已出貨' || /取消|作廢/.test(st)) return;
+    var items = [];
+    (o.items || []).forEach(function (it) {
+      var ordered = Math.floor(Number(it.qty)) || 0, shipped = Math.max(0, Math.floor(Number(it.shipped)) || 0), remain = ordered - shipped;
+      if (!it.product || remain <= 0) return;
+      var sku = fxcSkuOf_(map, products, it.product, it.volume);
+      var p = sku ? products[sku] : null;
+      items.push({ sku_id: sku || '', name: p ? String(p.name) : String(it.product).replace(/\s*V\d+$/i, '').trim(), vol: p ? String(p.volume) : String(it.volume || ''),
+        qty: remain, ordered: ordered, shipped: shipped });
+    });
+    if (!items.length) return;
+    var dealer = String(o.client || '').trim(), cid = byDealer[dealer];
+    if (!cid) { unmapped[dealer] = (unmapped[dealer] || 0) + 1; return; }
+    var no = String(o.orderNo || '');
+    out.push({ orderNo: no, dealer: dealer, customer_id: String(cid), status: st,
+      deliveryDate: fxcYmd_(o.deliveryDate), actualDeliveryDate: fxcYmd_(o.actualDeliveryDate),
+      nextSeq: Math.max(maxSeq[no] || 0, Math.floor(Number(o.shipBatches)) || 0) + 1, lot: fxLotDigits_(o.lot), pm: String(o.pm || ''), items: items });
+  });
+  out.sort(function (a, b) { return String(a.deliveryDate || '9999').localeCompare(String(b.deliveryDate || '9999')) || String(a.orderNo).localeCompare(String(b.orderNo)); });
+  return { ok: true, configured: true, orders: out, unmapped: unmapped, at: tpeNow_() };
+}
