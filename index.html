@@ -1331,7 +1331,7 @@
       <div class="fl"><label>狀態</label><select class="fi" id="cs-f-active"><option value="Y">啟用中</option><option value="N">已終止/停用</option></select></div>
       <div class="fl"><label>價格基準 <span class="opt">售出單價＝牌價×折數</span></label><select class="fi" id="cs-f-pricebasis"><option value="">新價（主檔現行牌價）</option><option value="old">舊價客戶（用漲價前牌價）</option></select></div>
       <div class="fl" style="grid-column:span 2"><label>對應廠務經銷商 <span class="opt">連結後，廠務的進貨／售出／退貨會自動同步到這位客戶的寄售帳</span></label>
-        <select class="fi" id="cs-f-fxdealer"><option value="">（不連結廠務）</option></select>
+        <div id="cs-f-fxdealer" style="display:flex;flex-wrap:wrap;align-items:center;min-height:34px;padding:4px 8px;border:1px solid var(--bd);border-radius:8px;background:var(--card,#fff)"><span style="color:var(--hint);font-size:12px">（載入中…）</span></div>
         <div id="cs-f-fxdealer-hint" style="font-size:11px;color:var(--hint);margin-top:3px"></div></div>
     </div>
     <div id="cs-exc-wrap" style="margin-top:14px;display:none">
@@ -1409,7 +1409,7 @@
 <script src="js/05_orders.js?v=20261021d"></script>
 <script src="js/06_verify_mgmt.js?v=20261021d"></script>
 <script src="js/07_calendar.js?v=20261021d"></script>
-<script src="js/08_ownbrand.js?v=20261124b"></script>
+<script src="js/08_ownbrand.js?v=20261126a"></script>
 <script src="js/09_verify_form.js?v=20261021d"></script>
 <script src="js/10_today.js?v=20261021d"></script>
 <script src="js/11_customers.js?v=20261021d"></script>
