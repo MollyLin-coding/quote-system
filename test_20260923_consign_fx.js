@@ -34,7 +34,7 @@ const LEDGER = [
 ];
 
 (async () => {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const browser = await chromium.launch({ executablePath: process.env.PW_CHROME || '/opt/pw-browsers/chromium' });
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
@@ -61,7 +61,8 @@ const LEDGER = [
         case 'listVerifyForms':     return { ok: true, records: [], summary: {} };
         case 'getFactoryConsignDealers': return { ok: true, configured: window.FX_CONFIGURED, dealers: window.FX_CONFIGURED ? DEALERS : [], map: window.FX_MAP, lastSync: '2026-09-23T11:00:00+08:00', since: '2026-09-16 00:00:00' };
         case 'factoryConsignSync':  if (typeof rcClear === 'function') rcClear();   // 真的 apiCall 對寫入 action 會清讀取快取，這裡照做
-                                    return { ok: true, inserted: [{ fx: 'CI-N1' }, { fx: 'CI-N2' }], linked: [{ fx: 'CI-L1' }], skipped: [], unmappedDealers: { '經銷商－誠品生活': 3 }, unmappedProducts: {}, ambiguous: {}, autoMapped: [], dealerMap: {}, dealers: DEALERS, at: '2026-09-23T12:34:00+08:00' };
+                                    return { ok: true, inserted: [{ fx: 'CI-N1' }, { fx: 'CI-N2' }], linked: [{ fx: 'CI-L1' }], skipped: [], unmappedDealers: { '經銷商－誠品生活': 3 }, unmappedProducts: {}, ambiguous: {}, autoMapped: [], dealerMap: {}, dealers: DEALERS, at: '2026-09-23T12:34:00+08:00',
+                                      moneyAdj: [{ id: 'ADJ-20261120-島羽-運費', date: '2026-11-20', dealer: '島羽 Wing Islands', customer_id: '4', name: '運費扣抵（客戶代墊）', qty: -1, price: 361, amount: -361, note: '' }] };   // 2026-11-26 廠務「異動」金額調整
         case 'saveFactoryMap':      return { ok: true, saved: 1, removed: 0 };
         case 'saveConsignCustomer': return { ok: true, customer: payload.customer };
         default: return { ok: true, quotes: [], orders: [], records: [], shipments: [], rows: [] };
@@ -142,19 +143,19 @@ const LEDGER = [
   check('3d 狀態列更新成這次同步時間', /2026-09-23 12:34/.test(s3.status));
   check('3e 鈕復原', /同步廠務/.test(s3.btnText));
 
-  // 5) 客戶設定下拉
+  // 5) 客戶設定：勾選清單（2026-11-26 起可勾多家）
   await page.evaluate(() => openConsignCustomerEdit('2'));
   await page.waitForTimeout(400);
   const f5 = await page.evaluate(() => {
-    const sel = document.getElementById('cs-f-fxdealer');
-    return { shown: sel.closest('.fl').style.display !== 'none', opts: [...sel.options].map(o => o.value + '|' + o.textContent + '|' + (o.disabled ? 'D' : '')), val: sel.value };
+    const box = document.getElementById('cs-f-fxdealer');
+    return { shown: box.closest('.fl').style.display !== 'none', opts: [...box.querySelectorAll('input[type=checkbox]')].map(o => o.value + '|' + o.parentElement.textContent + '|' + (o.disabled ? 'D' : '') + (o.checked ? 'C' : '')) };
   });
-  check('5a 下拉列出 3 家經銷商＋未指定＋不連結；downstairs 目前沒對應（未指定）', f5.shown && f5.opts.length === 5 && f5.val === '' && f5.opts[1].indexOf('-|') === 0);
-  check('5b 島羽那家已被客戶 4 對走 → disabled＋標示', f5.opts.some(o => /經銷商－島羽\|.*已對到 島羽Wing Islands.*\|D$/.test(o)));
-  // 存檔：選 downstair → saveConsignCustomer 之後打 saveFactoryMap
+  check('5a 清單列出 3 家經銷商＋不連結；downstairs 目前沒對應（都沒勾）', f5.shown && f5.opts.length === 4 && f5.opts[0].indexOf('-|') === 0 && !f5.opts.some(o => /C$/.test(o)));
+  check('5b 島羽那家已被客戶 4 對走 → disabled＋標示', f5.opts.some(o => /^經銷商－島羽\|.*已對到 島羽Wing Islands.*\|D$/.test(o)));
+  // 存檔：勾 downstair → saveConsignCustomer 之後打 saveFactoryMap（factory_names 陣列）
   await page.evaluate(async () => {
     window.CALLS = []; window.TOASTS = [];
-    document.getElementById('cs-f-fxdealer').value = '經銷商－downstair';
+    document.querySelector('#cs-f-fxdealer input[value="經銷商－downstair"]').checked = true; csFxOnPick();
     await saveConsignCustomerForm();
   });
   await page.waitForTimeout(400);
@@ -165,21 +166,39 @@ const LEDGER = [
     map: CS_FX.map['2'],
     toast: window.TOASTS.map(t => t[0]).join('|'),
   }));
-  check('5c 存客戶後打 saveFactoryMap（kind consign_client、qs_name＝客戶代碼、factory_name＝經銷商鍵）', s5.saveCus >= 0 && s5.saveMap > s5.saveCus && s5.mapRow && s5.mapRow[0].kind === 'consign_client' && s5.mapRow[0].qs_name === '2' && s5.mapRow[0].factory_name === '經銷商－downstair');
-  check('5d 前端對照更新、沒噴錯', s5.map === '經銷商－downstair' && !/沒存成功/.test(s5.toast));
+  check('5c 存客戶後打 saveFactoryMap（kind consign_client、qs_name＝客戶代碼、factory_names＝[經銷商鍵]）', s5.saveCus >= 0 && s5.saveMap > s5.saveCus && s5.mapRow && s5.mapRow[0].kind === 'consign_client' && s5.mapRow[0].qs_name === '2' && JSON.stringify(s5.mapRow[0].factory_names) === JSON.stringify(['經銷商－downstair']));
+  check('5d 前端對照更新（陣列）、沒噴錯', JSON.stringify(s5.map) === JSON.stringify(['經銷商－downstair']) && !/沒存成功/.test(s5.toast));
   // 沒變 → 不打
   await page.evaluate(() => openConsignCustomerEdit('2'));
   await page.waitForTimeout(300);
   await page.evaluate(async () => { window.CALLS = []; await saveConsignCustomerForm(); });
   await page.waitForTimeout(300);
   check('5e 對應沒變 → 不打 saveFactoryMap', await page.evaluate(() => !window.CALLS.some(c => c.action === 'saveFactoryMap')));
-  // 取消連結 → factory_name 空
+  // 多勾一家（誠品生活）→ factory_names 兩家；資訊列顯示兩家
   await page.evaluate(() => openConsignCustomerEdit('2'));
   await page.waitForTimeout(300);
-  await page.evaluate(async () => { window.CALLS = []; document.getElementById('cs-f-fxdealer').value = ''; await saveConsignCustomerForm(); });
+  await page.evaluate(async () => { window.CALLS = []; document.querySelector('#cs-f-fxdealer input[value="經銷商－誠品生活"]').checked = true; csFxOnPick(); await saveConsignCustomerForm(); });
   await page.waitForTimeout(300);
-  const s5f = await page.evaluate(() => ({ row: (window.CALLS.find(c => c.action === 'saveFactoryMap') || {}).rows, map: CS_FX.map['2'] }));
-  check('5f 改回未指定 → factory_name 空字串（後端刪對照）、前端對照移除', s5f.row && s5f.row[0].factory_name === '' && s5f.map === undefined);
+  const s5g = await page.evaluate(() => { const r = (window.CALLS.find(c => c.action === 'saveFactoryMap') || {}).rows; document.getElementById('cs-customer').value = '2'; onSelectConsignCustomer(); return { names: r && r[0].factory_names, map: CS_FX.map['2'], info: document.getElementById('cs-cusinfo').textContent, status: document.getElementById('cs-fxstatus').textContent }; });
+  check('5g 多勾一家 → factory_names 兩家、前端對照兩家、資訊列列出兩家', JSON.stringify(s5g.names) === JSON.stringify(['經銷商－downstair', '經銷商－誠品生活']) && s5g.map.length === 2 && /已連結廠務「downstair」「誠品生活」/.test(s5g.info));
+  check('5h 狀態列：已對應 2 位客戶／3 家廠務經銷商、沒有「還沒對到」', /已對應 2 位客戶／3 家廠務經銷商/.test(s5g.status) && !/還沒對到這裡的客戶/.test(s5g.status));
+  // 勾「不連結」→ factory_names ['-']，其他格鎖住
+  await page.evaluate(() => openConsignCustomerEdit('2'));
+  await page.waitForTimeout(300);
+  const s5i = await page.evaluate(async () => { window.CALLS = []; const nl = document.querySelector('#cs-f-fxdealer input[value="-"]'); nl.checked = true; csFxOnPick(); const lockedAll = [...document.querySelectorAll('#cs-f-fxdealer input')].filter(i => i.value !== '-').every(i => i.disabled && !i.checked); await saveConsignCustomerForm(); return { lockedAll, names: (window.CALLS.find(c => c.action === 'saveFactoryMap') || {}).rows[0].factory_names, blocked: !!CS_FX.blocked['2'], map: CS_FX.map['2'] }; });
+  check('5i 勾不連結 → 其他格清掉鎖住、factory_names [\"-\"]、前端 blocked', s5i.lockedAll && JSON.stringify(s5i.names) === JSON.stringify(['-']) && s5i.blocked && s5i.map === undefined);
+  // 全部取消 → factory_names 空陣列（後端刪對照）
+  await page.evaluate(() => openConsignCustomerEdit('2'));
+  await page.waitForTimeout(300);
+  await page.evaluate(async () => { window.CALLS = []; document.querySelector('#cs-f-fxdealer input[value="-"]').checked = false; csFxOnPick(); await saveConsignCustomerForm(); });
+  await page.waitForTimeout(300);
+  const s5f = await page.evaluate(() => ({ row: (window.CALLS.find(c => c.action === 'saveFactoryMap') || {}).rows, map: CS_FX.map['2'], blocked: !!CS_FX.blocked['2'] }));
+  check('5f 改回未指定 → factory_names 空陣列（後端刪對照）、前端對照移除', s5f.row && JSON.stringify(s5f.row[0].factory_names) === '[]' && s5f.map === undefined && !s5f.blocked);
+
+  // 6) 金額調整（廠務「異動」）：同步摘要帶回來 → 狀態列提醒、月結篩得到
+  const s6 = await page.evaluate(async () => { await csFxSyncNow(null); csFxRenderStatus(); return { status: document.getElementById('cs-fxstatus').textContent, toast: window.TOASTS.map(t => t[0]).join('|'), list: csFxMoneyAdj('4', '2026-11-01', '2026-11-30').length, none: csFxMoneyAdj('2').length + csFxMoneyAdj('4', '2026-12-01', '2026-12-31').length, text: csFxMoneyAdjText(csFxMoneyAdj()) }; });
+  check('6a 同步 toast 提到金額調整、狀態列 💰 列出 11/20 島羽 運費扣抵 −$361', /1 筆金額調整沒進庫存帳/.test(s6.toast) && /💰 廠務登了 1 筆金額調整/.test(s6.status) && /11\/20 島羽 Wing Islands 運費扣抵（客戶代墊） −\$361/.test(s6.status));
+  check('6b csFxMoneyAdj 依客戶／期間篩選', s6.list === 1 && s6.none === 0 && /−\$361/.test(s6.text));
 
   // 7) 廠務沒設定
   await page.evaluate(async () => { window.FX_CONFIGURED = false; rcClear(); await csFxLoad(true); csFxRenderStatus(); });
