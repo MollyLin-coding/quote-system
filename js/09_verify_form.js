@@ -735,7 +735,7 @@ function ensureConsignVerifyOverlay(){
   if(document.getElementById('cs-vf-overlay')) return;
   const ov=document.createElement('div');
   ov.className='v2ov'; ov.id='cs-vf-overlay';
-  ov.innerHTML=`<div class="v2box" style="max-width:640px">
+  ov.innerHTML=`<div class="v2box" style="max-width:780px">
     <div class="v2h"><span>寄售鋪貨・出貨驗收單</span><button class="v2x" onclick="closeConsignVerifyForm()">✕</button></div>
     <div id="cs-vf-body"></div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:16px">
@@ -775,9 +775,11 @@ function buildConsignVerifyModal(){
   if(skip) skip.textContent = CONSIGN_VF_PENDING_TASTER ? '跳過，不產生（試飲瓶不會登記）' : '跳過，不產生';
   const inS='border:1px solid var(--bd);border-radius:5px;padding:5px 7px;font-size:12px;font-family:inherit;width:100%';
   const rowsH=d.rows.map((r,i)=>`<tr${r.taster?' style="background:#FBF8F1"':''}>
-    <td><input style="${inS}" data-i="${i}" data-k="name" class="cvfi" value="${escAttr(r.name||'')}">${r.taster?'<div style="font-size:10.5px;color:#7A5A1E;margin-top:3px">試飲瓶（免費贈送，不計價／不進庫存）</div>':''}</td>
-    <td><input style="${inS};width:90px" data-i="${i}" data-k="vol" class="cvfi" value="${escAttr(r.vol||'')}"></td>
-    <td><input type="number" min="0" style="${inS};width:80px" data-i="${i}" data-k="qty" class="cvfi" value="${(r.qty!==''&&r.qty!=null)?r.qty:''}"></td>
+    <td><input style="${inS};min-width:140px" data-i="${i}" data-k="name" class="cvfi" value="${escAttr(r.name||'')}">${r.taster?'<div style="font-size:10.5px;color:#7A5A1E;margin-top:3px">試飲瓶（免費贈送，不計價／不進庫存）</div>':''}</td>
+    <td><input style="${inS};width:88px" data-i="${i}" data-k="lot" class="cvfi" maxlength="40" placeholder="選填" value="${escAttr(r.lot||'')}"></td>
+    <td><input type="date" style="${inS};width:132px" data-i="${i}" data-k="mfg" class="cvfi" value="${escAttr(csVfYmd(r.mfg))}"></td>
+    <td><input style="${inS};width:78px" data-i="${i}" data-k="vol" class="cvfi" value="${escAttr(r.vol||'')}"></td>
+    <td><input type="number" min="0" style="${inS};width:70px" data-i="${i}" data-k="qty" class="cvfi" value="${(r.qty!==''&&r.qty!=null)?r.qty:''}"></td>
     <td style="text-align:center"><button class="del" onclick="csVfDelRow(${i})">✕</button></td>
   </tr>`).join('');
   document.getElementById('cs-vf-body').innerHTML=`
@@ -789,16 +791,43 @@ function buildConsignVerifyModal(){
       <div class="fl" style="grid-column:span 2"><label>備註 <span class="opt">選填</span></label><input class="fi" id="cs-vf-note" value="${escHtml(d.note||'')}"></div>
     </div>
     <div style="overflow-x:auto;margin-top:12px">
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <table style="width:100%;min-width:600px;border-collapse:collapse;font-size:12px">
         <thead><tr style="background:var(--gold-pale);color:var(--gold-deep)">
           <th style="padding:7px 4px;text-align:left;padding-left:6px">酒款</th>
+          <th style="padding:7px 4px">批號</th><th style="padding:7px 4px">製造日期</th>
           <th style="padding:7px 4px">容量</th><th style="padding:7px 4px">數量</th><th style="padding:7px 4px"></th>
         </tr></thead>
         <tbody id="cs-vf-rows">${rowsH}</tbody>
       </table>
     </div>
-    <button type="button" class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63;font-size:12px;padding:6px 12px;margin-top:8px" onclick="csVfAddRow()">＋ 新增品項</button>
-    <p style="font-size:11px;color:var(--hint);margin-top:10px;line-height:1.6">簡化版驗收單：品項／容量／數量，右下 QR 供客戶收貨後線上驗收回報（版面與一般報價單的出貨驗收單一致，不另設簽收欄）。標「試飲」的列為免費贈送的試飲瓶。</p>`;
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <button type="button" class="btn" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63;font-size:12px;padding:6px 12px;margin-top:8px" onclick="csVfAddRow()">＋ 新增品項</button>
+      <button type="button" class="btn" id="cs-vf-filllot" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63;font-size:12px;padding:6px 12px;margin-top:8px" onclick="csVfFillDown('lot')">↓ 批號帶到空白列</button>
+      <button type="button" class="btn" id="cs-vf-fillmfg" style="border:1px solid #D9D6CC;background:#fff;color:#6B6B63;font-size:12px;padding:6px 12px;margin-top:8px" onclick="csVfFillDown('mfg')">↓ 製造日期帶到空白列</button>
+    </div>
+    <p style="font-size:11px;color:var(--hint);margin-top:10px;line-height:1.6">簡化版驗收單：品項／容量／數量，右下 QR 供客戶收貨後線上驗收回報（版面與一般報價單的出貨驗收單一致，不另設簽收欄）。標「試飲」的列為免費贈送的試飲瓶。<br>
+      批號、製造日期選填：有填才會印在驗收單上（整張單都沒填批號，就不印批號那一欄；製造日期也一樣）。多款同一批時，填好一列再按「帶到空白列」。</p>`;
+}
+/* 2026-11-26 Molly：「寄售驗收單我需要可以打入酒款批號及製造日期」
+   每一款酒多兩格：批號（文字）、製造日期（日期）；留底的 items 本來就有 lot／mfg 兩欄（原本一律存空字串）。
+   csVfYmd：製造日期整理成日期欄吃得下的 YYYY-MM-DD（留底可能存成 2026/11/20）；認不得的回 '' */
+function csVfYmd(v){
+  const s=String(v==null?'':v).trim(); if(!s) return '';
+  const m=s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+  return m?(m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0')):'';
+}
+/* 「帶到空白列」：拿第一個有填的值，補進其他「有酒名、這格還空白」的列；已經填的不動 */
+function csVfFillDown(k){
+  if(!CONSIGN_VF_DATA) return;
+  csVfSyncFromInputs();
+  const label=(k==='lot')?'批號':'製造日期';
+  const rows=CONSIGN_VF_DATA.rows||[];
+  const src=rows.find(r=>String(r[k]||'').trim()!=='');
+  if(!src){ toast('請先在其中一列填好'+label+'，再按這顆','err'); return; }
+  let n=0;
+  rows.forEach(r=>{ if(String(r.name||'').trim()!=='' && String(r[k]||'').trim()===''){ r[k]=src[k]; n++; } });
+  buildConsignVerifyModal();
+  toast(n?('已把'+label+'「'+String(src[k]).trim()+'」帶到其餘 '+n+' 列（原本有填的沒動）'):('其他列的'+label+'都已經有填了'),'ok');
 }
 function csVfSyncFromInputs(){
   if(!CONSIGN_VF_DATA) return;
@@ -806,6 +835,11 @@ function csVfSyncFromInputs(){
     const i=+el.dataset.i, k=el.dataset.k;
     if(CONSIGN_VF_DATA.rows[i]) CONSIGN_VF_DATA.rows[i][k]=el.value;
   });
+  // 2026-11-26：表頭的日期／經手人／備註也一起收——按「新增品項」「✕」「帶到空白列」重畫時，剛改的值才不會跳回原本的
+  const _g=id=>document.getElementById(id);
+  if(_g('cs-vf-date')) CONSIGN_VF_DATA.shipDate=_g('cs-vf-date').value;
+  if(_g('cs-vf-handler')) CONSIGN_VF_DATA.handler=_g('cs-vf-handler').value;
+  if(_g('cs-vf-note')) CONSIGN_VF_DATA.note=_g('cs-vf-note').value;
 }
 /* 2026-09-01 複檢：原本 csVfCollect() 會「就地」把空白列從 CONSIGN_VF_DATA.rows 濾掉，
    但畫面上的輸入框沒有重畫、data-i 還是舊的位置編號 → 只要按過一次「預覽」再回頭補填，
@@ -841,11 +875,18 @@ function buildConsignVerifyDocHtml(d, opts){
   const qrSvg=verifyQrSvg(verifyQrUrl(d.no,''),4);
   /* 2026-08-06 Molly：拿掉「簽收」欄，改對齊一般報價單那套出貨驗收單的格式
      （那套沒有簽收欄、也沒有手簽名欄位，一律走 QR 線上回報）。 */
-  const theadCols=`<th class="l" style="width:58%">酒款</th><th style="width:21%">容量</th><th style="width:21%">數量</th>`;
+  /* 2026-11-26 Molly：批號、製造日期「有填才印」（跟報價單那套驗收單的 LOT 欄同一個規則）：
+     整張單沒有任何一列填批號 → 不印批號欄；製造日期同理。兩欄都沒填＝版面跟原本一模一樣。 */
+  const hasLot=d.rows.some(r=>String(r.lot||'').trim()!=='');
+  const hasMfg=d.rows.some(r=>String(r.mfg||'').trim()!=='');
+  const W=(hasLot&&hasMfg)?{n:36,l:14,m:18,v:16,q:16}:hasLot?{n:46,l:16,m:0,v:19,q:19}:hasMfg?{n:44,l:0,m:18,v:19,q:19}:{n:58,l:0,m:0,v:21,q:21};
+  const theadCols=`<th class="l" style="width:${W.n}%">酒款</th>`+(hasLot?`<th style="width:${W.l}%">批號</th>`:'')+(hasMfg?`<th style="width:${W.m}%">製造日期</th>`:'')+`<th style="width:${W.v}%">容量</th><th style="width:${W.q}%">數量</th>`;
+  const lotTd=r=>hasLot?`<td class="mut">${escHtml(String(r.lot||'').trim())||'—'}</td>`:'';
+  const mfgTd=r=>hasMfg?`<td class="mut">${escHtml(vfDate(csVfYmd(r.mfg)||String(r.mfg||'').trim()))||'—'}</td>`:'';
   const rowsHtml=d.rows.map(r=>{
     // 試飲瓶：免費贈送，驗收單上明確標示，客戶一眼看得出這瓶不計價
     const tag=r.taster?' <span style="font-size:10px;font-weight:700;color:#7A5A1E;background:#F3ECDD;border-radius:4px;padding:1px 6px;margin-left:4px">試飲</span>':'';
-    return `<tr><td class="l">${escHtml(r.name)}${tag}</td><td>${escHtml(r.vol)||'—'}</td><td>${(parseFloat(r.qty)||0)||'—'}</td></tr>`;
+    return `<tr><td class="l">${escHtml(r.name)}${tag}</td>${lotTd(r)}${mfgTd(r)}<td>${escHtml(r.vol)||'—'}</td><td>${(parseFloat(r.qty)||0)||'—'}</td></tr>`;
   });
   const headerBlockHtml=`
   <div class="hd">
@@ -923,7 +964,8 @@ function saveConsignVerifyFormRecord(d){
     const editId=CONSIGN_VF_EDIT_ID; CONSIGN_VF_EDIT_ID=null;
     const record={ no:d.no, lot:'', shipDate:d.shipDate, pm:d.handler||'', boxes:'', client:d.client,
       // taster 一起存進 items_json，之後從留底編輯這張單時「試飲」標示不會掉
-      items:(d.rows||[]).map(r=>({ name:r.name, lot:'', vol:r.vol, mfg:'', thisShip:parseFloat(r.qty)||0, ordered:parseFloat(r.qty)||0, shipped:0, taster:r.taster?1:0 })) };
+      // 2026-11-26：批號、製造日期一起存（原本這兩欄一律存空字串）
+      items:(d.rows||[]).map(r=>({ name:r.name, lot:String(r.lot||'').trim(), vol:r.vol, mfg:csVfYmd(r.mfg)||String(r.mfg||'').trim(), thisShip:parseFloat(r.qty)||0, ordered:parseFloat(r.qty)||0, shipped:0, taster:r.taster?1:0 })) };
     /* 複檢 2026-08-06 #23：留底存檔原本失敗完全不出聲，使用者不會知道這批沒留底——
        下次開驗收單就算不到這批，「已出貨」歸零、「本次出貨」又帶成全部數量。改成明確提示。 */
     apiCall({action:'saveVerifyForm', token:AUTH_TOKEN, record}).then(res=>{
