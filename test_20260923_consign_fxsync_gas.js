@@ -159,6 +159,63 @@ function factory(body) {
   ctx2.runFactorySync();
   check('10 runFactorySync 接著跑寄售同步（訂單同步炸掉也照跑）', ctx2.__sheets.consign_ledger.rows.length >= 6);
 
+  // ── M 2026-11-26 誠品拆成 6 個門市經銷商／至美蒔光／「異動」金額調整（廠務搬 Supabase 後的新後端資料）─────────
+  {
+    const DEALERS_M = DEALERS.concat([
+      { key: '經銷商－至美蒔光', label: '至美蒔光', enabled: true, discount: 0.75, closeDay: 5 },
+      { key: '經銷商－誠品生活_松菸店', label: '誠品生活_松菸店', enabled: true, discount: 0.65, closeDay: 30 },
+      { key: '經銷商－誠品生活_南西店', label: '誠品生活_南西店', enabled: true, discount: 0.65, closeDay: 30 },
+      { key: '經銷商－誠品生活_平鎮物流中心', label: '誠品生活_平鎮物流中心', enabled: true, discount: 0.65, closeDay: 30 },
+    ]);
+    const ROWS_M = [
+      { id: 'CI-N1', date: '2026-11-19', dealer: '經銷商－誠品生活_南西店', product: '茉莉香片脆梅琴酒V2', volume: '100ml', type: '進貨', qty: 5, price: '', orderNo: '261110-001', seq: '1', operator: 'Vic', note: '訂單出貨 第 1 次', createdAt: '2026-11-19 10:02:04' },
+      { id: 'CI-P1', date: '2026-11-23', dealer: '經銷商－誠品生活_平鎮物流中心', product: '蜜香紅茶荔枝琴酒V2', volume: '100ml', type: '進貨', qty: 9, price: '', orderNo: '261119-004', seq: '1', operator: 'Vic', note: '訂單出貨 第 1 次', createdAt: '2026-11-23 10:00:00' },
+      { id: 'CI-Z1', date: '2026-11-03', dealer: '經銷商－至美蒔光', product: '泰奶烏龍蘭姆酒', volume: '100ml', type: '進貨', qty: 2, price: '', orderNo: '261103-001', seq: '1', operator: 'Vic', note: '訂單出貨 第 1 次', createdAt: '2026-11-03 16:06:44' },
+      { id: 'CI-I1', date: '2026-11-16', dealer: '經銷商－島羽', product: '蜜香紅茶荔枝琴酒V2', volume: '100ml', type: '售出', qty: -3, price: 140, orderNo: '', seq: '', operator: 'TP01-A', note: '', createdAt: '2026-11-16 16:00:00' },
+      { id: 'ADJ-20261120-島羽-運費', date: '2026-11-20', dealer: '經銷商－島羽', product: '運費扣抵（客戶代墊）', volume: '', type: '異動', qty: -1, price: 361, orderNo: '', seq: '', operator: 'Molly', note: '島羽 11/20 代墊運費', createdAt: '2026-11-19 23:10:00' },
+    ];
+    const factoryM = body => {
+      if (body.key !== 'k'.repeat(24)) return { ok: false, error: 'key' };
+      if (body.action === 'extConsignLedger') return { ok: true, dealers: DEALERS_M, rows: ROWS_M.filter(r => r.createdAt >= String(body.since || '')), prices: [], statements: [] };
+      return { ok: false, error: 'unknown ' + body.action };
+    };
+    const MAP_ONE = [['consign_client', '6', '經銷商－誠品生活', '', ''], ['consign_client', '4', '經銷商－島羽', '', '']];
+    // M1 還沒把門市對進來：門市的進貨擋下、說明要到客戶設定勾進去；至美蒔光沒客戶 → 沒對到
+    let c = mkCtx({ factory: factoryM, seed: { consign_customers: CUSTOMERS, ownbrand_products: PRODUCTS, consign_ledger: [], factory_map: MAP_ONE } });
+    let r = c.handleFactoryConsignSync_({});
+    const amb1 = r.ambiguous || {};
+    check('M1a 誠品門市還沒對進來 → 進貨先不進帳、ambiguous 說明「到客戶設定把它一起勾進去」', r.ok && r.inserted.length === 1 && /一起勾進去/.test(String(amb1['經銷商－誠品生活_南西店'] || '')) && (r.unmappedDealers || {})['經銷商－誠品生活_南西店'] === 1);
+    check('M1b 至美蒔光沒有客戶 → 沒對到、不新增', (r.unmappedDealers || {})['經銷商－至美蒔光'] === 1 && !(r.dealerMap || {})['經銷商－至美蒔光']);
+    check('M1c 「異動」金額調整不進庫存帳、不列略過、放進 moneyAdj（−361）', r.skipped.length === 0 && r.moneyAdj.length === 1 && r.moneyAdj[0].amount === -361 && r.moneyAdj[0].customer_id === '4' && /運費扣抵/.test(r.moneyAdj[0].name) && r.moneyAdj[0].dealer === '島羽 Wing Islands');
+    const last1 = JSON.parse(c.__props ? '{}' : '{}');
+    // M2 saveFactoryMap 帶 factory_names：一位客戶整組換成多家（誠品 6 → 本店＋3 門市）；至美蒔光新客戶 7 對 1 家
+    const sv = c.handleSaveFactoryMap_({ rows: [
+      { kind: 'consign_client', qs_name: '6', factory_names: ['經銷商－誠品生活', '經銷商－誠品生活_松菸店', '經銷商－誠品生活_南西店', '經銷商－誠品生活_平鎮物流中心', '經銷商－誠品生活_南西店'], note: '寄售頁客戶設定指定' },
+    ] });
+    const mapRows = c.__sheets.factory_map.rows.filter(x => x[0] === 'consign_client');
+    check('M2a factory_names 整組取代：誠品 6 有 4 列（重複的只留一筆）、島羽那列不動', sv.ok && sv.removed === 1 && sv.saved === 4 && mapRows.filter(x => x[1] === '6').length === 4 && mapRows.filter(x => x[1] === '4').length === 1);
+    const sv2 = c.handleSaveFactoryMap_({ rows: [{ kind: 'consign_client', qs_name: '6', factory_names: ['經銷商－誠品生活_南西店', '-'], note: '' }] });
+    check('M2b factory_names 含「-」→ 只留不連結那一列', sv2.ok && c.__sheets.factory_map.rows.filter(x => x[0] === 'consign_client' && x[1] === '6').length === 1 && c.__sheets.factory_map.rows.some(x => x[1] === '6' && x[2] === '-'));
+    const sv3 = c.handleSaveFactoryMap_({ rows: [{ kind: 'consign_client', qs_name: '6', factory_names: [], note: '' }] });
+    check('M2c factory_names 空陣列 → 清掉（回到名字自動配）', sv3.ok && !c.__sheets.factory_map.rows.some(x => x[0] === 'consign_client' && x[1] === '6'));
+    check('M2d 不帶 factory_names 的舊寫法照舊（單列 upsert）', c.handleSaveFactoryMap_({ rows: [{ kind: 'consign_client', qs_name: '4', factory_name: '經銷商－島羽', note: 'x' }] }).ok && c.__sheets.factory_map.rows.filter(x => x[0] === 'consign_client' && x[1] === '4').length === 1);
+    // M3 門市都對到客戶 6、至美蒔光新客戶 7 → 同步進帳；備註標門市；至美蒔光只有一家不標
+    const CUST_M = CUSTOMERS.concat([[7, '', '至美蒔光', 0.75, 5, '', '', '', 'Y', '', '']]);
+    const MAP_M = [['consign_client', '6', '經銷商－誠品生活', '', ''], ['consign_client', '6', '經銷商－誠品生活_松菸店', '', ''], ['consign_client', '6', '經銷商－誠品生活_南西店', '', ''],
+      ['consign_client', '6', '經銷商－誠品生活_平鎮物流中心', '', ''], ['consign_client', '4', '經銷商－島羽', '', ''], ['consign_client', '7', '經銷商－至美蒔光', '', '']];
+    c = mkCtx({ factory: factoryM, seed: { consign_customers: CUST_M, ownbrand_products: PRODUCTS, consign_ledger: [], factory_map: MAP_M } });
+    r = c.handleFactoryConsignSync_({});
+    const led = c.__sheets.consign_ledger.rows;
+    const row = tag => led.find(x => String(x[7]).indexOf('[FXC:' + tag + ']') === 0 || String(x[7]).indexOf('[FXC:' + tag + '|') === 0);
+    check('M3a 誠品兩個門市的進貨都進客戶 6；至美蒔光進客戶 7；島羽售出照舊 → 共 4 筆', r.ok && r.inserted.length === 4 && Object.keys(r.unmappedDealers || {}).length === 0 && Object.keys(r.ambiguous || {}).length === 0);
+    check('M3b 南西店進貨備註標【南西店】、平鎮標【平鎮物流中心】', row('CI-N1') && String(row('CI-N1')[2]) === '6' && /^\[FXC:CI-N1\|261110-001#1\] 【南西店】廠務 261110-001 第1次／Vic：訂單出貨 第 1 次$/.test(row('CI-N1')[7]) && /【平鎮物流中心】/.test(row('CI-P1')[7]));
+    check('M3c 至美蒔光只對一家 → 備註不標分店', row('CI-Z1') && String(row('CI-Z1')[2]) === '7' && /^\[FXC:CI-Z1\|261103-001#1\] 廠務 261103-001/.test(row('CI-Z1')[7]));
+    check('M3d 異動仍不進帳、摘要 moneyAdj 有存（FACTORY_CONSIGN_LAST_RESULT）', !led.some(x => /ADJ-20261120/.test(String(x[7]))) && r.moneyAdj.length === 1 && (() => { const lr = c.PropertiesService.getScriptProperties().getProperty('FACTORY_CONSIGN_LAST_RESULT'); return !!lr && JSON.parse(lr).moneyAdj.length === 1; })());
+    const r2 = c.handleFactoryConsignSync_({});
+    check('M3e 再同步一次不重複進帳', r2.ok && r2.inserted.length === 0 && led.length === 4);
+    check('M3f 分店名：「誠品生活_南西店」→南西店、「誠品生活」→誠品生活、「誠品生活 南西」→南西', c.fxcBranchLabel_('誠品生活_南西店', [{ customer_id: 6, name: '誠品生活' }], 6) === '南西店' && c.fxcBranchLabel_('誠品生活', [{ customer_id: 6, name: '誠品生活' }], 6) === '誠品生活' && c.fxcBranchLabel_('經銷商－誠品生活 南西', [{ customer_id: 6, name: '誠品生活' }], 6) === '南西');
+  }
+
   results.forEach(r => console.log(r[0], r[1]));
   const fails = results.filter(r => r[0] === 'FAIL').length;
   console.log(`\n${results.length - fails}/${results.length} PASS${fails ? ' — ' + fails + ' FAIL' : ''}`);
