@@ -233,10 +233,13 @@ async function csFxLoad(force){
   if(String(d.lastSync||'')>String(CS_FX.lastSync||'')) CS_FX.lastSync=d.lastSync;   // 手動同步剛回來的時間比讀取快取新時保留
   if(d.lastResult && (!CS_FX.lastResult || String(d.lastResult.at||'')>=String(CS_FX.lastResult.at||''))) CS_FX.lastResult=d.lastResult;   // 每小時排程那次的摘要也看得到
   CS_FX.map={}; CS_FX.blocked={};
+  /* 2026-11-26 Molly：誠品在廠務拆成 6 個門市經銷商、報價系統維持一個客戶 → 一位客戶可對多家（map: 客戶代碼 → [經銷商鍵…]） */
   (d.map||[]).forEach(m=>{
     if(!m.qs_name||!m.factory_name) return;
     const q=String(m.qs_name).trim(), f=String(m.factory_name).trim();
-    if(f===CS_FX_NO_LINK) CS_FX.blocked[q]=true; else CS_FX.map[q]=f;
+    if(f===CS_FX_NO_LINK){ CS_FX.blocked[q]=true; return; }
+    if(!CS_FX.map[q]) CS_FX.map[q]=[];
+    if(!CS_FX.map[q].includes(f)) CS_FX.map[q].push(f);
   });
 }
 // 名字比對鍵（跟後端 fxcNameKey_ 同一套：去經銷商前綴、去空白、小寫、參→叁、只留中英數）
@@ -251,12 +254,28 @@ function csFxDealerBlocked(d){
 }
 /* 2026-09-23 Molly：月結請款兩邊都留 → 這位客戶（對到的廠務經銷商）這個月份在廠務的對帳單（期別 yyyy-MM） */
 function csFxStmtFor(cid, ym){
-  const key=csFxDealerOf(cid); if(!key||!ym) return null;
-  return (CS_FX.statements||[]).find(x=>String(x.dealer)===String(key)&&String(x.period||'').slice(0,7)===String(ym).slice(0,7))||null;
+  const keys=csFxDealersOf(cid); if(!keys.length||!ym) return null;
+  return (CS_FX.statements||[]).find(x=>keys.includes(String(x.dealer))&&String(x.period||'').slice(0,7)===String(ym).slice(0,7))||null;
 }
 function csFxDupNames(cid){ return (CS_CUSTOMERS||[]).filter(c=>String(c.customer_id)===String(cid)).map(c=>c.name||c.customer_id); }
-function csFxDealerOf(cid){ return CS_FX.map[String(cid||'').trim()]||''; }
+function csFxDealersOf(cid){ return (CS_FX.map[String(cid||'').trim()]||[]).slice(); }   // 這位客戶對到的廠務經銷商鍵（可能多家）
+function csFxDealerOf(cid){ return csFxDealersOf(cid)[0]||''; }   // 相容舊呼叫：第一家
 function csFxDealerLabel(key){ const d=CS_FX.dealers.find(x=>String(x.key)===String(key)); return d?(d.label||d.key):String(key||'').replace(/^經銷商[－-]/,''); }
+/* 這位客戶對到的經銷商們，顯示用：「島羽 Wing Islands」／「誠品生活」「誠品生活_南西店」等 7 家 */
+function csFxDealersText(cid){
+  const keys=csFxDealersOf(cid); if(!keys.length) return '';
+  const labels=keys.map(csFxDealerLabel);
+  if(labels.length<=3) return labels.map(l=>'「'+escHtml(l)+'」').join('');
+  return labels.slice(0,2).map(l=>'「'+escHtml(l)+'」').join('')+'等 '+labels.length+' 家';
+}
+/* 廠務「異動」＝金額調整（運費扣抵、代墊…）：不入庫存帳，同步摘要帶回來給 Molly 看；cid／from／to 選填（篩客戶、篩期間） */
+function csFxMoneyAdj(cid, from, to){
+  const r=CS_FX.lastResult; const list=(r&&r.moneyAdj)||[];
+  return list.filter(a=>(!cid||String(a.customer_id||'')===String(cid))&&(!from||String(a.date||'')>=String(from))&&(!to||String(a.date||'')<=String(to)));
+}
+function csFxMoneyAdjText(list){
+  return list.map(a=>escHtml(String(a.date||'').slice(5).replace('-','/'))+' '+escHtml(a.dealer||'')+' '+escHtml(a.name||'')+' '+(a.amount<0?'−':'+')+'$'+Math.abs(Math.round(a.amount||0)).toLocaleString()).join('、');
+}
 function csFxRenderStatus(){
   const el=document.getElementById('cs-fxstatus'); if(!el) return;
   const btn=document.getElementById('cs-fxsync-btn');
@@ -264,9 +283,10 @@ function csFxRenderStatus(){
   if(btn) btn.style.display='';
   const parts=['🔗 廠務寄售帳每小時自動同步'+(CS_FX.lastSync?'，最近一次 '+escHtml(String(CS_FX.lastSync).replace('T',' ').slice(0,16)):'（還沒同步過）')];
   const linked=Object.keys(CS_FX.map).length;
-  const unlinked=CS_FX.dealers.filter(d=>d.enabled!==false && !Object.keys(CS_FX.map).some(k=>CS_FX.map[k]===String(d.key)) && !csFxDealerBlocked(d));
+  const linkedKeys=[].concat(...Object.keys(CS_FX.map).map(k=>CS_FX.map[k]));
+  const unlinked=CS_FX.dealers.filter(d=>d.enabled!==false && !linkedKeys.includes(String(d.key)) && !csFxDealerBlocked(d));
   if(unlinked.length) parts.push('⚠ 廠務有 '+unlinked.length+' 家經銷商還沒對到這裡的客戶：'+escHtml(unlinked.map(d=>d.label||d.key).join('、'))+'（到「客戶設定」指定，或按「同步廠務」讓系統用名字自動配）');
-  else if(linked) parts.push('已對應 '+linked+' 家經銷商');
+  else if(linked) parts.push('已對應 '+linked+' 位客戶／'+linkedKeys.length+' 家廠務經銷商');
   const r=CS_FX.lastResult;
   if(r){
     const ud=Object.keys(r.unmappedDealers||{}), up=Object.keys(r.unmappedProducts||{}), amb=r.ambiguous||{};
@@ -277,6 +297,8 @@ function csFxRenderStatus(){
     if(pd.length) parts.push('⚠ 有 '+pd.length+' 筆廠務異動跟妳手動登過的很像（前後一樣近的有兩筆），先對上其中一筆：'+escHtml(pd.slice(0,3).join('、'))+'——請到明細確認沒對錯');
     if(pdf.length) parts.push('⚠ 有 '+pdf.length+' 筆售出廠務的單價跟這裡不一樣，已照報價系統的記：'+escHtml(pdf.slice(0,3).join('、'))+'——請同仁把廠務的折扣率改成跟這裡一樣');
     if(pf.length) parts.push('⚠ 有 '+pf.length+' 筆售出這裡算不出單價（公版酒主檔沒有這款／規格），先用廠務的：'+escHtml(pf.slice(0,3).join('、')));
+    const ma=csFxMoneyAdj();
+    if(ma.length) parts.push('💰 廠務登了 '+ma.length+' 筆金額調整（運費扣抵、代墊這類，不是庫存、沒進寄售帳）——請款時請手動加減：'+csFxMoneyAdjText(ma.slice(0,5))+(ma.length>5?'…':''));
   }
   el.innerHTML=parts.join('<br>');
 }
@@ -300,6 +322,7 @@ async function csFxSyncNow(btn){
     if(r.priceDiff&&r.priceDiff.length) parts.push('⚠ '+r.priceDiff.length+' 筆售出廠務單價跟這裡不一樣（已照報價系統記，請同仁改廠務折扣）');
     if(r.priceFallback&&r.priceFallback.length) parts.push(r.priceFallback.length+' 筆售出這裡算不出單價、先用廠務的');
     if(r.skipped&&r.skipped.length) parts.push('略過 '+r.skipped.length+' 筆：'+r.skipped.slice(0,2).join('；'));
+    if(r.moneyAdj&&r.moneyAdj.length) parts.push('💰 廠務有 '+r.moneyAdj.length+' 筆金額調整沒進庫存帳（看下方說明）');
     toast(parts.length?parts.join('，'):'已跟廠務同步，沒有新異動', (amb.length||up.length||ud.length||(r.possibleDup&&r.possibleDup.length))?'err':'ok');
     await csFxLoad(true).catch(()=>{});   // 自動配對可能寫了新對照
     CS_FX.lastResult=r;
@@ -310,40 +333,57 @@ async function csFxSyncNow(btn){
   }catch(e){ toast(e.message||'同步失敗','err'); }
   finally{ if(btn) btnBusy(btn, false); }
 }
-/* 客戶設定裡的「對應廠務經銷商」下拉 */
+/* 客戶設定裡的「對應廠務經銷商」：勾選清單（2026-11-26 起一位客戶可勾多家——誠品 6 個門市都對到「誠品生活」）
+   容器 #cs-f-fxdealer：第一格「不連結廠務」（勾了其他都不能勾）＋每家廠務經銷商一格；全部不勾＝未指定（同步時用名字自動配） */
+function csFxSelected(){
+  const box=document.getElementById('cs-f-fxdealer'); if(!box) return [];
+  return [...box.querySelectorAll('input[type=checkbox]:checked')].map(i=>String(i.value||'').trim()).filter(Boolean);
+}
+function csFxOnPick(){
+  const box=document.getElementById('cs-f-fxdealer'), hint=document.getElementById('cs-f-fxdealer-hint'); if(!box) return;
+  const noLink=box.querySelector('input[value="'+CS_FX_NO_LINK+'"]');
+  const others=[...box.querySelectorAll('input[type=checkbox]')].filter(i=>i.value!==CS_FX_NO_LINK);
+  if(noLink&&noLink.checked) others.forEach(i=>{ i.checked=false; i.disabled=true; });
+  else others.forEach(i=>{ if(i.dataset.taken!=='1') i.disabled=false; });
+  const sel=csFxSelected();
+  if(hint) hint.textContent=sel.includes(CS_FX_NO_LINK)?'不連結：廠務的異動不會進這位客戶的帳，系統也不會再用名字自動配。'
+    :sel.length?'勾到的 '+sel.length+' 家廠務經銷商，進貨／售出／退貨都會自動進這位客戶的寄售帳（同一家的分店／物流中心都勾進來，帳就合在一起、明細會標門市）。'
+    :'都不勾＝同步時用名字自動配（配得到就自動填上）；這位客戶不走廠務的話請勾「不連結廠務」。';
+}
 async function csFxFillDealerSelect(cid){
-  const sel=document.getElementById('cs-f-fxdealer'), hint=document.getElementById('cs-f-fxdealer-hint'); if(!sel) return;
+  const box=document.getElementById('cs-f-fxdealer'), hint=document.getElementById('cs-f-fxdealer-hint'); if(!box) return;
   if(!CS_FX.loaded){ try{ await csFxLoad(false); }catch(_){} }
-  if(!CS_FX.configured){ sel.closest('.fl').style.display='none'; return; }
-  sel.closest('.fl').style.display='';
-  sel.disabled=false;
+  if(!CS_FX.configured){ box.closest('.fl').style.display='none'; return; }
+  box.closest('.fl').style.display='';
   const dups=cid?csFxDupNames(cid):[];
   if(dups.length>1){
     // 客戶代碼重複：指定下去兩家的帳會混在一起（後端也會擋）→ 先改代碼
-    sel.innerHTML='<option value="">（客戶代碼重複，先改代碼）</option>'; sel.disabled=true;
+    box.innerHTML='<span style="color:var(--hint)">（客戶代碼重複，先改代碼）</span>'; box.dataset.disabled='1';
     if(hint) hint.textContent='⚠ 客戶代碼 '+cid+' 同時是「'+dups.join('」「')+'」，先把其中一家的代碼改成不重複，才能連結廠務。';
     return;
   }
-  const cur=CS_FX.blocked[String(cid||'')]?CS_FX_NO_LINK:csFxDealerOf(cid);
-  sel.innerHTML='<option value="">（未指定：同步時用名字自動配）</option><option value="'+CS_FX_NO_LINK+'"'+(cur===CS_FX_NO_LINK?' selected':'')+'>（不連結廠務：這位客戶都在這裡手動登）</option>'+CS_FX.dealers.map(d=>{
-    const takenBy=Object.keys(CS_FX.map).find(k=>CS_FX.map[k]===String(d.key)&&k!==String(cid||''));
-    const tc=takenBy?(CS_CUSTOMERS.find(c=>String(c.customer_id)===takenBy)||{}).name||takenBy:'';
-    return `<option value="${escAttr(d.key)}"${String(d.key)===cur?' selected':''}${takenBy?' disabled':''}>${escHtml(d.label||d.key)}${d.enabled===false?'（廠務已停用）':''}${takenBy?'（已對到 '+escHtml(tc)+'）':''}</option>`;
-  }).join('');
-  if(hint) hint.textContent=(cur===CS_FX_NO_LINK)?'不連結：廠務的異動不會進這位客戶的帳，系統也不會再用名字自動配。'
-    :cur?'廠務的進貨／售出／退貨會自動進這位客戶的寄售帳；換成「不連結」就停止同步（已同步的紀錄留著）。'
-    :'未指定＝同步時用名字自動配（配得到就自動填上）；這位客戶不走廠務的話請選「不連結廠務」。';
+  box.dataset.disabled='';
+  const blocked=!!CS_FX.blocked[String(cid||'')], cur=csFxDealersOf(cid);
+  const item=(val,text,checked,disabled,taken)=>`<label style="display:inline-flex;align-items:center;gap:4px;margin:2px 10px 2px 0;font-size:12px;white-space:nowrap${disabled?';color:var(--hint)':''}"><input type="checkbox" value="${escAttr(val)}"${checked?' checked':''}${disabled?' disabled':''}${taken?' data-taken="1"':''} onchange="csFxOnPick()">${text}</label>`;
+  box.innerHTML=item(CS_FX_NO_LINK,'（不連結廠務：這位客戶都在這裡手動登）',blocked,false,false)
+    +CS_FX.dealers.map(d=>{
+      const takenBy=Object.keys(CS_FX.map).find(k=>CS_FX.map[k].includes(String(d.key))&&k!==String(cid||''));
+      const tc=takenBy?(CS_CUSTOMERS.find(c=>String(c.customer_id)===takenBy)||{}).name||takenBy:'';
+      return item(d.key, escHtml(d.label||d.key)+(d.enabled===false?'（廠務已停用）':'')+(takenBy?'（已對到 '+escHtml(tc)+'）':''), cur.includes(String(d.key)), blocked||!!takenBy, !!takenBy);
+    }).join('');
+  csFxOnPick();
 }
 async function csFxSaveDealerMap(cid){
-  const sel=document.getElementById('cs-f-fxdealer'); if(!sel||!CS_FX.configured||sel.closest('.fl').style.display==='none'||sel.disabled) return;
-  const val=String(sel.value||'').trim(), cur=CS_FX.blocked[String(cid)]?CS_FX_NO_LINK:csFxDealerOf(cid);
-  if(val===cur) return;
-  if(val && val!==CS_FX_NO_LINK && csFxDupNames(cid).length>1) throw new Error('客戶代碼 '+cid+' 重複，先改代碼再連結廠務');
-  const d=await apiCall({action:'saveFactoryMap', token:AUTH_TOKEN, rows:[{kind:'consign_client', qs_name:String(cid), factory_name:val,
-    note:val===CS_FX_NO_LINK?'寄售頁客戶設定：不連結廠務':(val?'寄售頁客戶設定指定':'')}]});
+  const box=document.getElementById('cs-f-fxdealer'); if(!box||!CS_FX.configured||box.closest('.fl').style.display==='none'||box.dataset.disabled==='1') return;
+  let vals=csFxSelected(); if(vals.includes(CS_FX_NO_LINK)) vals=[CS_FX_NO_LINK];
+  const cur=CS_FX.blocked[String(cid)]?[CS_FX_NO_LINK]:csFxDealersOf(cid);
+  if(vals.length===cur.length && vals.every(v=>cur.includes(v))) return;   // 沒變不打
+  if(vals.length && vals[0]!==CS_FX_NO_LINK && csFxDupNames(cid).length>1) throw new Error('客戶代碼 '+cid+' 重複，先改代碼再連結廠務');
+  const d=await apiCall({action:'saveFactoryMap', token:AUTH_TOKEN, rows:[{kind:'consign_client', qs_name:String(cid), factory_names:vals,
+    note:vals[0]===CS_FX_NO_LINK?'寄售頁客戶設定：不連結廠務':(vals.length?'寄售頁客戶設定指定':'')}]});
   if(!d||!d.ok) throw new Error((d&&d.error)||'儲存廠務對應失敗');
   delete CS_FX.map[String(cid)]; delete CS_FX.blocked[String(cid)];
-  if(val===CS_FX_NO_LINK) CS_FX.blocked[String(cid)]=true; else if(val) CS_FX.map[String(cid)]=val;
+  if(vals[0]===CS_FX_NO_LINK) CS_FX.blocked[String(cid)]=true; else if(vals.length) CS_FX.map[String(cid)]=vals.slice();
   csFxRenderStatus();
 }
 
@@ -375,9 +415,9 @@ function onSelectConsignCustomer(){
   const c=curConsignCustomer();
   if(info&&c){
     const disc=(parseFloat(c.default_discount)||0);
-    const fxk=csFxDealerOf(CS_CUR);
+    const fxt=csFxDealersText(CS_CUR);
     info.innerHTML='ℹ️ 預設折數 '+(disc?((disc*10).toFixed(disc*10%1?1:0)+'折'):'—')+'　·　每月請款日 '+(c.billing_day||'—')+'　·　'+(String(c.active||'Y').toUpperCase()==='N'?'已停用':'啟用中')
-      +(fxk?'　·　🔗 已連結廠務「'+escHtml(csFxDealerLabel(fxk))+'」（進貨／售出／退貨自動同步）':'');
+      +(fxt?'　·　🔗 已連結廠務'+fxt+'（進貨／售出／退貨自動同步）':'');
   }
   box.style.display='block';
   if(!document.getElementById('cs-month').value){ const n=new Date(); document.getElementById('cs-month').value=n.getFullYear()+'-'+s2(n.getMonth()+1); }
@@ -686,11 +726,12 @@ function openConsignMove(){
   CS_MOVE_ROWID=0; csMoveItems=[]; csAddMoveRow(); csAddMoveRow();   // 預留兩列，方便直接一次填多款
   if(!OWNBRAND_PRODUCTS || !OWNBRAND_PRODUCTS.length){ loadOwnbrandData().then(renderCsMoveItems).catch(()=>{}); }
   // 2026-09-23：已連結廠務的客戶，進貨／售出／退貨都由廠務同步，這裡提醒不硬擋（試飲瓶、盤點調整還是要在這登）
-  { const b=document.getElementById('cs-m-fxbanner'); const fxk=csFxDealerOf(CS_CUR);
-    const dl=fxk?CS_FX.dealers.find(x=>String(x.key)===String(fxk)):null;
+  { const b=document.getElementById('cs-m-fxbanner'); const fxks=csFxDealersOf(CS_CUR), fxk=fxks[0]||'';
+    const dls=fxks.map(k=>CS_FX.dealers.find(x=>String(x.key)===String(k))).filter(Boolean);
+    const dl=(fxk && dls.length && dls.every(x=>x.enabled===false))?dls[0]:null;   // 全部都在廠務停用了才算停用
     if(b){
-      if(fxk && !(dl && dl.enabled===false)){ b.innerHTML='🔗 這位客戶已連結廠務「'+escHtml(csFxDealerLabel(fxk))+'」：鋪貨／銷售／退貨會從廠務自動同步進來，<b>不用在這裡再登一次</b>（會重複計庫存）。這裡只登「試飲瓶」或廠務沒有的「盤點調整」。'; b.style.display='block'; }
-      else if(fxk){ b.innerHTML='🔗 這位客戶連結的廠務經銷商「'+escHtml(csFxDealerLabel(fxk))+'」在廠務那邊已停用：這裡照常登記（廠務若又有這家的異動，還是會同步進來）。'; b.style.display='block'; }
+      if(fxk && !(dl && dl.enabled===false)){ b.innerHTML='🔗 這位客戶已連結廠務'+csFxDealersText(CS_CUR)+'：鋪貨／銷售／退貨會從廠務自動同步進來，<b>不用在這裡再登一次</b>（會重複計庫存）。這裡只登「試飲瓶」或廠務沒有的「盤點調整」。'; b.style.display='block'; }
+      else if(fxk){ b.innerHTML='🔗 這位客戶連結的廠務經銷商'+csFxDealersText(CS_CUR)+'在廠務那邊已停用：這裡照常登記（廠務若又有這家的異動，還是會同步進來）。'; b.style.display='block'; }
       else b.style.display='none';
     } }
   onConsignMoveType();
@@ -947,9 +988,12 @@ async function csCheckSettled(){
     // 2026-09-23 Molly：月結請款兩邊都留 → 同時看廠務這期對帳單（已結清＝廠務那邊已經請過款）
     const fs=(typeof csFxStmtFor==='function')?csFxStmtFor(CS_MONTHLY.for_customer, CS_MONTHLY.for_ym):null;
     CS_MONTHLY.fxStmt=fs||null;
-    const fsH=fs?(String(fs.status)==='已結清'
+    const maList=(typeof csFxMoneyAdj==='function')?csFxMoneyAdj(CS_MONTHLY.for_customer, (CS_MONTHLY.period&&CS_MONTHLY.period.from)||'', (CS_MONTHLY.period&&CS_MONTHLY.period.to)||''):[];
+    CS_MONTHLY.fxMoneyAdj=maList;
+    const maH=maList.length?`<br><span style="color:var(--red,#B3261E);font-weight:600">💰 廠務這期登了 ${maList.length} 筆金額調整（合計 ${maList.reduce((a,x)=>a+(Math.round(x.amount)||0),0)<0?'−':'+'}${money(Math.abs(maList.reduce((a,x)=>a+(Math.round(x.amount)||0),0)))}），月結不會自動帶入，請款時請手動加減：</span>${csFxMoneyAdjText(maList)}`:'';
+    const fsH=(fs?(String(fs.status)==='已結清'
       ? `<br><span style="color:var(--red,#B3261E);font-weight:600">⚠ 廠務這期（${escHtml(fs.period)}）已經登記結清：${money(fs.amount)}${fs.paidDate?'，入帳 '+escHtml(fs.paidDate):''}${fs.orderNo?'，認列單 '+escHtml(fs.orderNo):''}——這裡再轉報價單會重複請款</span>`
-      : `<br>📄 廠務這期（${escHtml(fs.period)}）已經有對帳單：${money(fs.amount)}（${escHtml(fs.status||'未結清')}）`):'';
+      : `<br>📄 廠務這期（${escHtml(fs.period)}）已經有對帳單：${money(fs.amount)}（${escHtml(fs.status||'未結清')}）`):'')+maH;
     const el=document.getElementById('cs-settled');
     if(el) el.innerHTML=(q
       ? `✅ 這個月已於 ${escHtml(q.quoteDate||'')} 轉出報價單 <b>${escHtml(q.quoteNo)}</b>（已請款，別重複開單）`
@@ -997,6 +1041,8 @@ function consignMonthlyToQuote(){
   if(CS_MONTHLY.settled && !confirm('這個月已經在 '+(CS_MONTHLY.settled.quoteDate||'')+' 轉出過報價單 '+CS_MONTHLY.settled.quoteNo+'。\n再轉一次會出現兩張同月份的請款單，確定要繼續嗎？')) return;
   { const _fs=(typeof csFxStmtFor==='function')?csFxStmtFor(CS_MONTHLY.for_customer, CS_MONTHLY.for_ym):null;
     if(_fs && String(_fs.status)==='已結清' && !confirm('廠務這期（'+_fs.period+'）已經登記結清 '+money(_fs.amount)+(_fs.orderNo?'（認列單 '+_fs.orderNo+'）':'')+'。\n再在這裡轉報價單請款，會跟廠務那邊重複請款，確定要繼續嗎？')) return; }
+  { const _ma=CS_MONTHLY.fxMoneyAdj||[];
+    if(_ma.length && !confirm('廠務這期登了 '+_ma.length+' 筆金額調整（'+_ma.map(a=>a.name+' '+(a.amount<0?'−':'+')+Math.abs(Math.round(a.amount))).join('、')+'），月結報價單不會自動帶入，轉出後請自己加減。\n要繼續嗎？')) return; }
   if(typeof isFormDirty==='function' && isFormDirty() && !confirm('報價單表單還有未儲存的內容，轉出月結報價單會把它清掉，確定要繼續？')) return;
   const c=CS_MONTHLY.customer||{};
   const period=(CS_MONTHLY.period&&CS_MONTHLY.period.from)?`${CS_MONTHLY.period.from} ～ ${CS_MONTHLY.period.to}`:`${CS_MONTHLY.year}年${CS_MONTHLY.month}月`;
