@@ -22,7 +22,7 @@
 const { chromium } = require('/opt/node-tools/node_modules/playwright');
 
 (async () => {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const browser = await chromium.launch({ executablePath: process.env.PW_CHROME || '/opt/pw-browsers/chromium' });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const errors = [];
   page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
@@ -296,7 +296,7 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
         case 'listVerifyForms': return { ok: true, records: [], summary: {} };
         case 'getFactoryConsignDealers': return { ok: true, configured: true, dealers: DEALERS, map: window.FXMAP, lastSync: '2026-09-23T19:00:00+08:00', since: '2026-09-16 00:00:00',
           lastResult: { at: '2026-09-23T19:00:00+08:00', inserted: 2, linked: 0, unmappedDealers: {}, unmappedProducts: {}, ignoredDealers: { '經銷商－日光貳參': 3 }, ambiguous: {}, possibleDup: ['X2（2026-09-20 茉莉|100ml ×4）'], priceFallback: ['X3（泰奶：廠務單價 0 → 報價系統 140）'], skipped: [] } };
-        case 'saveFactoryMap': (payload.rows || []).forEach(r => { window.FXMAP = window.FXMAP.filter(m => !(m.kind === r.kind && String(m.qs_name) === String(r.qs_name))); if (r.factory_name) window.FXMAP.push(r); }); return { ok: true, saved: 1, removed: 0 };
+        case 'saveFactoryMap': (payload.rows || []).forEach(r => { window.FXMAP = window.FXMAP.filter(m => !(m.kind === r.kind && String(m.qs_name) === String(r.qs_name))); if (r.factory_names) r.factory_names.forEach(n => window.FXMAP.push({ kind: r.kind, qs_name: r.qs_name, factory_name: n })); else if (r.factory_name) window.FXMAP.push(r); }); return { ok: true, saved: 1, removed: 0 };
         case 'saveConsignCustomer': return { ok: true, customer: payload.customer };
         default: return { ok: true, quotes: [], orders: [], records: [], shipments: [], rows: [] };
       }
@@ -308,22 +308,23 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
     await new Promise(r => setTimeout(r, 300));
     out.status = document.getElementById('cs-fxstatus').textContent;
     out.blocked = !!CS_FX.blocked['7'] && !CS_FX.map['7'];
-    // 11 不連結：選項預選 '-'；改成未指定 → 送空字串；再改回不連結 → 送 '-'
+    // 11 不連結：「不連結」格預勾；改成未指定（全部取消）→ 送空陣列；再勾回不連結 → 送 ['-']（2026-11-26 起是勾選清單，可多家）
     openConsignCustomerEdit('7'); await new Promise(r => setTimeout(r, 300));
-    const sel = document.getElementById('cs-f-fxdealer');
-    out.sel7 = { val: sel.value, opts: [...sel.options].map(o => o.value), hint: document.getElementById('cs-f-fxdealer-hint').textContent };
+    const box = document.getElementById('cs-f-fxdealer');
+    const cbs = () => [...box.querySelectorAll('input[type=checkbox]')];
+    out.sel7 = { val: cbs().filter(i => i.checked).map(i => i.value).join(','), opts: cbs().map(o => o.value), othersLocked: cbs().filter(i => i.value !== '-').every(i => i.disabled), hint: document.getElementById('cs-f-fxdealer-hint').textContent };
     window.CALLS = [];
-    sel.value = ''; await saveConsignCustomerForm(); await new Promise(r => setTimeout(r, 300));
+    cbs().forEach(i => { i.checked = false; }); csFxOnPick(); await saveConsignCustomerForm(); await new Promise(r => setTimeout(r, 300));
     out.unset = ((window.CALLS.find(x => x.action === 'saveFactoryMap') || {}).rows || [])[0];
     openConsignCustomerEdit('7'); await new Promise(r => setTimeout(r, 300));
     window.CALLS = [];
-    document.getElementById('cs-f-fxdealer').value = '-'; await saveConsignCustomerForm(); await new Promise(r => setTimeout(r, 300));
+    cbs().find(i => i.value === '-').checked = true; csFxOnPick(); await saveConsignCustomerForm(); await new Promise(r => setTimeout(r, 300));
     out.reblock = ((window.CALLS.find(x => x.action === 'saveFactoryMap') || {}).rows || [])[0];
     out.reblockState = !!CS_FX.blocked['7'];
     // 12 代碼重複
     openConsignCustomerEdit('9'); await new Promise(r => setTimeout(r, 300));
-    const sel9 = document.getElementById('cs-f-fxdealer');
-    out.dup = { disabled: sel9.disabled, hint: document.getElementById('cs-f-fxdealer-hint').textContent };
+    const box9 = document.getElementById('cs-f-fxdealer');
+    out.dup = { disabled: box9.dataset.disabled === '1' && box9.querySelectorAll('input').length === 0, hint: document.getElementById('cs-f-fxdealer-hint').textContent };
     if (typeof closeConsignCustomerEdit === 'function') closeConsignCustomerEdit();
     // 13 明細分批
     document.getElementById('cs-customer').value = '4'; onSelectConsignCustomer();
@@ -337,9 +338,9 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
     return out;
   }, { PRODUCTS, CUSTOMERS, DEALERS, MAP, LEDGER });
   check('11a 選了「不連結」的日光貳叁：廠務日光貳參不列進「還沒對到」', !/還沒對到/.test(c.status) || !/日光貳參/.test(c.status), c.status);
-  check('11b 下拉有「未指定」「不連結」兩個選項、預選不連結、說明講清楚', c.blocked && c.sel7.val === '-' && c.sel7.opts[0] === '' && c.sel7.opts[1] === '-' && /不會再用名字自動配/.test(c.sel7.hint), JSON.stringify(c.sel7));
-  check('11c 改成未指定 → 送空字串（刪對照）；改回不連結 → 送 \'-\'', c.unset && c.unset.factory_name === '' && c.reblock && c.reblock.factory_name === '-' && c.reblockState, JSON.stringify([c.unset, c.reblock]));
-  check('12 客戶代碼重複（誠品生活／桃園青埔都是 9）→ 下拉鎖住、講明先改代碼', c.dup.disabled === true && /重複/.test(c.dup.hint) && /誠品生活/.test(c.dup.hint), JSON.stringify(c.dup));
+  check('11b 勾選清單第一格是「不連結」且預勾、其他格鎖住、說明講清楚', c.blocked && c.sel7.val === '-' && c.sel7.opts[0] === '-' && c.sel7.othersLocked && /不會再用名字自動配/.test(c.sel7.hint), JSON.stringify(c.sel7));
+  check('11c 改成未指定 → 送 factory_names []（刪對照）；改回不連結 → 送 [\'-\']', c.unset && JSON.stringify(c.unset.factory_names) === '[]' && c.reblock && JSON.stringify(c.reblock.factory_names) === '["-"]' && c.reblockState, JSON.stringify([c.unset, c.reblock]));
+  check('12 客戶代碼重複（誠品生活／桃園青埔都是 9）→ 清單鎖住、講明先改代碼', c.dup.disabled === true && /重複/.test(c.dup.hint) && /誠品生活/.test(c.dup.hint), JSON.stringify(c.dup));
   check('13a 同一張廠務訂單兩趟出貨＝兩批（第 1 趟 2 款、第 2 趟 1 款），驗收單備註不帶廠務摘要', c.btns === 2 && c.batches.length === 2 && c.batches.some(x => x.n === 2 && x.date === '2026-09-18') && c.batches.some(x => x.n === 1 && x.date === '2026-09-20') && c.batches.every(x => x.note === ''), JSON.stringify(c.batches));
   check('13b 登記視窗：連結中的島羽照舊提醒；廠務已停用的 downstair 改說「這裡照常登記」', /不用在這裡再登一次/.test(c.ban4) && /已停用/.test(c.ban2) && /照常登記/.test(c.ban2) && !/不用在這裡再登一次/.test(c.ban2), c.ban2);
   check('14 狀態列：可能重複＋算不出單價先用廠務的（每小時那次的摘要也看得到）', /跟妳手動登過的很像/.test(c.status) && /算不出單價/.test(c.status), c.status);
